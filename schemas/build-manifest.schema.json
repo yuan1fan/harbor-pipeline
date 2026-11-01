@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://harbor-pipeline.local/schemas/build-manifest.schema.json",
+  "title": "BuildManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "cve_id", "candidate_revision", "variant",
+    "source_commit", "image_ref", "image_digest", "dependency_lock",
+    "cpu_arch", "harbor_version", "generator_version", "prompt_version",
+    "file_digests", "control_plan", "built_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "cve_id": {"type": "string", "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$"},
+    "candidate_revision": {"type": "integer", "minimum": 1},
+    "variant": {"enum": ["vulnerable", "fixed"]},
+    "source_commit": {"type": "string", "minLength": 1},
+    "image_ref": {"type": "string", "minLength": 1},
+    "image_digest": {"type": "string", "minLength": 1},
+    "dependency_lock": {"type": "object"},
+    "cpu_arch": {"type": "string", "minLength": 1},
+    "harbor_version": {"type": "string", "minLength": 1},
+    "generator_version": {"type": "string", "minLength": 1},
+    "prompt_version": {"type": "string", "minLength": 1},
+    "file_digests": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    },
+    "control_plan": {"type": "object"},
+    "seed": {"type": ["integer", "null"]},
+    "task_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "built_at": {"type": "string", "format": "date-time"}
+  }
+}

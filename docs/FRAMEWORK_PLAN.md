@@ -1,8 +1,9 @@
 # Harbor CVE 自动出题产线搭建计划
 
 日期：2026 年 11 月 1 日  
-状态：实施与交接基线，尚未完成端到端运行验收  
-交接入口：[HANDOFF.md](../HANDOFF.md)
+状态：自动化产线已实现；首个真实 CVE 完成 qualification 并发布；12 输入试点批次与真实模型难度基线已完成  
+交接入口：[HANDOFF.md](../HANDOFF.md)  
+运维手册：[OPERATIONS.md](OPERATIONS.md)
 
 本项目面向 LLM 的 Web 安全与渗透测试训练，批量将真实 CVE 转换为 Harbor 任务。每个 CVE 对应一道主任务，并附带漏洞事实规格、修复对照、参考解法和量化验收报告。框架的首要目标是证明任务考察了目标 CVE，然后才是提高产量和收集模型轨迹。
 
@@ -20,25 +21,28 @@
 | 题目目标 | 与该 CVE 的直接安全影响一致，不额外拼接无关漏洞链 |
 | 运行环境 | Python 控制程序与 Linux 容器；Windows 本机可作为开发入口 |
 | 交付格式 | 固定 Harbor 版本可执行的任务目录，以及独立审计包 |
-| 试点规模 | 筛选 10 至 20 个候选 CVE，先跑通一个，再扩展批次 |
+| 试点规模 | 筛选 10 至 20 个候选 CVE，先跑通一个，再扩展批次（当前 12 个输入，1 个发布、11 个未支持） |
 | 首版暂不覆盖 | 内核与驱动漏洞、专用硬件、难以获得的商业制品、复杂多漏洞攻击链 |
 
 真实产品复现与自行编写的机制模拟必须使用不同标签。机制模拟不能进入真实 CVE 认证题库。缺少运行制品、修复依据或必要前提的 CVE，可以成为暂不支持的输入。
 
-## 2 当前基础与建设缺口
+## 2 当前基础与验收状态
 
-本节基于 2026 年 11 月 1 日读取的工作区快照，描述已见代码与配置，不代表运行验收结果。完整交接状态见 [HANDOFF.md](../HANDOFF.md)。
+截至 2026 年 11 月 1 日，计划中的核心模块均已实现，并用真实 Docker/Harbor 跑通首个 CVE。完整命令、产物和限制见 [OPERATIONS.md](OPERATIONS.md)。
 
-| 已有内容 | 可复用部分 | 仍需完成 |
-| --- | --- | --- |
-| `pyproject.toml` | Python 3.11 以上、包定义、CLI 入口声明、jsonschema 与 pytest 依赖声明 | CLI 实现、依赖锁定、安装和入口验证 |
-| `harbor_pipeline/config.py` | TOML 读取、环境变量展开、部分预算校验、按角色覆盖模型配置 | 跨字段约束、未知配置处理、正式验收 profile |
-| `harbor_pipeline/util.py` | JSON 原子写入、摘要计算、产物路径限制、文件集合写入 | 边界验证、与运行存储及执行器集成 |
-| `pipeline.toml` | 本地模型 CLI 配置与开发预算 | provider 实现、会话权限限制、精确模型身份记录 |
-| `pipeline.api.toml` | API provider 配置样例 | provider 实现、异常处理、用量记录 |
-| `.env.example` 与 `.gitignore` | 凭据字段说明与本地产物忽略规则 | 凭据注入、日志脱敏、长期制品存储 |
+| 能力 | 实现状态 |
+| --- | --- |
+| CLI 与诊断 | `doctor/run/collect/freeze/generate/build/validate/release/batch/resume/report` 均已接入 |
+| 六类契约 | `schemas/` 与 `contracts.py` 提供必需字段、版本、摘要和交叉引用校验 |
+| 状态机与恢复 | 原子 checkpoint、跨进程 lease、失败重试与终态隔离已通过测试 |
+| 证据采集与冻结 | HTTPS + 白名单 + 公网 IP 校验 + DNS pinning；失败源落盘重试 |
+| 成对环境与判题 | 独立 verifier、受限 replay、T01–T12 差分、业务健康与负例 |
+| 质量与准入 | 五维分、Wilson 区间、20 对 qualification、硬条件发布门 |
+| 发布与复检 | 不可变副本、审计包、`verify_release`、副本 oracle 复检 |
+| 批次与并发 | 去重/limit、共享预算、worker 异常终态、数据集 split 审计、oracle 与模型难度基线 |
+| 模型 provider 与修复 | fixture/anthropic/claude-cli；修复只能改 `environment/` 既有文件 |
 
-当前 `pyproject.toml` 和 `__main__.py` 引用了 `harbor_pipeline.cli`，读取快照中未见该模块。配置中声明的 `claude-cli`、`anthropic`、`fixture` 不代表适配器已经实现。当前目录也未识别为 Git 工作树，后续需要建立版本基线。
+首个真实 CVE `CVE-2024-23334` 已 `RELEASED`，质量分 `100.0`，20 组成对样本，置信区间 `[0.8389, 1.0]`；任务摘要与制品 digest 记录在 [HANDOFF.md](../HANDOFF.md)。12 个真实 Web CVE 的试点批次已跑通：1 个发布、11 个明确 `UNSUPPORTED`、所有输入有终态，产出率 `8.33%`。模型难度基线也已实测（`claude-code` + `deepseek-v4-pro`，3/3 成功，中位 `81.2s`），但当前仍只内置 aiohttp 一个完整场景，候选覆盖的扩充是下一阶段工作。
 
 ## 3 关键设计决策
 
@@ -336,6 +340,29 @@ DISCOVERED → EVIDENCE_READY → SPEC_FROZEN → GENERATED
 
 建议预留的 CLI 能力为环境诊断、输入检查、生成、验证、恢复、批次报告和本地发布。命令名称在 CLI 契约确定后写入操作手册；本计划不将尚未实现的命令列为可执行步骤。
 
+### 13.1 待办完成情况（2026-11-01）
+
+| 编号 | 状态 | 交付证据 |
+| --- | --- | --- |
+| TSK01 | 完成 | Git 基线提交 `44070f0 chore: baseline skeleton + plan docs`；`requirements.lock` 锁定已验证环境，源码与配置可回退 |
+| TSK02 | 完成 | CLI 全部子命令、退出码、`doctor --json` |
+| TSK03 | 完成 | Harbor 0.23.0 实机运行、独立 verifier、受限 replay 与 T12 故障注入 |
+| TSK04 | 完成 | 六类 schema、契约校验与冻结摘要 |
+| TSK05 | 完成 | fixture provider；修复越权路径/新文件被拒绝 |
+| TSK06 | 完成 | 状态机、checkpoint、lease、共享预算并发测试 |
+| TSK07 | 完成 | 来源白名单、DNS pinning、失败快照与重采 |
+| TSK08 | 完成 | aiohttp 3.9.1/3.9.2 成对环境与业务健康 |
+| TSK09 | 完成 | 参考解法、T05/T06/T07/T10 负例、T08 controlled |
+| TSK10 | 完成 | 差分矩阵、五维评分、Wilson 区间、准入 evaluator |
+| TSK11 | 完成 | 三种 provider、预算预留/退款、冻结文件不可改 |
+| TSK12 | 完成 | 发布包、审计包、`verify_release`、副本 oracle 复检 |
+| TSK13 | 完成 | 批次计划、去重、共享账本、批次报告、split 审计；12 输入试点全部终态；oracle 与真实模型难度基线均已测量 |
+| TSK14 | 完成（单机线程池） | 文件锁预算一致性、worker 隔离与异常终态；真实多 CVE 并发待候选池扩充后压测 |
+
+M5 的“10 至 20 个候选”已达成：`candidates/pilot-web-cves.json` 提供 12 个真实 Web CVE，`work/runs/qual-01` 的批次报告记录输入 12、`RELEASED = 1`、`UNSUPPORTED = 11`、`inputs = 12`、产出率 `0.0833`，所有输入都有终态；数据集清单 1 条且 `split_audit.ok = true`。验收结果同时记录 oracle 成功率 `1.0`（中位 `52.6s`）与模型难度基线 `3/3`（中位 `81.2s`，`$0.53961`）。
+
+需要明确边界：12 个候选里只有 aiohttp 有完整场景模板，其余 11 个是“有终态的未支持”，不是 11 道已验收题目。下一阶段的产出率提升取决于为 Apache httpd、Struts2、Spring、Log4j 等新增事实条目和场景模板，不能靠模型自由发挥；在此之前不得把 `UNSUPPORTED` 计入题库。
+
 ## 14 验证与测试要求
 
 对控制与信任边界安排针对性测试，避免为纯文本或简单字段重复编写无意义测试。
@@ -363,4 +390,4 @@ DISCOVERED → EVIDENCE_READY → SPEC_FROZEN → GENERATED
 
 交接应包含以下可检查结果：当前源码与配置、版本基线、数据契约、固定 Harbor 版本、一个真实 CVE 的完整产物和审计包、可重复的验收记录、失败样例、资源清理与恢复步骤、预算策略及未决项。接收方应能在约定环境从清洁状态复跑首题，并解释其为何属于指定 CVE。
 
-接收方首先执行 [HANDOFF.md](../HANDOFF.md) 中的接手清单，再按 TSK01 至 TSK10 建立最小闭环。当前交付是搭建计划与交接说明，框架实现和运行验收按上述阶段继续推进。
+接收方首先执行 [HANDOFF.md](../HANDOFF.md) 中的接手清单，再按 [OPERATIONS.md](OPERATIONS.md) 复跑首个 CVE。当前交付已包含可运行的产线、Git 基线、锁定依赖、首题发布包、12 输入试点报告、oracle 与模型难度基线；下一阶段工作是扩充场景模板与候选覆盖，不应把未实现的 CVE 场景描述为已验收。

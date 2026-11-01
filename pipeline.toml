@@ -28,6 +28,6 @@ max_budget_usd = 3.0
 #max_output_tokens = 12000
 
 [sources]
-allowed_hosts = ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov"]
+allowed_hosts = ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org"]
 max_bytes = 1500000
 timeout_sec = 30

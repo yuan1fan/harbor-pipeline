@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "notes": "Phase-1 pilot pool. Only CVEs with a curated built-in scenario can become tasks; the rest are expected to end UNSUPPORTED until their evidence and scenario templates are added.",
+  "candidates": [
+    {"cve_id": "CVE-2024-23334", "priority": 1, "notes": "aiohttp static traversal; released qualification task"},
+    {"cve_id": "CVE-2021-41773", "priority": 2, "notes": "Apache httpd path traversal; needs an httpd scenario"},
+    {"cve_id": "CVE-2021-42013", "priority": 3, "notes": "Apache httpd path traversal/RCE; needs an httpd scenario"},
+    {"cve_id": "CVE-2017-5638", "priority": 4, "notes": "Apache Struts2 OGNL RCE; needs a Java web scenario"},
+    {"cve_id": "CVE-2022-22965", "priority": 5, "notes": "Spring4Shell; needs a Java servlet scenario"},
+    {"cve_id": "CVE-2022-1388", "priority": 6, "notes": "F5 iControl REST auth bypass; needs a proprietary-compatible scenario"},
+    {"cve_id": "CVE-2023-34362", "priority": 7, "notes": "MOVEit SQL injection; needs a .NET/SQL scenario"},
+    {"cve_id": "CVE-2023-4966", "priority": 8, "notes": "CitrixBleed; needs a Citrix-compatible scenario"},
+    {"cve_id": "CVE-2021-44228", "priority": 9, "notes": "Log4Shell; needs a JNDI/Java scenario"},
+    {"cve_id": "CVE-2022-26134", "priority": 10, "notes": "Confluence OGNL; needs a Java web scenario"},
+    {"cve_id": "CVE-2020-14882", "priority": 11, "notes": "WebLogic console RCE; needs a Java web scenario"},
+    {"cve_id": "CVE-2023-46805", "priority": 12, "notes": "Ivanti Connect Secure auth bypass; needs a proprietary-compatible scenario"}
+  ]
+}

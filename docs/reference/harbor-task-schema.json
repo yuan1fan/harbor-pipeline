@@ -1,0 +1,849 @@
+{
+  "$defs": {
+    "AgentConfig": {
+      "properties": {
+        "network_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NetworkMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Network access policy. [agent] and [verifier] use this only as an explicit phase override when set."
+        },
+        "allowed_hosts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hostnames, IP address literals/CIDR ranges, or leading wildcard patterns reachable when network_mode='allowlist'.",
+          "title": "Allowed Hosts"
+        },
+        "timeout_sec": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeout Sec"
+        },
+        "user": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Username or UID to run the agent as. None uses the environment's default USER (e.g., root).",
+          "title": "User"
+        }
+      },
+      "title": "AgentConfig",
+      "type": "object"
+    },
+    "ArtifactConfig": {
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "destination": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Destination"
+        },
+        "exclude": {
+          "description": "Patterns to exclude when downloading a directory artifact (passed as tar --exclude flags).",
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclude",
+          "type": "array"
+        },
+        "service": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Docker Compose service to collect this artifact from. None or 'main' targets the agent's container. Any other value requires a compose-capable environment provider and an absolute source path.",
+          "title": "Service"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ArtifactConfig",
+      "type": "object"
+    },
+    "Author": {
+      "description": "Author information for a package or dataset.",
+      "properties": {
+        "name": {
+          "description": "Author name",
+          "title": "Name",
+          "type": "string"
+        },
+        "email": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Author email address",
+          "title": "Email"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Author",
+      "type": "object"
+    },
+    "EnvironmentConfig": {
+      "properties": {
+        "network_mode": {
+          "$ref": "#/$defs/NetworkMode",
+          "default": "public",
+          "description": "Network access policy for this environment. Defaults to public."
+        },
+        "allowed_hosts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hostnames, IP address literals/CIDR ranges, or leading wildcard patterns reachable when network_mode='allowlist'.",
+          "title": "Allowed Hosts"
+        },
+        "build_timeout_sec": {
+          "default": 600.0,
+          "title": "Build Timeout Sec",
+          "type": "number"
+        },
+        "docker_image": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A pre-built Docker image to use for the environment. When set, environment/Dockerfile is optional for supported environment types.",
+          "title": "Docker Image"
+        },
+        "os": {
+          "$ref": "#/$defs/TaskOS",
+          "default": "linux",
+          "description": "Target operating system for the task's container. Defaults to 'linux' for back-compat. Set to 'windows' to target Windows containers (requires Docker Desktop in Windows container mode on a Windows host)."
+        },
+        "cpus": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpus"
+        },
+        "memory_mb": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Memory Mb"
+        },
+        "storage_mb": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage Mb"
+        },
+        "gpus": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gpus"
+        },
+        "gpu_types": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of acceptable GPU types (e.g., ['H100', 'A100', 'T4']). None means any GPU type is acceptable.",
+          "title": "Gpu Types"
+        },
+        "tpu": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TpuSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "TPU slice specification (type + topology). When set, the environment requests a TPU node matching this spec."
+        },
+        "mcp_servers": {
+          "items": {
+            "$ref": "#/$defs/MCPServerConfig"
+          },
+          "title": "Mcp Servers",
+          "type": "array"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Environment variables required for the task and resolved from the host at runtime. Supports ${VAR} and ${VAR:-default} template syntax.",
+          "title": "Env",
+          "type": "object"
+        },
+        "skills_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to skills directory in the environment. Contents are copied to the agent's skills config directory.",
+          "title": "Skills Dir"
+        },
+        "healthcheck": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HealthcheckConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Healthcheck to run after environment start to verify readiness. Mirrors Docker HEALTHCHECK semantics."
+        },
+        "workdir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default working directory for command execution. Overrides the container's WORKDIR when set.",
+          "title": "Workdir"
+        },
+        "allow_internet": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Deprecated compatibility field. Use [environment].network_mode instead.",
+          "title": "Allow Internet"
+        }
+      },
+      "title": "EnvironmentConfig",
+      "type": "object"
+    },
+    "HealthcheckConfig": {
+      "description": "Healthcheck configuration mirroring Docker HEALTHCHECK options.\n\nRuns a command repeatedly after environment start to verify readiness.\nAll retries must pass before agent setup begins.",
+      "properties": {
+        "command": {
+          "description": "Shell command to run. Exit 0 means healthy.",
+          "title": "Command",
+          "type": "string"
+        },
+        "interval_sec": {
+          "default": 5.0,
+          "description": "Time in seconds between healthcheck attempts.",
+          "title": "Interval Sec",
+          "type": "number"
+        },
+        "timeout_sec": {
+          "default": 30.0,
+          "description": "Maximum time in seconds for a single healthcheck command to run.",
+          "title": "Timeout Sec",
+          "type": "number"
+        },
+        "start_period_sec": {
+          "default": 0.0,
+          "description": "Grace period in seconds after environment start during which failures do not count toward retries.",
+          "title": "Start Period Sec",
+          "type": "number"
+        },
+        "start_interval_sec": {
+          "default": 5.0,
+          "description": "Interval in seconds between checks during the start period.",
+          "title": "Start Interval Sec",
+          "type": "number"
+        },
+        "retries": {
+          "default": 3,
+          "description": "Number of consecutive failures before the healthcheck is considered failed.",
+          "title": "Retries",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "title": "HealthcheckConfig",
+      "type": "object"
+    },
+    "MCPServerConfig": {
+      "description": "Configuration for an MCP server available to the agent.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "transport": {
+          "default": "sse",
+          "enum": [
+            "stdio",
+            "sse",
+            "streamable-http"
+          ],
+          "title": "Transport",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Command"
+        },
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Args",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "MCPServerConfig",
+      "type": "object"
+    },
+    "MultiStepRewardStrategy": {
+      "description": "Strategy for deriving a trial-level reward from per-step verifier results.",
+      "enum": [
+        "mean",
+        "final"
+      ],
+      "title": "MultiStepRewardStrategy",
+      "type": "string"
+    },
+    "NetworkMode": {
+      "description": "Network access policy for agent and verifier execution.",
+      "enum": [
+        "no-network",
+        "public",
+        "allowlist"
+      ],
+      "title": "NetworkMode",
+      "type": "string"
+    },
+    "PackageInfo": {
+      "description": "Package metadata for the [task] section of task.toml.\n\nThis section identifies the package in the registry with a unique name.",
+      "properties": {
+        "name": {
+          "description": "Package name in org/name format (e.g., 'harbor/hello-world')",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Task package version. Usually semantic, but any non-empty string is accepted.",
+          "title": "Version"
+        },
+        "description": {
+          "default": "",
+          "description": "Human-readable description of the task",
+          "title": "Description",
+          "type": "string"
+        },
+        "authors": {
+          "description": "List of package authors",
+          "items": {
+            "$ref": "#/$defs/Author"
+          },
+          "title": "Authors",
+          "type": "array"
+        },
+        "keywords": {
+          "description": "Keywords for search and categorization",
+          "items": {
+            "type": "string"
+          },
+          "title": "Keywords",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "PackageInfo",
+      "type": "object"
+    },
+    "SolutionConfig": {
+      "properties": {
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Env",
+          "type": "object"
+        }
+      },
+      "title": "SolutionConfig",
+      "type": "object"
+    },
+    "StepConfig": {
+      "properties": {
+        "name": {
+          "description": "Unique, portable directory name under steps/.",
+          "title": "Name",
+          "type": "string"
+        },
+        "agent": {
+          "$ref": "#/$defs/AgentConfig"
+        },
+        "verifier": {
+          "$ref": "#/$defs/VerifierConfig"
+        },
+        "min_reward": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "If set, abort remaining steps when this step's rewards do not meet the threshold(s). A float gates on the 'reward' key (1D convention); a dict gates on each declared key (aborts if any key is below its threshold or missing from the rewards dict). A missing verifier_result (verifier crash) or missing gated key is treated as -inf. Ignored when verification is globally disabled.",
+          "title": "Min Reward"
+        },
+        "healthcheck": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HealthcheckConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional per-step healthcheck run after this step's setup completes and before the agent runs. Mirrors the semantics of the top-level environment healthcheck; start_period_sec applies as a grace period after setup. Supplements rather than replaces the top-level healthcheck."
+        },
+        "artifacts": {
+          "description": "Artifacts to collect after this step's verification into steps/{name}/artifacts/. Appended to task-level and trial-level artifacts during this step's collection pass.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/ArtifactConfig"
+              }
+            ]
+          },
+          "title": "Artifacts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "StepConfig",
+      "type": "object"
+    },
+    "TaskOS": {
+      "description": "Target operating system for a task's container.",
+      "enum": [
+        "linux",
+        "windows"
+      ],
+      "title": "TaskOS",
+      "type": "string"
+    },
+    "TpuSpec": {
+      "description": "Specification for a TPU slice attached to an environment.\n\nThe (type, topology) pair fully determines the GKE node pool the pod\nlands on *and* the per-pod TPU chip count, so there is no separate\nuser-facing chip-count field \u2014 it is derived via chip_count.",
+      "properties": {
+        "type": {
+          "description": "TPU accelerator type. Accepts either a user-friendly alias (e.g., 'v6e', 'trillium', 'v4') or a canonical GKE label (e.g., 'tpu-v6e-slice', 'tpu7x').",
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "topology": {
+          "description": "TPU topology as 'NxM' or 'NxMxK' (e.g., '2x4', '2x2x1').",
+          "title": "Topology",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "topology"
+      ],
+      "title": "TpuSpec",
+      "type": "object"
+    },
+    "VerifierCollectConfig": {
+      "description": "A command run inside a compose service after the agent phase ends.\n\nCollect hooks let services snapshot runtime state (database contents,\nin-memory counters) into files before the environment is torn down, so\nthe files can be declared as artifacts and read by a separate verifier.\nHooks targeting the main service run before the main container is\nstopped; hooks targeting sidecars run after it is stopped.",
+      "properties": {
+        "command": {
+          "description": "Shell command to run in the service.",
+          "title": "Command",
+          "type": "string"
+        },
+        "service": {
+          "default": "main",
+          "description": "Compose service to run the command in. Defaults to main.",
+          "title": "Service",
+          "type": "string"
+        },
+        "timeout_sec": {
+          "default": 60.0,
+          "description": "Timeout in seconds for the collect command.",
+          "title": "Timeout Sec",
+          "type": "number"
+        },
+        "user": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Username or UID to run the command as. None uses the service container's default user.",
+          "title": "User"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "title": "VerifierCollectConfig",
+      "type": "object"
+    },
+    "VerifierConfig": {
+      "properties": {
+        "network_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NetworkMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Network access policy. [agent] and [verifier] use this only as an explicit phase override when set."
+        },
+        "allowed_hosts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hostnames, IP address literals/CIDR ranges, or leading wildcard patterns reachable when network_mode='allowlist'.",
+          "title": "Allowed Hosts"
+        },
+        "timeout_sec": {
+          "default": 600.0,
+          "title": "Timeout Sec",
+          "type": "number"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Env",
+          "type": "object"
+        },
+        "user": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Username or UID to run the verifier as. None uses the environment's default USER (e.g., root).",
+          "title": "User"
+        },
+        "environment_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VerifierEnvironmentMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Whether the verifier runs in the agent's environment ('shared') or in a dedicated container ('separate'). When omitted: defaults to 'separate' if a verifier 'environment' is set, otherwise 'shared'."
+        },
+        "environment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EnvironmentConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Environment definition for the separate verifier container. Same schema as the top-level [environment] section. When set without an explicit environment_mode, implies environment_mode='separate'. When unset with environment_mode='separate', a fresh copy of the top-level [environment] is used. Conflicts with environment_mode='shared'."
+        },
+        "collect": {
+          "description": "Commands run in compose services after the agent phase ends and before artifact collection ([[verifier.collect]] blocks in task.toml). Use these to snapshot runtime state into files that artifact entries can then collect.",
+          "items": {
+            "$ref": "#/$defs/VerifierCollectConfig"
+          },
+          "title": "Collect",
+          "type": "array"
+        }
+      },
+      "title": "VerifierConfig",
+      "type": "object"
+    },
+    "VerifierEnvironmentMode": {
+      "description": "Whether the verifier runs in the agent's environment or its own.",
+      "enum": [
+        "shared",
+        "separate"
+      ],
+      "title": "VerifierEnvironmentMode",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "default": "1.4",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "task": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PackageInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Package information for the task, parsed from the [task] section of task.toml."
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    },
+    "verifier": {
+      "$ref": "#/$defs/VerifierConfig"
+    },
+    "agent": {
+      "$ref": "#/$defs/AgentConfig"
+    },
+    "environment": {
+      "$ref": "#/$defs/EnvironmentConfig"
+    },
+    "solution": {
+      "$ref": "#/$defs/SolutionConfig"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source"
+    },
+    "multi_step_reward_strategy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MultiStepRewardStrategy"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "How to derive the trial-level reward from per-step verifier results in a multi-step task. 'mean' computes per-key means across steps (missing keys treated as 0; steps without a verifier_result excluded). 'final' uses the last step's verifier_result verbatim. Only applies to multi-step tasks; leave unset for single-step tasks. Defaults to 'mean' when unset on a multi-step task."
+    },
+    "steps": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/StepConfig"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Steps"
+    },
+    "artifacts": {
+      "items": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "#/$defs/ArtifactConfig"
+          }
+        ]
+      },
+      "title": "Artifacts",
+      "type": "array"
+    }
+  },
+  "title": "TaskConfig",
+  "type": "object"
+}

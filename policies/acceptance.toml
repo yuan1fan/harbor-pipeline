@@ -1,0 +1,56 @@
+schema_version = "1.0"
+policy_version = "2026-11-01.1"
+
+# F = 20V + 15P + 25M + 30D + 10I, each dimension in [0, 1].
+[weights]
+V = 20
+P = 15
+M = 25
+D = 30
+I = 10
+
+[thresholds]
+min_quality_score = 90.0
+min_attribution_grade = "A"
+
+[hard_conditions]
+require_no_unknown_assertions = true
+require_attribution_grade_a = true
+require_t01_vulnerable_health = true
+require_t02_fixed_health = true
+require_reference_poc_all_success = true
+require_zero_fixed_success = true
+require_negative_cases = ["T05", "T06", "T07", "T10"]
+max_infra_error_rate = 0.2
+min_valid_trials = 20
+require_paired_samples = true
+# Set to true when the release host can enforce network_mode='allowlist'.
+# Docker Desktop on Windows cannot (no CONFIG_NFT_FIB_INET); the limitation is
+# recorded per task in metadata.network_isolation instead of being hidden.
+require_network_allowlist = false
+
+# Development smoke settings are intentionally weaker than qualification.
+[profiles.smoke]
+trials = 3
+min_valid_trials = 3
+require_paired = false
+min_quality_score = 0.0
+allow_attribution_grade = ["A", "B", "C"]
+
+[profiles.qualification]
+trials = 20
+min_valid_trials = 20
+require_paired = true
+min_quality_score = 90.0
+allow_attribution_grade = ["A"]
+
+# Attribution evidence grades. Only A may enter a released training set.
+[grades.A]
+description = "Verified real version, target fix, matching trigger evidence, and healthy business on both sides."
+releasable = true
+[grades.B]
+description = "Full release comparison with extra changes; attribution limits recorded."
+releasable = false
+[grades.C]
+description = "Descriptions or unverified reproduction hints only."
+releasable = false

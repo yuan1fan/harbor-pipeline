@@ -37,7 +37,7 @@ class ModelSettings:
 
 @dataclass
 class SourceSettings:
-    allowed_hosts: list[str] = field(default_factory=lambda: ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov"])
+    allowed_hosts: list[str] = field(default_factory=lambda: ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org"])
     max_bytes: int = 1500000
     timeout_sec: int = 30
 

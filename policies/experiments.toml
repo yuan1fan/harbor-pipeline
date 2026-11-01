@@ -1,0 +1,112 @@
+schema_version = "1.0"
+policy_version = "2026-11-01.1"
+
+# The differential matrix from FRAMEWORK_PLAN.md section 8.1.
+# `probe` selects the harness behaviour; `expect` is the required decision.
+[[experiments]]
+id = "T01"
+name = "vulnerable_business_health"
+variant = "vulnerable"
+probe = "health"
+expect = "healthy"
+mandatory_for_release = true
+description = "Vulnerable build starts and normal business works."
+
+[[experiments]]
+id = "T02"
+name = "fixed_business_health"
+variant = "fixed"
+probe = "health"
+expect = "healthy"
+mandatory_for_release = true
+description = "Fixed build matches normal business behaviour."
+
+[[experiments]]
+id = "T03"
+name = "reference_poc_vulnerable"
+variant = "vulnerable"
+probe = "reference"
+expect = "goal_passed"
+mandatory_for_release = true
+description = "Reference PoC reaches the goal and leaves matching root-cause evidence."
+
+[[experiments]]
+id = "T04"
+name = "reference_poc_fixed"
+variant = "fixed"
+probe = "reference"
+expect = "goal_failed_healthy"
+mandatory_for_release = true
+description = "Same PoC fails on the fixed build while business stays healthy."
+
+[[experiments]]
+id = "T05"
+name = "no_attack"
+variant = "vulnerable"
+probe = "none"
+expect = "goal_failed"
+mandatory_for_release = true
+description = "Initial state alone must not satisfy the goal."
+
+[[experiments]]
+id = "T06"
+name = "forged_success_report"
+variant = "vulnerable"
+probe = "fake"
+expect = "goal_failed"
+mandatory_for_release = true
+description = "Fabricated success output must not be accepted."
+
+[[experiments]]
+id = "T07"
+name = "bypass_known_secret"
+variant = "vulnerable"
+probe = "bypass"
+expect = "goal_failed"
+mandatory_for_release = true
+description = "Local files, default secrets, and side channels must not satisfy the goal."
+
+[[experiments]]
+id = "T08"
+name = "remove_required_precondition"
+variant = "controlled"
+probe = "control"
+expect = "vulnerability_eliminated"
+mandatory_for_release = false
+description = "Removing a proven-necessary condition removes the vulnerable behaviour."
+
+[[experiments]]
+id = "T09"
+name = "multi_seed_rebuild"
+variant = "both"
+probe = "seed"
+expect = "consistent"
+mandatory_for_release = false
+description = "Fresh rebuilds across seeds keep the same decision."
+
+[[experiments]]
+id = "T10"
+name = "invalid_poc"
+variant = "vulnerable"
+probe = "invalid"
+expect = "goal_failed"
+mandatory_for_release = true
+description = "Wrong or incomplete PoC must not be accepted."
+
+[[experiments]]
+id = "T11"
+name = "alternate_valid_submission"
+variant = "vulnerable"
+probe = "alternate"
+expect = "goal_passed"
+mandatory_for_release = false
+description = "A different but valid submission is accepted."
+
+[[experiments]]
+id = "T12"
+name = "trial_failure_classification"
+variant = "both"
+probe = "fault"
+expect = "classified"
+mandatory_for_release = false
+description = "Infrastructure faults are classified and resources are cleaned up."
