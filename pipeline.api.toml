@@ -1,0 +1,25 @@
+[pipeline]
+output_dir = "runs"
+workers = 1
+max_repairs = 2
+trials = 5
+min_trials = 5
+max_calls = 12
+max_total_tokens = 180000
+max_context_bytes = 600000
+command_timeout_sec = 300
+python_image = "python:3.12.10-slim-bookworm"
+require_harbor_lint = true
+
+[models.default]
+provider = "anthropic"
+model = "${CLAUDE_MODEL}"
+timeout_sec = 300
+max_output_tokens = 18000
+api_base = "https://api.anthropic.com"
+api_version = "2023-06-01"
+
+[sources]
+allowed_hosts = ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov"]
+max_bytes = 1500000
+timeout_sec = 30

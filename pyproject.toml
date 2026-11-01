@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "harbor-cve-pipeline"
+version = "0.1.0"
+description = "Evidence-driven CVE task generation and differential validation for Harbor"
+requires-python = ">=3.11"
+dependencies = ["jsonschema>=4.23,<5"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+harbor-pipeline = "harbor_pipeline.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["harbor_pipeline*"]
+
+[tool.setuptools.package-data]
+harbor_pipeline = ["prompts/*.md", "assets/*.py"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
