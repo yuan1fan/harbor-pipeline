@@ -206,6 +206,12 @@ Exactly one action per reply, as a JSON object:
 - Use `registry` before choosing a version. Never invent one. If a lookup
   fails, do not repeat the same name; use the build log and the bundle's
   recorded versions instead.
+- A missing compiler is a Dockerfile problem, not a package problem. When pip
+  or npm fails building an extension (`gcc: No such file`, `cmake not found`,
+  `Python.h: No such file`), add the toolchain to the Dockerfile before the
+  install step: `build-essential cmake git python3-dev pkg-config libev-dev`.
+  For npm postinstall scripts that are irrelevant to the application, pass
+  `--ignore-scripts` instead of chasing each native build.
 - Use `build` for packaging failures and `run_verifier` for behaviour. The
   build log tail and the verifier's stdout/stderr are in the observation; do
   not repeat a patch that failed for the same reason.
