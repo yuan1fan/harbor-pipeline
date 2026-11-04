@@ -8,8 +8,10 @@ build failure is attributed to the candidate rather than to a later trial.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import signal
 import subprocess
 import time
 import uuid
@@ -56,22 +58,67 @@ def docker_binary() -> str:
     return resolved
 
 
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """Kill the docker CLI and every child that inherited its pipes.
+
+    ``subprocess.run(timeout=...)`` only kills the direct child. A docker build
+    spawns a buildx child that keeps the stdout/stderr pipes open, so the
+    reader threads in ``communicate()`` stay blocked even after the CLI dies.
+    On Windows that turned a 600 s build timeout into an hours-long hang.
+    """
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                capture_output=True, text=True, timeout=30,
+                **no_window_kwargs(),
+            )
+        else:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                proc.kill()
+    except Exception:  # noqa: BLE001 - best-effort teardown
+        try:
+            proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _run(command: list[str], *, timeout: int, log_path: Path) -> subprocess.CompletedProcess:
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        **no_window_kwargs(),
+    )
     try:
-        completed = subprocess.run(
-            command, capture_output=True, text=True, timeout=timeout,
-            **no_window_kwargs(),
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_tree(proc)
+        # Never wait indefinitely for inherited pipes. If the tree did not
+        # close them, keep the timeout verdict and let the caller fail the
+        # candidate instead of hanging the whole batch.
+        try:
+            stdout, stderr = proc.communicate(timeout=15)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = "", ""
+        log_path.write_text(
+            f"$ {' '.join(command)}\n\n{stdout or ''}\n{stderr or ''}\nTIMEOUT\n",
+            encoding="utf-8",
         )
-    except subprocess.TimeoutExpired as exc:
-        text = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
-        log_path.write_text(text + "\nTIMEOUT\n", encoding="utf-8")
-        raise TaskError("build_error", f"Build exceeded {timeout}s: {' '.join(command[:4])}") from exc
+        raise TaskError(
+            "build_error", f"Build exceeded {timeout}s: {' '.join(command[:4])}"
+        )
     log_path.write_text(
-        f"$ {' '.join(command)}\n\n{completed.stdout}\n{completed.stderr}\n",
+        f"$ {' '.join(command)}\n\n{stdout or ''}\n{stderr or ''}\n",
         encoding="utf-8",
     )
-    return completed
+    return subprocess.CompletedProcess(
+        command, proc.returncode, stdout, stderr
+    )
 
 
 def run_in_image(
@@ -95,24 +142,30 @@ def run_in_image(
         "--entrypoint", "sh", image_ref, "-c", command,
     ]
     try:
-        completed = subprocess.run(
-            argv, capture_output=True, text=True, timeout=timeout,
+        proc = subprocess.Popen(
+            argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             **no_window_kwargs(),
         )
-    except subprocess.TimeoutExpired as exc:
-        output = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
-        output += "\nTIMEOUT"
+    except OSError as exc:
+        return {"exit": -1, "output": f"docker run failed: {exc}"}
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_tree(proc)
+        try:
+            stdout, stderr = proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = "", ""
+        output = (stdout or "") + (stderr or "") + "\nTIMEOUT"
         if log_path is not None:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             log_path.write_text(output[-20000:], encoding="utf-8")
         return {"exit": 124, "output": output[-8000:]}
-    except OSError as exc:
-        return {"exit": -1, "output": f"docker run failed: {exc}"}
-    combined = (completed.stdout or "") + (completed.stderr or "")
+    combined = (stdout or "") + (stderr or "")
     if log_path is not None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_path.write_text(combined[-20000:], encoding="utf-8")
-    return {"exit": completed.returncode, "output": combined[-8000:]}
+    return {"exit": proc.returncode, "output": combined[-8000:]}
 
 
 def inspect_image(image_ref: str, *, dockerfile: Path) -> tuple[str, str]:

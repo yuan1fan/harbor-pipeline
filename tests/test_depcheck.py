@@ -45,7 +45,8 @@ def test_python_requires_python_incompatibility(monkeypatch):
     )
     monkeypatch.setattr(depcheck, "version_exists", lambda *args: True)
     monkeypatch.setattr(
-        depcheck, "_release_metadata", lambda *args: {"requires_python": ">=3.6,<3.9"}
+        depcheck, "_release_metadata",
+        lambda *args: {"info": {"requires_python": ">=3.6,<3.9"}, "urls": []},
     )
     issues = depcheck.check_bundle(_bundle(), SourceSettings())
     assert any("requires Python" in issue for issue in issues)
@@ -122,3 +123,77 @@ def test_exec_action_is_part_of_the_agent_protocol():
     assert "inspect_package" in actions
     assert "exec_image" in repair.RepairTools.__dataclass_fields__
     assert "inspect_package" in repair.RepairTools.__dataclass_fields__
+
+
+def test_wheel_mismatch_detects_an_old_binary_release():
+    assert depcheck._wheel_mismatch(
+        ["onnx-1.3.0-cp36-cp36m-manylinux1_x86_64.whl"], "3.12"
+    )
+    assert not depcheck._wheel_mismatch(
+        ["onnx-1.3.0-py3-none-any.whl"], "3.12"
+    )
+    assert not depcheck._wheel_mismatch(["onnx-1.3.0.tar.gz"], "3.12")
+    assert not depcheck._wheel_mismatch(
+        ["cryptography-42-cp37-abi3-manylinux.whl"], "3.12"
+    )
+    assert depcheck._wheel_mismatch(
+        ["cryptography-42-cp36-cp36m-manylinux.whl"], "3.12"
+    )
+
+
+def test_manifest_go_require_must_exist(monkeypatch):
+    monkeypatch.setattr(
+        depcheck, "lookup", lambda ecosystem, name, settings: (
+            {"versions": ["1.0.0"]}
+            if name == "whodb" or name.endswith("/core")
+            else {"error": "HTTP 404 Not Found"}
+        )
+    )
+    monkeypatch.setattr(
+        depcheck, "version_exists",
+        lambda ecosystem, name, version, settings: (
+            name == "whodb" or name.endswith("/core")
+        ),
+    )
+    bundle = _bundle(
+        ecosystem="npm",
+        name="whodb",
+        base="golang:1.25-bookworm",
+        files={
+            "go.mod": (
+                "module task\n\ngo 1.25\n\nrequire (\n"
+                "\tgithub.com/clidey/whodb/core v{{REF}}\n"
+                "\tgithub.com/nope/missing v1.2.3\n"
+                ")\n"
+            )
+        },
+    )
+    issues = depcheck.check_bundle(bundle, SourceSettings())
+    assert any("github.com/nope/missing" in issue for issue in issues)
+
+
+def test_manifest_package_json_name_and_version_must_exist(monkeypatch):
+    def exists(ecosystem, name, version, settings):
+        if name == "real":
+            return True
+        if name == "missing-name":
+            return None
+        return False
+
+    monkeypatch.setattr(
+        depcheck, "lookup",
+        lambda ecosystem, name, settings: (
+            {"error": "HTTP 404 Not Found"} if name == "missing-name"
+            else {"versions": ["1.0.0"]}
+        ),
+    )
+    monkeypatch.setattr(depcheck, "version_exists", exists)
+    monkeypatch.setattr(depcheck, "_release_metadata", lambda *args: {})
+    bundle = _bundle(ecosystem="npm", name="openclaw", base="node:22-bookworm")
+    bundle["target"]["files"]["package.json"] = (
+        '{"dependencies": {"real": "1.0.0", "ghost": "9.9.9", '
+        '"missing-name": "{{REF}}"}}'
+    )
+    issues = depcheck.check_bundle(bundle, SourceSettings())
+    assert any("ghost 9.9.9" in issue for issue in issues)
+    assert any("missing-name" in issue for issue in issues)

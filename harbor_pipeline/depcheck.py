@@ -55,7 +55,7 @@ def _release_metadata(
     try:
         if ecosystem == "pypi":
             result = fetch(f"https://pypi.org/pypi/{name}/{version}/json", settings)
-            return json.loads(result.body.decode("utf-8")).get("info") or {}
+            return json.loads(result.body.decode("utf-8"))
         if ecosystem == "npm":
             result = fetch(
                 f"https://registry.npmjs.org/{name}/{version}", settings
@@ -64,6 +64,24 @@ def _release_metadata(
     except Exception:  # noqa: BLE001 - a metadata miss must not block a task
         return {}
     return {}
+
+
+def _wheel_mismatch(files: list[str], runtime: str) -> bool:
+    """True when the release publishes wheels, but none for this interpreter.
+
+    ``requires_python`` is metadata the publisher may leave empty; an old
+    release with only cp36 wheels then looks installable on Python 3.12 and
+    fails at build time. Pure-python and abi3 wheels are usable everywhere
+    they claim to be.
+    """
+    wheels = [name for name in files if name.endswith(".whl")]
+    if not wheels:
+        return False
+    if any("none-any.whl" in name or "abi3" in name for name in wheels):
+        return False
+    major, _, minor = runtime.partition(".")
+    tag = f"cp{major}{minor}"
+    return not any(tag in name for name in wheels)
 
 
 def _python_compatible(requires_python: str, runtime: str) -> bool | None:
@@ -138,7 +156,8 @@ def check_bundle(bundle: dict, settings: SourceSettings) -> list[str]:
     if language == "python" and ecosystem == "pypi":
         for key in ("vulnerable_ref", "fixed_ref"):
             ref = _normalize_ref(ecosystem, str(versions.get(key) or ""))
-            info = _release_metadata(ecosystem, name, ref, settings)
+            doc = _release_metadata(ecosystem, name, ref, settings)
+            info = doc.get("info") or {}
             requires = str(info.get("requires_python") or "")
             compatible = _python_compatible(requires, runtime)
             if compatible is False:
@@ -147,11 +166,23 @@ def check_bundle(bundle: dict, settings: SourceSettings) -> list[str]:
                     f"{base_image} provides Python {runtime}. Choose a release "
                     "compatible with the image or a matching base image."
                 )
+            filenames = [
+                str(item.get("filename") or "")
+                for item in (doc.get("urls") or [])
+                if isinstance(item, dict)
+            ]
+            if _wheel_mismatch(filenames, runtime):
+                issues.append(
+                    f"{name} {ref} publishes binary wheels, but none for Python "
+                    f"{runtime} (base image {base_image}). Building from source is "
+                    "likely to fail; choose a release with a matching wheel or a "
+                    "compatible base image."
+                )
     elif language == "node" and ecosystem == "npm":
         for key in ("vulnerable_ref", "fixed_ref"):
             ref = _normalize_ref(ecosystem, str(versions.get(key) or ""))
-            info = _release_metadata(ecosystem, name, ref, settings)
-            engines = str((info.get("engines") or {}).get("node") or "")
+            doc = _release_metadata(ecosystem, name, ref, settings)
+            engines = str((doc.get("engines") or {}).get("node") or "")
             compatible = _node_compatible(engines, runtime)
             if compatible is False:
                 issues.append(
@@ -179,4 +210,109 @@ def check_bundle(bundle: dict, settings: SourceSettings) -> list[str]:
                     )
             except ValueError:
                 pass
+    issues.extend(_manifest_issues(bundle, settings))
+    return issues
+
+
+_GO_REQUIRE_BLOCK = re.compile(r"require\s*\(([^)]*)\)", re.DOTALL)
+_GO_REQUIRE_LINE = re.compile(r"^\s*require\s+(\S+)\s+(\S+)\s*$", re.MULTILINE)
+
+
+def _go_requires(go_mod: str) -> list[tuple[str, str]]:
+    requires: list[tuple[str, str]] = []
+    for block in _GO_REQUIRE_BLOCK.findall(go_mod):
+        for line in block.splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and not parts[0].startswith("//"):
+                requires.append((parts[0], parts[1]))
+    for match in _GO_REQUIRE_LINE.finditer(go_mod):
+        requires.append((match.group(1), match.group(2)))
+    return requires
+
+
+def _manifest_issues(bundle: dict, settings: SourceSettings) -> list[str]:
+    """Check the dependencies the target actually declares.
+
+    The product's ecosystem is a hint from the advisory; the build follows the
+    target's ``go.mod`` / ``package.json`` / ``requirements.txt``. A model can
+    therefore pin a real product and a nonexistent helper, or use a Go module
+    path that was never published. A template ``{{REF}}`` version is checked
+    for the package/module name only.
+    """
+    files = (bundle.get("target") or {}).get("files") or {}
+    issues: list[str] = []
+    budget = 8
+
+    def exists(ecosystem: str, name: str, version: str | None) -> bool | None:
+        nonlocal budget
+        if budget <= 0:
+            return None
+        budget -= 1
+        if version is None:
+            result = lookup(ecosystem, name, settings)
+            if "error" not in result:
+                return True
+            error = str(result["error"]).lower()
+            return False if ("404" in error or "no published" in error) else None
+        return version_exists(ecosystem, name, version, settings)
+
+    for filename, body in files.items():
+        name = str(filename)
+        text = str(body)
+        if name.endswith("go.mod"):
+            for path, version in _go_requires(text):
+                if path.startswith(("//", ")")):
+                    continue
+                if "{{REF}}" in version:
+                    if exists("go", path, None) is False:
+                        issues.append(
+                            f"go.mod requires module {path!r}, which is not "
+                            "published; use the real module path from the evidence."
+                        )
+                elif exists("go", path, version) is False:
+                    issues.append(
+                        f"go.mod requires {path} {version}, but that module "
+                        "version is not published."
+                    )
+        elif name.endswith("package.json"):
+            try:
+                data = json.loads(text)
+            except ValueError:
+                continue
+            for dep, spec in (data.get("dependencies") or {}).items():
+                spec = str(spec)
+                if "{{REF}}" in spec:
+                    if exists("npm", dep, None) is False:
+                        issues.append(
+                            f"package.json depends on {dep!r}, which is not "
+                            "published on npm."
+                        )
+                elif re.fullmatch(r"v?\d+(?:\.\d+)*", spec):
+                    if exists("npm", dep, spec.lstrip("v")) is False:
+                        issues.append(
+                            f"package.json pins {dep} {spec}, which is not "
+                            "published on npm."
+                        )
+        elif name.endswith("requirements.txt"):
+            for line in text.splitlines():
+                line = line.split("#", 1)[0].strip()
+                if "==" not in line:
+                    continue
+                dep, version = line.split("==", 1)
+                dep = dep.split("[", 1)[0].strip()
+                version = version.strip()
+                if not dep:
+                    continue
+                if "{{REF}}" in version:
+                    if exists("pypi", dep, None) is False:
+                        issues.append(
+                            f"requirements.txt names {dep!r}, which is not "
+                            "published on PyPI."
+                        )
+                elif re.fullmatch(r"\d+(?:\.\d+)*(?:[a-zA-Z0-9.+-]*)", version):
+                    if exists("pypi", dep, version) is False:
+                        issues.append(
+                            f"requirements.txt pins {dep}=={version}, which is "
+                            "not published on PyPI."
+                        )
     return issues

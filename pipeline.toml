@@ -16,7 +16,7 @@ max_context_bytes = 600000
 # 300s was short enough that a normal 60s build timed out under twenty
 # concurrent trials. A build that genuinely hangs still ends well before the
 # job-level timeout in harbor_adapter.
-command_timeout_sec = 600
+command_timeout_sec = 900
 # Exact tag for development. Replace with an immutable digest before production acceptance.
 python_image = "python:3.12.10-slim-bookworm"
 require_harbor_lint = true
