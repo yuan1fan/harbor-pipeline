@@ -9,7 +9,7 @@ from harbor_pipeline.contracts import load_experiments, load_policy, validate
 from harbor_pipeline.differential import MatrixResult
 from harbor_pipeline.generator import render_task
 from harbor_pipeline.harbor_adapter import TrialOutcome, classify_trial
-from harbor_pipeline.scenario import _synthesis_entrypoint
+from harbor_pipeline.scenario import ScenarioContext, _synthesis_entrypoint
 from harbor_pipeline.trials import Expectation, evaluate_expectation
 
 
@@ -58,7 +58,17 @@ def test_t12_expectation_accepts_a_classified_target_failure():
 
 
 def test_fault_switch_is_in_the_normal_target_and_both_composes():
-    entrypoint = _synthesis_entrypoint("node /opt/app/server.js", "/opt/app/secret/token")
+    ctx = ScenarioContext(
+        cve_id="CVE-0000-0000",
+        product="demo",
+        variant="vulnerable",
+        probe="reference",
+        version="1.0.0",
+        secret_path="/opt/app/secret/token",
+        spec_digest="0" * 64,
+        attribution_grade="A",
+    )
+    entrypoint = _synthesis_entrypoint("node /opt/app/server.js", ctx)
     assert "TARGET_FAULT" in entrypoint
 
     spec = fixtures.cve_spec()

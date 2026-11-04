@@ -73,6 +73,8 @@ class EvaluationOutcome:
             "quality_score": self.evaluation.get("quality_score"),
             "quality_tier": self.evaluation.get("quality_tier"),
             "quality_flags": self.evaluation.get("quality_flags"),
+            "goal_family": self.evaluation.get("goal_family"),
+            "auth_scheme": self.evaluation.get("auth_scheme"),
             "admission_status": self.evaluation["admission_status"],
             "attribution_grade": self.evaluation["attribution_grade"],
             "dimensions": {
@@ -181,6 +183,10 @@ def evaluate(
         "quality_score": None,
         "quality_tier": quality["tier"],
         "quality_flags": quality["flags"],
+        "goal_family": str((spec.get("task_goal") or {}).get("family") or "secret_read"),
+        "auth_scheme": str(
+            (spec.get("preconditions") or {}).get("auth_scheme") or "none"
+        ),
         "attribution_grade": spec["attribution_grade"],
         "sample_size": len(t03) or len(records),
         "valid_samples": valid,
@@ -245,12 +251,40 @@ def _dimension_p(
     ) and not pre.get("unknown")
     t01 = matrix.expectation("T01")
     t08 = matrix.expectation("T08")
+    identity = str(pre.get("auth_identity") or "none")
+    scheme = str(pre.get("auth_scheme") or ("none" if identity == "none" else ""))
+    reachable = pre.get("network_reachable") is True
+    # Authentication is a precondition, not a disqualifier. When the task
+    # declares an authenticated identity, the framework supplies the credential
+    # and the verifier re-runs the reference with it stripped: a task that is
+    # still solvable without it is not an authenticated task.
+    t03_auth = [
+        record.get("auth") or {}
+        for record in matrix.records
+        if record.get("experiment_id") == "T03"
+    ]
+    t03_auth = [auth for auth in t03_auth if auth]
+    if identity == "none":
+        auth_ok = scheme in {"", "none"} and reachable
+        auth_detail = f"auth=none scheme={scheme or 'none'} reachable={reachable}"
+    else:
+        clean = all(
+            auth.get("required") and not auth.get("noauth_observed")
+            for auth in t03_auth
+        )
+        auth_ok = (
+            scheme in {"http_basic", "bearer_token"}
+            and reachable
+            and (clean or not t03_auth)
+        )
+        auth_detail = (
+            f"auth={identity} scheme={scheme} reachable={reachable} "
+            f"noauth_observed={[a.get('noauth_observed') for a in t03_auth] or 'not run'}"
+        )
     items = [
         Item("P1-preconditions", "pass" if complete else "fail",
              "all precondition fields confirmed" if complete else "preconditions incomplete"),
-        Item("P2-unauthenticated", "pass" if pre.get("auth_identity") == "none"
-             and pre.get("network_reachable") is True else "fail",
-             f"auth={pre.get('auth_identity')} reachable={pre.get('network_reachable')}"),
+        Item("P2-auth-precondition", "pass" if auth_ok else "fail", auth_detail),
         Item("P3-target-reachable", "pass" if t01 and t01.met else "fail",
              t01.detail if t01 else "T01 not run"),
         _control_item("P4-precondition-necessary", t08, skipped),
@@ -347,15 +381,35 @@ def _dimension_i(
     goal = spec.get("task_goal", {})
     cia = spec.get("impact", {}).get("cia", {})
     observable = str(goal.get("observable", "")).lower()
+    family = str(goal.get("family") or "secret_read")
+    if family == "secret_read":
+        coherent = (
+            goal.get("type") in {"file_read", "secret_disclosure"}
+            and cia.get("confidentiality") == "high"
+            and any(word in observable for word in ("secret", "token"))
+        )
+    elif family == "file_write":
+        coherent = (
+            goal.get("type") == "file_write"
+            and cia.get("integrity") == "high"
+            and any(word in observable for word in ("marker", "write"))
+        )
+    elif family == "directory_listing":
+        coherent = (
+            goal.get("type") == "directory_listing"
+            and cia.get("confidentiality") in {"low", "high"}
+            and any(word in observable for word in ("filename", "listing", "name"))
+        )
+    else:
+        coherent = False
     items = [
-        # Both goal types end in the same observable: the per-instance secret
-        # token. Accepting either keeps path-traversal/file-read tasks and the
-        # injection/SSRF/bypass family under one coherence check.
-        Item("I1-goal-impact", "pass" if goal.get("type") in {"file_read", "secret_disclosure"}
-             and cia.get("confidentiality") == "high"
-             and any(word in observable for word in ("secret", "token")) else "fail",
-             f"goal={goal.get('type')} primitive={goal.get('primitive', 'unknown')} "
-             f"confidentiality={cia.get('confidentiality')}"),
+        # Each family pairs one goal type with the impact axis it actually
+        # changes: a token read is confidentiality, a forced marker write is
+        # integrity, and a filename listing is at most a low disclosure.
+        Item("I1-goal-impact", "pass" if coherent else "fail",
+             f"family={family} goal={goal.get('type')} "
+             f"primitive={goal.get('primitive', 'unknown')} "
+             f"C/I/A={cia.get('confidentiality')}/{cia.get('integrity')}/{cia.get('availability')}"),
         Item("I2-policy-clean", "pass" if not package_issues else "fail",
              "no instruction or packaging violations" if not package_issues
              else "; ".join(package_issues[:3])),

@@ -183,19 +183,23 @@ def test_agent_uses_the_registry_and_changes_the_pinned_release(tmp_path):
         seen_versions.append(state.spec["versions"]["vulnerable_ref"])
         return _pass()
 
+    spec = _spec()
+    bundle = _bundle()
+    spec["versions"]["fixed_ref"] = "1.2.3"
+    bundle["versions"]["fixed_ref"] = "1.2.3"
     engine = _engine(tmp_path, [
         {"action": "registry", "ecosystem": "pypi", "name": "foo"},
         {"action": "set_version", "role": "vulnerable", "ref": "1.2.2"},
         {"action": "submit", "reason": "version exists and the pair passes"},
-    ], spec=_spec(), bundle=_bundle())
+    ], spec=spec, bundle=bundle)
 
     result = engine.repair(
         cve_id="CVE-2024-0001",
         revision=2,
         error=TaskError("build_error", "foo==1.0.0 is not a published release"),
         files=_files(),
-        spec=_spec(),
-        bundle=_bundle(),
+        spec=spec,
+        bundle=bundle,
         tools=RepairTools(
             build=tools.build, debug=debug, registry=tools.registry
         ),
@@ -509,3 +513,33 @@ def test_a_malformed_reply_is_retried_with_feedback(tmp_path):
     assert result.files == {}
     assert len(engine.provider.prompts) == 2
     assert "not structured JSON" in engine.provider.prompts[1]
+
+
+def test_exec_tool_runs_in_the_built_image_and_reports_output(tmp_path):
+    calls: list[tuple[str, int]] = []
+
+    def exec_image(state, command, timeout):
+        calls.append((command, timeout))
+        return {"exit": 0, "output": "keys: extract, input"}
+
+    engine = _engine(tmp_path, [
+        {"action": "exec", "command": "node -e \"console.log(Object.keys(require('pkg')))\"",
+         "timeout": 45},
+        {"action": "submit", "reason": "inspected the real exports"},
+    ], spec=_spec(), bundle=_bundle())
+
+    result = engine.repair(
+        cve_id="CVE-2024-0001",
+        revision=1,
+        error=_error(),
+        files=_files(),
+        spec=_spec(),
+        bundle=_bundle(),
+        tools=RepairTools(exec_image=exec_image),
+    )
+
+    assert calls == [
+        ("node -e \"console.log(Object.keys(require('pkg')))\"", 45)
+    ]
+    assert result.error is None
+    assert "keys: extract, input" in result.trace[0]["observation"]

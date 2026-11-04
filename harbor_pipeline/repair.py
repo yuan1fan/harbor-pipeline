@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -46,10 +47,12 @@ FRAMEWORK_PATHS = frozenset({
     "environment/Dockerfile",
     "environment/docker-compose.yaml",
 })
-MAX_AGENT_STEPS = 40
-MAX_VERIFIER_RUNS = 6
-MAX_BUILD_RUNS = 4
+MAX_AGENT_STEPS = 50
+MAX_VERIFIER_RUNS = 8
+MAX_BUILD_RUNS = 6
 MAX_REGISTRY_LOOKUPS = 12
+MAX_EXEC_RUNS = 16
+MAX_INSPECT_RUNS = 4
 MAX_REPLY_ATTEMPTS = 3
 # One observation can carry a build log or a verifier trace. Keep it bounded so
 # a long agent run does not grow the prompt without limit.
@@ -74,6 +77,8 @@ ACTION_SCHEMA: dict[str, Any] = {
                 "set_start_command",
                 "set_fixed_override",
                 "registry",
+                "exec",
+                "inspect_package",
                 "build",
                 "run_verifier",
                 "submit",
@@ -82,6 +87,7 @@ ACTION_SCHEMA: dict[str, Any] = {
         },
         "path": {"type": "string"},
         "content": {"type": "string"},
+        "timeout": {"type": "integer", "minimum": 5, "maximum": 180},
         "files": {
             "type": "array",
             "maxItems": 16,
@@ -145,9 +151,19 @@ Exactly one action per reply, as a JSON object:
   the `environment/target/` version.
 - `{"action":"registry","ecosystem":"pypi","name":"onnx"}`: published
   versions. Ecosystems: `pypi`, `npm`, `go`, `maven`.
+- `{"action":"exec","command":"node -e \\"console.log(Object.keys(require('pkg')))\\"","timeout":60}`:
+  run a bounded command in a throwaway container of the last built vulnerable
+  target image (no network). Use it to list a package's real exports, read its
+  installed source, or check an import error. It shows the last build, so call
+  `build` after changing files.
+- `{"action":"inspect_package","name":"@scope/pkg"}`: resolve the installed
+  dependency in that same image and print its real path, files, package.json
+  and exported symbols. Prefer this over guessing an import path; node_modules
+  entries are often symlinks, so use `readlink -f` and `find -L` when you do
+  use `exec` yourself.
 - `{"action":"build"}`: build both variants and return the build log tail.
 - `{"action":"run_verifier"}`: run the real T03+T04 pair. Success requires the
-  vulnerable build to reach the secret AND the fixed build to hold.
+  vulnerable build to reach the goal observable AND the fixed build to hold.
 - `{"action":"submit","reason":"..."}`: finalize. If the files changed since
   the last verifier run, this runs the pair again.
 - `{"action":"abort","reason":"..."}`: give up without applying changes.
@@ -162,9 +178,21 @@ Exactly one action per reply, as a JSON object:
   variant and the fixed ref for the fixed variant. A concrete version in a
   target file applies to both variants and will usually make the fixed build
   leak.
-- The exploit must read the secret from the running vulnerable server. Never
-  hard-code the secret, never read it from a local path, and never use an
-  intended feature that works on both builds.
+- The exploit must obtain the goal observable from the running vulnerable
+  server. Never hard-code it, never read it from a local path, and never use an
+  intended feature that works on both builds. The observable depends on
+  `task_goal.family` read from the bundle:
+  - `secret_read`: print the per-instance 48-hex token.
+  - `file_write`: choose a fresh 48-hex nonce, make the target write it to the
+    marker path through the vulnerability, and print the same nonce. Do not add
+    an intended route that writes the marker.
+  - `directory_listing`: list the protected directory and print the randomly
+    named `.txt` filename, never the file contents.
+- If `preconditions.auth_identity` is not `none`, the target must enforce the
+  declared scheme on every route except `/health` and `/business`. The
+  framework supplies `APP_USER`/`APP_PASS` or `APP_TOKEN` to the target and
+  `TARGET_USER`/`TARGET_PASSWORD` or `TARGET_TOKEN` to the PoC. Do not
+  hard-code the credential and do not make the protected route work without it.
 - The bundle's root cause names the vulnerable code path. Make the application
   call that exact API. A wrapper or helper that throws before reaching it is
   not the vulnerability, even if the route returns an error from it.
@@ -172,9 +200,9 @@ Exactly one action per reply, as a JSON object:
   uses a different language or a dependency that does not exist, replace it
   with an application that uses the real product package (for example an npm
   package must be exercised from Node, not from an invented Go module).
-- The fixed build must not return the secret. If the vulnerable build returns
-  only a listing, use the library's own download/get call and return its body;
-  do not read the file from disk after the library call.
+- The fixed build must not return the observable. For `secret_read`, a
+  vulnerable listing is not enough: use the library's own download/get call and
+  return its body; do not read the file from disk after the library call.
 - Use `registry` before choosing a version. Never invent one. If a lookup
   fails, do not repeat the same name; use the build log and the bundle's
   recorded versions instead.
@@ -242,6 +270,10 @@ class RepairTools:
     build: Callable[[AuthoringState], dict[str, Any]] | None = None
     debug: Callable[[AuthoringState], dict[str, Any]] | None = None
     registry: Callable[[str, str], dict[str, Any]] | None = None
+    # Run a bounded command inside the last built vulnerable target image.
+    exec_image: Callable[[AuthoringState, str, int], dict[str, Any]] | None = None
+    # Resolve the installed package and print its real exports/files.
+    inspect_package: Callable[[AuthoringState, str], dict[str, Any]] | None = None
     # Live audit hook: the pipeline appends each step to repair-trace.jsonl so
     # a long agent run is observable before it finishes.
     on_step: Callable[[dict[str, Any]], None] | None = None
@@ -332,6 +364,8 @@ class RepairEngine:
         verifier_runs = 0
         build_runs = 0
         registry_lookups = 0
+        exec_runs = 0
+        inspect_runs = 0
         registry_cache: dict[tuple[str, str], dict[str, Any]] = {}
         registry_failures: dict[tuple[str, str], int] = {}
         last_read: dict[str, str] = {}
@@ -370,6 +404,7 @@ class RepairEngine:
             )
 
         for step in range(MAX_AGENT_STEPS):
+            scan = _readback_scan(current, bundle_state)
             prompt = self._agent_prompt(
                 error=error,
                 current=current,
@@ -377,12 +412,14 @@ class RepairEngine:
                 spec=spec_state,
                 bundle=bundle_state,
                 observations=observations,
-                context=context,
+                context="\n\n".join(part for part in (context, scan) if part),
                 limits={
                     "steps": MAX_AGENT_STEPS - step,
                     "verifier": MAX_VERIFIER_RUNS - verifier_runs,
                     "build": MAX_BUILD_RUNS - build_runs,
                     "registry": MAX_REGISTRY_LOOKUPS - registry_lookups,
+                    "exec": MAX_EXEC_RUNS - exec_runs,
+                    "inspect": MAX_INSPECT_RUNS - inspect_runs,
                 },
                 pinned_ref=pinned_ref,
             )
@@ -507,6 +544,67 @@ class RepairEngine:
                         else:
                             registry_cache[key] = result
                             observation = _registry_observation(result, ecosystem, name)
+            elif kind == "exec":
+                if exec_runs >= MAX_EXEC_RUNS:
+                    observation = "Exec budget is exhausted. Use run_verifier or submit."
+                    ok = False
+                elif tools.exec_image is None:
+                    observation = "The exec tool is unavailable."
+                    ok = False
+                else:
+                    command = str(action.get("command") or "")
+                    if not command.strip():
+                        observation = "`command` must be a non-empty string."
+                        ok = False
+                    else:
+                        try:
+                            timeout = int(action.get("timeout") or 60)
+                        except (TypeError, ValueError):
+                            timeout = 60
+                        timeout = max(5, min(timeout, 180))
+                        try:
+                            result = tools.exec_image(state(), command, timeout)
+                            if not result.get("no_image"):
+                                # A missing build is a usage hint, not a spent
+                                # inspection: do not charge the budget for it.
+                                exec_runs += 1
+                            observation = (
+                                f"exit={result.get('exit')}\n"
+                                + str(result.get("output") or "")[-8000:]
+                            )
+                            if result.get("note"):
+                                observation += "\n" + str(result["note"])
+                            ok = result.get("exit") == 0
+                        except Exception as exc:  # noqa: BLE001 - tool fault
+                            observation = f"Exec tool failed: {exc}"
+                            ok = False
+            elif kind == "inspect_package":
+                if inspect_runs >= MAX_INSPECT_RUNS:
+                    observation = "Package inspection budget is exhausted."
+                    ok = False
+                elif tools.inspect_package is None:
+                    observation = "The package inspection tool is unavailable."
+                    ok = False
+                else:
+                    name = str(action.get("name") or "").strip()
+                    if not name:
+                        observation = "`name` must be a package name."
+                        ok = False
+                    else:
+                        try:
+                            result = tools.inspect_package(state(), name)
+                            if not result.get("no_image"):
+                                inspect_runs += 1
+                            observation = (
+                                f"exit={result.get('exit')}\n"
+                                + str(result.get("output") or "")[-10000:]
+                            )
+                            if result.get("note"):
+                                observation += "\n" + str(result["note"])
+                            ok = result.get("exit") == 0
+                        except Exception as exc:  # noqa: BLE001 - tool fault
+                            observation = f"Package inspection failed: {exc}"
+                            ok = False
             elif kind == "build":
                 if build_runs >= MAX_BUILD_RUNS:
                     observation = "Build budget is exhausted. Use run_verifier or submit."
@@ -876,6 +974,69 @@ def _apply_writes(
     return changed, "Updated: " + ", ".join(changed)
 
 
+_READBACK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("node", re.compile(
+        r"\b(?:fs\.(?:readFile|readFileSync|createReadStream|readdir|readdirSync)"
+        r"|res\.sendFile)\b"
+    )),
+    ("python", re.compile(
+        r"(?:\bopen\s*\(|\bPath\([^)]*\)\.read_text\s*\(|\bsend_file\s*\()"
+    )),
+    ("go", re.compile(
+        r"\b(?:os\.ReadFile|ioutil\.ReadFile|http\.ServeFile|os\.ReadDir)\b"
+    )),
+    ("java", re.compile(
+        r"\b(?:Files\.readAllBytes|new\s+FileInputStream|Files\.list)\b"
+    )),
+)
+
+
+def _readback_scan(files: dict[str, str], bundle: dict[str, Any]) -> str:
+    """Point the author at direct reads that can survive the fixed build.
+
+    A handler that assembles a path from the request and reads it itself still
+    works after the upstream patch, so T04 sees a leak. This is a pointer for
+    the author, not a gate: the paired verifier remains the verdict.
+    """
+    product = str((bundle.get("product") or {}).get("name") or "").strip()
+    hits: list[str] = []
+    for name, body in sorted(files.items()):
+        if not name.startswith("environment/target/"):
+            continue
+        lowered = body.lower()
+        if product and product.lower() not in lowered:
+            continue
+        for language, pattern in _READBACK_PATTERNS:
+            for match in pattern.finditer(body):
+                line = body.count("\n", 0, match.start()) + 1
+                hits.append(f"{name}:{line}: {match.group(0)} ({language})")
+    if not hits:
+        return (
+            "## Static read-back scan\n"
+            "No direct file-read call was found in a file that also references "
+            "the product package."
+        )
+    return (
+        "## Static read-back scan\n"
+        "These direct reads sit in the same file as the product import. If a "
+        "handler returns content read this way, the fixed build may still "
+        "leak and T04 will fail. Route the observable through the library call "
+        "only:\n- " + "\n- ".join(hits[:20])
+    )
+
+
+def _version_tuple(value: str) -> tuple[int, ...] | None:
+    text = str(value or "").strip().lstrip("v")
+    if not text or not text[0].isdigit():
+        return None
+    parts = []
+    for chunk in re.split(r"[.+-]", text):
+        if not chunk.isdigit():
+            break
+        parts.append(int(chunk))
+    return tuple(parts) if parts else None
+
+
 def _set_version(
     action: dict[str, Any], spec: dict[str, Any], bundle: dict[str, Any]
 ) -> str:
@@ -890,6 +1051,36 @@ def _set_version(
         return "The spec has no versions object; cannot set a release."
     key = f"{role}_ref"
     ref = ref.strip()
+    other = versions.get("fixed_ref" if role == "vulnerable" else "vulnerable_ref")
+    if role == "vulnerable" and other and ref == str(other):
+        return "The vulnerable ref must differ from the fixed ref."
+    if role == "vulnerable":
+        # The new release must still be inside the recorded affected range.
+        affected = str((bundle.get("versions") or {}).get("affected") or "").strip()
+        if affected and affected[0] in "><=~!":
+            try:
+                from packaging.specifiers import SpecifierSet
+                from packaging.version import Version
+
+                if not SpecifierSet(affected).contains(Version(ref.lstrip("v"))):
+                    return (
+                        f"{ref!r} is outside the recorded affected range "
+                        f"{affected!r}. Choose an affected release, or keep the "
+                        "current pair."
+                    )
+            except Exception:  # noqa: BLE001 - non-PEP 440 ranges are advisory
+                pass
+    current = versions.get(key)
+    if current and other:
+        low, high = (
+            (ref, other) if role == "vulnerable" else (other, ref)
+        )
+        low_tuple, high_tuple = _version_tuple(low), _version_tuple(high)
+        if low_tuple and high_tuple and low_tuple >= high_tuple:
+            return (
+                f"{low!r} must be older than {high!r} "
+                "(vulnerable < fixed)."
+            )
     bundle_versions = bundle.setdefault("versions", {})
     if versions.get(key) == ref and (
         not isinstance(bundle_versions, dict)
@@ -989,6 +1180,8 @@ def _verifier_observation(evidence: dict[str, Any]) -> str:
         f"reference_stdout={str(evidence.get('reference_stdout') or '')[-1200:]!r}",
         f"submitted_exit={evidence.get('submitted_exit')}",
         f"submitted_observed={evidence.get('submitted_observed')}",
+        f"marker_present={evidence.get('marker_present')}",
+        f"marker_matches_reference={evidence.get('marker_matches_reference')}",
         f"fixed_status={evidence.get('fixed_status')}",
         f"fixed_health_ok={evidence.get('fixed_health_ok')}",
         f"fixed_reference_stderr={str(evidence.get('fixed_reference_error') or '')[-600:]!r}",
@@ -1000,7 +1193,9 @@ def _verifier_observation(evidence: dict[str, Any]) -> str:
     if evidence.get("target_log"):
         lines.append(f"target_log={str(evidence['target_log'])[-800:]!r}")
     if _debug_passed(evidence):
-        lines.append("PAIR PASSED: vulnerable reached the secret and the fixed build holds.")
+        lines.append(
+            "PAIR PASSED: vulnerable reached the goal observable and the fixed build holds."
+        )
     else:
         lines.append(
             "PAIR FAILED: success requires goal_passed on the vulnerable build "

@@ -60,6 +60,12 @@ _SECRET_PRIMITIVES: dict[str, re.Pattern[str]] = {
         r"directory listing|sensitive file|file download",
         re.IGNORECASE,
     ),
+    "file_write": re.compile(
+        r"arbitrary file write|file write|write arbitrary files?|"
+        r"zip slip|zip-slip|path traversal.*write|symlink.*write|"
+        r"write files? (?:outside|to an arbitrary)",
+        re.IGNORECASE,
+    ),
     "ssrf": re.compile(r"server-side request forgery|\bssrf\b", re.IGNORECASE),
     "sql_injection": re.compile(r"sql injection|\bsqli\b", re.IGNORECASE),
     "command_injection": re.compile(
@@ -287,7 +293,7 @@ def _candidate_from_nvd(
     if not product and not any(_cpe_part(cpe) == "a" for cpe in cpes):
         return None, "no application component"
     if not primitives:
-        return None, "no secret-disclosure primitive"
+        return None, "no supported primitive"
     if _NON_SERVER_RE.search(description) and not (commit_refs or advisory_refs):
         return None, "non-server or local-only"
     if not (_WEB_RE.search(description) or commit_refs or advisory_refs or osv_refs):

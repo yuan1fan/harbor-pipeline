@@ -83,12 +83,39 @@ def check_spec_consistency(spec: dict) -> list[str]:
         if spec.get("versions", {}).get("vulnerable_ref") == spec.get("versions", {}).get("fixed_ref"):
             issues.append("Vulnerable and fixed references must differ")
     goal = spec.get("task_goal", {})
-    if goal.get("type") in {"file_read", "secret_disclosure"}:
-        observable = str(goal.get("observable", "")).lower()
-        if not any(word in observable for word in ("secret", "token", "read")):
-            issues.append(
-                f"{goal.get('type')} goal needs an observable secret disclosure"
-            )
+    family = str(goal.get("family") or "secret_read")
+    expected_type = {
+        "secret_read": {"file_read", "secret_disclosure"},
+        "file_write": {"file_write"},
+        "directory_listing": {"directory_listing"},
+    }.get(family)
+    if expected_type is None:
+        issues.append(f"Unknown task_goal.family {family!r}")
+    elif goal.get("type") not in expected_type:
+        issues.append(
+            f"task_goal.family {family!r} requires type in {sorted(expected_type)}, "
+            f"got {goal.get('type')!r}"
+        )
+    observable = str(goal.get("observable", "")).lower()
+    keywords = {
+        "secret_read": ("secret", "token", "read"),
+        "file_write": ("marker", "write"),
+        "directory_listing": ("filename", "listing", "name"),
+    }.get(family, ("secret", "token", "read"))
+    if not any(word in observable for word in keywords):
+        issues.append(
+            f"{family} goal needs an observable containing one of {keywords}"
+        )
+    pre = spec.get("preconditions", {})
+    identity = str(pre.get("auth_identity") or "none")
+    scheme = str(pre.get("auth_scheme") or "")
+    if identity == "none":
+        if scheme not in {"", "none"}:
+            issues.append("auth_scheme requires an authenticated identity")
+    elif scheme not in {"http_basic", "bearer_token"}:
+        issues.append(
+            f"auth_identity {identity!r} requires an auth_scheme, got {scheme!r}"
+        )
     return issues
 
 

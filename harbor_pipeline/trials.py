@@ -150,6 +150,11 @@ def build_trial_record(
             "detail": str(evidence.get("status", "missing")),
             "target_response_digest": response_digest,
         },
+        "auth": {
+            "required": bool(evidence.get("auth_required")),
+            "noauth_observed": bool(evidence.get("noauth_observed")),
+        },
+        "goal_family": str(evidence.get("goal_family") or "secret_read"),
         "goal_result": goal_result,
         "exit_status": int(evidence.get("submitted_exit") or 0),
         "error_category": trial.error_category,

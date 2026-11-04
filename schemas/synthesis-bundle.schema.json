@@ -40,12 +40,17 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "network_reachable", "auth_identity", "privileges", "configuration",
-        "user_interaction", "dependencies", "unknown"
+        "network_reachable", "auth_identity", "auth_scheme", "privileges",
+        "configuration", "user_interaction", "dependencies", "unknown"
       ],
       "properties": {
         "network_reachable": {"type": "boolean"},
-        "auth_identity": {"type": "string"},
+        "auth_identity": {
+          "enum": ["none", "low_privilege", "high_privilege"]
+        },
+        "auth_scheme": {
+          "enum": ["none", "http_basic", "bearer_token"]
+        },
         "privileges": {"type": "string"},
         "configuration": {"type": "string", "minLength": 1},
         "user_interaction": {"type": "boolean"},
@@ -84,9 +89,16 @@
     "task_goal": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "primitive", "target_asset", "observable"],
+      "required": ["type", "family", "primitive", "target_asset", "observable"],
       "properties": {
-        "type": {"enum": ["file_read", "secret_disclosure"]},
+        "type": {
+          "enum": [
+            "file_read", "secret_disclosure", "file_write", "directory_listing"
+          ]
+        },
+        "family": {
+          "enum": ["secret_read", "file_write", "directory_listing"]
+        },
         "primitive": {
           "enum": [
             "path_traversal", "file_read", "ssrf", "sql_injection",
@@ -94,7 +106,7 @@
             "template_injection", "auth_bypass", "information_disclosure"
           ]
         },
-        "target_asset": {"const": "/opt/app/secret/token"},
+        "target_asset": {"type": "string", "minLength": 1},
         "observable": {"type": "string", "minLength": 10}
       }
     },

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import SCHEMA_VERSION
-from .backend import build_task_images, preflight_target, prune_task_images
+from .backend import build_task_images, preflight_target, prune_task_images, run_in_image
 from .config import Config
 from .contracts import (
     MAX_MATRIX_REPEATS,
@@ -173,6 +173,10 @@ class CvePipeline:
         self._ledger_obj = ledger
         self._repair = None
         self._repair_error: str | None = None
+        # Images built during the current repair attempt are kept until the
+        # attempt ends so the exec tool can inspect the real installed package.
+        self._repair_images: dict[str, str] = {}
+        self._repair_prune_bases: list[str] = []
 
     # -- facility ----------------------------------------------------------
 
@@ -515,8 +519,8 @@ class CvePipeline:
         except PipelineError as exc:
             shutil.rmtree(debug_root, ignore_errors=True)
             raise TaskError("budget_exhausted", str(exc)) from exc
+        builds: dict[str, dict] = {}
         try:
-            builds: dict[str, dict] = {}
             for variant, task_dir, base in (
                 ("vulnerable", vuln_dir, vuln_base),
                 ("fixed", fixed_dir, fixed_base),
@@ -570,12 +574,136 @@ class CvePipeline:
             ledger.commit(reservation, {"builds": 6})
         finally:
             shutil.rmtree(debug_root, ignore_errors=True)
-            prune_task_images(vuln_base)
-            prune_task_images(fixed_base)
+            # Keep only this build's images: the exec tool inspects the last
+            # built vulnerable target, and older sets are pruned immediately.
+            self._replace_repair_images(
+                [vuln_base, fixed_base],
+                {
+                    variant: build["images"]["target"]["image_ref"]
+                    for variant, build in builds.items()
+                    if build.get("images", {}).get("target", {}).get("image_ref")
+                },
+            )
 
     def _repair_registry_lookup(self, ecosystem: str, name: str) -> dict:
         """Query a public registry through the configured allowlisted fetcher."""
         return registry_mod.lookup(ecosystem, name, self.config.sources)
+
+    def _repair_inspect_package(self, state, name: str) -> dict:
+        """Resolve an installed dependency and print its real exports.
+
+        Node modules are frequently symlinked (npm workspaces, pnpm), so a
+        guessed ``lib/...`` path can miss the installed tree entirely. This
+        runs the ecosystem's own resolver and lists what the package actually
+        exports, which is what the author needs to call the right API.
+        """
+        import re
+
+        if not re.fullmatch(r"[A-Za-z0-9._@/:-]+", name):
+            return {"exit": 2, "output": "unsafe package name"}
+        product = {}
+        try:
+            product = state.spec.get("product") or {}
+        except AttributeError:
+            product = {}
+        ecosystem = str(product.get("ecosystem") or "")
+        if not ecosystem:
+            ecosystem = str(((state.bundle or {}).get("product") or {}).get("ecosystem") or "")
+        if ecosystem == "npm":
+            command = (
+                "set +e; PKG='" + name + "'; "
+                "echo '== resolve'; readlink -f \"/opt/app/node_modules/$PKG\" 2>/dev/null; "
+                "echo '== files'; find -L \"/opt/app/node_modules/$PKG\" -maxdepth 3 "
+                "-type f 2>/dev/null | head -60; "
+                "echo '== package.json'; cat \"/opt/app/node_modules/$PKG/package.json\" "
+                "2>/dev/null | head -60; "
+                "echo '== exports'; cd /opt/app && node -e \"const m=require('$PKG'); "
+                "console.log(Object.keys(m)); if (m && m.default) "
+                "console.log('default:', Object.keys(m.default));\" 2>&1 | head -40"
+            )
+        elif ecosystem == "pypi":
+            module = name.replace("-", "_")
+            command = (
+                "set +e; MOD='" + module + "'; "
+                "echo '== module'; python -c \"import importlib;"
+                "m=importlib.import_module('$MOD');"
+                "print('file:', getattr(m,'__file__',None));"
+                "print('exports:', [x for x in dir(m) if not x.startswith('_')])\" "
+                "2>&1 | head -40; "
+                "echo '== files'; find /usr/local/lib/python*/site-packages "
+                f"-maxdepth 3 -iname '*{module}*' 2>/dev/null | head -40"
+            )
+        elif ecosystem == "go":
+            command = (
+                "set +e; cd /opt/app 2>/dev/null; "
+                "echo '== go doc'; go doc '" + name + "' 2>&1 | head -60; "
+                "echo '== module dirs'; find /go/pkg/mod -maxdepth 6 -type d "
+                f"-path '*{name}*' 2>/dev/null | head -20"
+            )
+        elif ecosystem == "maven":
+            artifact = name.split(":")[-1]
+            command = (
+                "set +e; echo '== jars'; find /root/.m2 /usr/share/maven-repo "
+                f"-name '*.jar' 2>/dev/null | grep -i '{artifact}' | head -20"
+            )
+        else:
+            return {"exit": 2, "output": f"unsupported ecosystem {ecosystem!r}"}
+        image = self._repair_images.get("vulnerable")
+        if not image:
+            return {
+                "exit": -1,
+                "no_image": True,
+                "output": "No vulnerable target image has been built yet. Call "
+                          "`build` first, then retry the inspection.",
+            }
+        result = run_in_image(
+            image, command, timeout=60, log_path=self.store.path("repair-inspect.log")
+        )
+        result["note"] = (
+            "This ran in the last built vulnerable image. If you changed files "
+            "after that build, call `build` before trusting these results."
+        )
+        return result
+
+    def _cleanup_repair_images(self) -> None:
+        """Drop the debug images kept alive for the exec tool."""
+        for base in dict.fromkeys(self._repair_prune_bases):
+            try:
+                prune_task_images(base)
+            except Exception:  # noqa: BLE001 - cleanup must not mask a verdict
+                pass
+        self._repair_prune_bases = []
+        self._repair_images = {}
+
+    def _replace_repair_images(
+        self, bases: list[str], images: dict[str, str]
+    ) -> None:
+        """Swap in the newest debug image set and prune the previous one."""
+        self._cleanup_repair_images()
+        self._repair_prune_bases = list(bases)
+        self._repair_images = dict(images)
+
+    def _repair_exec_run(self, state, command: str, timeout: int) -> dict:
+        """Run a bounded command in the last built vulnerable target image."""
+        image = self._repair_images.get("vulnerable")
+        if not image:
+            return {
+                "exit": -1,
+                "no_image": True,
+                "output": "No vulnerable target image has been built yet. Call "
+                          "`build` first, then retry the inspection.",
+            }
+        result = run_in_image(
+            image,
+            command,
+            timeout=timeout,
+            log_path=self.store.path("repair-exec.log"),
+        )
+        result["note"] = (
+            "This ran in the last built vulnerable image. If you changed files "
+            "after that build, call `build` before trusting these results."
+        )
+        return result
 
     def _debug_repair_run(self, state) -> dict:
         """Execute one T03+T04 pair for the repairer's current authoring state.
@@ -598,13 +726,14 @@ class CvePipeline:
         except PipelineError as exc:
             shutil.rmtree(debug_root, ignore_errors=True)
             raise TaskError("budget_exhausted", str(exc)) from exc
+        built: dict[str, dict] = {}
         try:
             for variant, task_dir, base in (
                 ("vulnerable", vuln_dir, vuln_base),
                 ("fixed", fixed_dir, fixed_base),
             ):
                 try:
-                    build_task_images(
+                    built[variant] = build_task_images(
                         task_dir=task_dir,
                         variant=variant,
                         revision=self.store.load().revision,
@@ -675,6 +804,8 @@ class CvePipeline:
                 "reference_stdout": vuln.get("reference_stdout"),
                 "submitted_exit": vuln.get("submitted_exit"),
                 "submitted_observed": vuln.get("submitted_observed"),
+                "marker_present": vuln.get("marker_present"),
+                "marker_matches_reference": vuln.get("marker_matches_reference"),
                 "fixed_status": fixed.get("status"),
                 "fixed_health_ok": fixed.get("health_ok"),
                 "fixed_reference_error": fixed.get("reference_error"),
@@ -686,8 +817,14 @@ class CvePipeline:
             ledger.commit(reservation, {"builds": 6, "trials": 2})
         finally:
             shutil.rmtree(debug_root, ignore_errors=True)
-            prune_task_images(vuln_base)
-            prune_task_images(fixed_base)
+            self._replace_repair_images(
+                [vuln_base, fixed_base],
+                {
+                    variant: build["images"]["target"]["image_ref"]
+                    for variant, build in built.items()
+                    if build.get("images", {}).get("target", {}).get("image_ref")
+                },
+            )
 
     def _ledger(self):
         from .budget import Ledger
@@ -1729,6 +1866,8 @@ class CvePipeline:
         job.revision += 1
         job.attempts["repair"] = used + 1
         self.store.save(job)
+        self._repair_images = {}
+        self._repair_prune_bases = []
         # A resume can enter repair before ``synthesize()`` has loaded the
         # bundle, so read the pinned release and the authoring bundle from disk
         # instead of assuming the in-memory attributes are populated.
@@ -1759,6 +1898,8 @@ class CvePipeline:
                     debug=self._debug_repair_run,
                     build=self._repair_build_run,
                     registry=self._repair_registry_lookup,
+                    exec_image=self._repair_exec_run,
+                    inspect_package=self._repair_inspect_package,
                     on_step=lambda entry: self._repair_trace_step(
                         used + 1, job.revision, entry
                     ),
@@ -1769,6 +1910,8 @@ class CvePipeline:
             self._append_repair_log(used + 1, error, files, model="unavailable", failure=str(exc))
             self.store.fail(self.store.load(), error)
             return False
+        finally:
+            self._cleanup_repair_images()
         self._append_repair_log(used + 1, error, files, result=result)
         if not (result.files or result.spec_changed or result.bundle_changed):
             # A provider outage or an unusable reply says nothing about the

@@ -74,6 +74,47 @@ def _run(command: list[str], *, timeout: int, log_path: Path) -> subprocess.Comp
     return completed
 
 
+def run_in_image(
+    image_ref: str,
+    command: str,
+    *,
+    timeout: int = 60,
+    log_path: Path | None = None,
+) -> dict:
+    """Run a bounded shell command in a throwaway container of a built image.
+
+    Used by the repair agent to inspect the installed dependency (exports,
+    package metadata, import errors) instead of guessing from the build log.
+    The container has no network, a memory/CPU cap and a hard timeout; it
+    cannot modify the image or the host.
+    """
+    docker = docker_binary()
+    argv = [
+        docker, "run", "--rm", "--network", "none",
+        "--memory", "512m", "--cpus", "1",
+        "--entrypoint", "sh", image_ref, "-c", command,
+    ]
+    try:
+        completed = subprocess.run(
+            argv, capture_output=True, text=True, timeout=timeout,
+            **no_window_kwargs(),
+        )
+    except subprocess.TimeoutExpired as exc:
+        output = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+        output += "\nTIMEOUT"
+        if log_path is not None:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(output[-20000:], encoding="utf-8")
+        return {"exit": 124, "output": output[-8000:]}
+    except OSError as exc:
+        return {"exit": -1, "output": f"docker run failed: {exc}"}
+    combined = (completed.stdout or "") + (completed.stderr or "")
+    if log_path is not None:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text(combined[-20000:], encoding="utf-8")
+    return {"exit": completed.returncode, "output": combined[-8000:]}
+
+
 def inspect_image(image_ref: str, *, dockerfile: Path) -> tuple[str, str]:
     docker = docker_binary()
     completed = subprocess.run(

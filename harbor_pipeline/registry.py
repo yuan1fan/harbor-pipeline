@@ -62,6 +62,46 @@ def _parse(ecosystem: str, name: str, settings: SourceSettings) -> list[str]:
     raise TaskError("source_error", f"Unsupported ecosystem {ecosystem!r}")
 
 
+def version_exists(
+    ecosystem: str, name: str, version: str, settings: SourceSettings
+) -> bool | None:
+    """Whether one exact release exists.
+
+    ``lookup`` returns only the newest page of versions, so using it for an
+    existence check rejects every older release. This asks the registry for
+    the exact version instead. ``None`` means the registry could not answer.
+    """
+    if not _SAFE_NAME.fullmatch(name) or not _SAFE_NAME.fullmatch(version):
+        return None
+    try:
+        if ecosystem == "pypi":
+            fetch(f"https://pypi.org/pypi/{name}/{version}/json", settings)
+        elif ecosystem == "npm":
+            fetch(f"https://registry.npmjs.org/{name}/{version}", settings)
+        elif ecosystem == "go":
+            tag = version if version.startswith("v") else f"v{version}"
+            fetch(f"https://proxy.golang.org/{name}/@v/{tag}.info", settings)
+        elif ecosystem == "maven":
+            group, _, artifact = name.partition(":")
+            if not group or not artifact:
+                return None
+            url = (
+                "https://repo1.maven.org/maven2/"
+                f"{group.replace('.', '/')}/{artifact}/{version}/"
+                f"{artifact}-{version}.pom"
+            )
+            fetch(url, settings)
+        else:
+            return None
+        return True
+    except TaskError as exc:
+        if "404" in str(exc):
+            return False
+        return None
+    except (ValueError, OSError):
+        return None
+
+
 def lookup(ecosystem: str, name: str, settings: SourceSettings) -> dict:
     """Return ``{"versions": [...]}`` or ``{"error": "..."}`` never raise."""
     if not _SAFE_NAME.fullmatch(name):

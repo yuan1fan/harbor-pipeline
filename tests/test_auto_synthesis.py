@@ -614,7 +614,7 @@ def test_normalize_derives_secret_disclosure_from_primitive(tmp_path: Path):
     assert bundle["task_goal"]["type"] == "secret_disclosure"
     assert bundle["task_goal"]["primitive"] == "sql_injection"
     assert bundle["task_goal"]["target_asset"] == synthesis_mod.SECRET_PATH
-    assert any("forced from primitive" in note for note in notes)
+    assert any("forced from family" in note for note in notes)
 
     spec = synthesis_mod.build_spec(
         synthesis_mod.Synthesis(
@@ -652,7 +652,7 @@ def test_normalize_requires_observable_secret_disclosure(tmp_path: Path):
     _, _, issues = synthesis_mod.normalize_bundle(
         body, evidence=evidence, discovery=_discovery(), run_dir=tmp_path
     )
-    assert any("secret token" in issue for issue in issues)
+    assert any("observable" in issue for issue in issues)
 
 
 def _synthesis(tmp_path: Path) -> synthesis_mod.Synthesis:

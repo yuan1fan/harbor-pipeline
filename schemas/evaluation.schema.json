@@ -203,6 +203,20 @@
           }
         }
       }
+    },
+    "goal_family": {
+      "enum": [
+        "secret_read",
+        "file_write",
+        "directory_listing"
+      ]
+    },
+    "auth_scheme": {
+      "enum": [
+        "none",
+        "http_basic",
+        "bearer_token"
+      ]
     }
   },
   "$defs": {

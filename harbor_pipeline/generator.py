@@ -9,6 +9,15 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from . import GENERATOR_VERSION, PROMPT_VERSION
+from .goals import (
+    SECRET_PATH,
+    auth_identity,
+    auth_material,
+    auth_scheme,
+    goal_family,
+    listing_name,
+    target_asset,
+)
 from .repair import FRAMEWORK_PATHS, POC_PATH
 from .scenario import (
     _SYNTHESIS_LAYER,
@@ -100,13 +109,17 @@ def render_task(
     tag_base = prebuilt_base or (
         image_tag_base(spec["cve_id"], variant, revision) if prebuilt else None
     )
+    family = goal_family(spec)
+    material = auth_material(spec)
     ctx = ScenarioContext(
         cve_id=spec["cve_id"],
         product=spec["product"]["name"],
         variant=variant,
         probe=probe,
         version=version,
-        secret_path=spec["task_goal"]["target_asset"],
+        # The framework always creates the token at SECRET_PATH, whichever
+        # family the goal belongs to; the family picks the observable.
+        secret_path=SECRET_PATH,
         spec_digest=spec["frozen_digest"],
         attribution_grade=spec["attribution_grade"],
         synthetic=synthetic or synthesis is not None,
@@ -117,6 +130,14 @@ def render_task(
         synthesis_digest=synthesis_digest,
         revision=revision,
         image_base=tag_base,
+        goal_family=family,
+        auth_identity=auth_identity(spec),
+        auth_scheme=auth_scheme(spec),
+        auth_user=material["user"],
+        auth_password=material["password"],
+        auth_token=material["token"],
+        listing_name=listing_name(spec) if family == "directory_listing" else "",
+        target_asset=target_asset(spec, family),
     )
     if synthesis is not None:
         files = render_synthesis(ctx, synthesis)
@@ -314,8 +335,12 @@ prompt_version = {_q(PROMPT_VERSION)}
 prompt_policy = "service-only"
 network_isolation = {_q(network_mode)}
 goal_type = {_q(spec['task_goal']['type'])}
+goal_family = {_q(str(spec['task_goal'].get('family') or 'secret_read'))}
 goal_primitive = {_q(primitive)}
-target_secret_path = {_q(spec['task_goal']['target_asset'])}
+target_secret_path = {_q(SECRET_PATH)}
+goal_target_asset = {_q(spec['task_goal']['target_asset'])}
+auth_identity = {_q(str(spec.get('preconditions', {}).get('auth_identity') or 'none'))}
+auth_scheme = {_q(str(spec.get('preconditions', {}).get('auth_scheme') or 'none'))}
 
 [verifier]
 environment_mode = "separate"

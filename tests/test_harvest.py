@@ -72,7 +72,7 @@ def test_nvd_candidate_rejects_xss_only():
     }])
     candidate, reason = _candidate_from_nvd(entry, 2026)
     assert candidate is None
-    assert reason == "no secret-disclosure primitive"
+    assert reason == "no supported primitive"
 
 
 def test_nvd_candidate_rejects_rejected_record():

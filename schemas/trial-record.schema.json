@@ -40,6 +40,18 @@
         "target_response_digest": {"type": ["string", "null"]}
       }
     },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "noauth_observed"],
+      "properties": {
+        "required": {"type": "boolean"},
+        "noauth_observed": {"type": "boolean"}
+      }
+    },
+    "goal_family": {
+      "enum": ["secret_read", "file_write", "directory_listing"]
+    },
     "goal_result": {"enum": ["passed", "failed", "error"]},
     "exit_status": {"type": "integer"},
     "error_category": {

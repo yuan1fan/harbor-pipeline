@@ -5,7 +5,7 @@ workers = 4
 # Concurrent trials inside one candidate. Batch container count is roughly
 # workers * trial_workers * 2, so raise it only with host capacity.
 trial_workers = 2
-max_repairs = 4
+max_repairs = 6
 trials = 20
 min_trials = 20
 # Per-candidate model ceilings. The batch ledger multiplies these by the
