@@ -84,6 +84,17 @@ def _wheel_mismatch(files: list[str], runtime: str) -> bool:
     return not any(tag in name for name in wheels)
 
 
+def _wheel_pythons(files: list[str]) -> list[str]:
+    """The CPython tags a release actually publishes wheels for."""
+    tags = set()
+    for name in files:
+        if not name.endswith(".whl"):
+            continue
+        for major, minor in re.findall(r"-cp(\d)(\d+)-", name):
+            tags.add(f"{major}.{minor}")
+    return sorted(tags)
+
+
 def _python_compatible(requires_python: str, runtime: str) -> bool | None:
     if not requires_python:
         return None
@@ -172,11 +183,18 @@ def check_bundle(bundle: dict, settings: SourceSettings) -> list[str]:
                 if isinstance(item, dict)
             ]
             if _wheel_mismatch(filenames, runtime):
+                supported = _wheel_pythons(filenames)
+                hint = (
+                    f" It publishes wheels for Python {', '.join(supported)}; "
+                    "set base_image to a python:<version>-slim tag matching one "
+                    "of them."
+                    if supported else ""
+                )
                 issues.append(
                     f"{name} {ref} publishes binary wheels, but none for Python "
                     f"{runtime} (base image {base_image}). Building from source is "
                     "likely to fail; choose a release with a matching wheel or a "
-                    "compatible base image."
+                    "compatible base image." + hint
                 )
     elif language == "node" and ecosystem == "npm":
         for key in ("vulnerable_ref", "fixed_ref"):

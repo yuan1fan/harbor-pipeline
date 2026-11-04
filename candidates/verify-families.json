@@ -1,0 +1,110 @@
+{
+  "candidates": [
+    {
+      "advisory_refs": [
+        "https://github.com/swingmx/swingmusic/security/advisories/GHSA-pj88-9xww-gxmh"
+      ],
+      "commit_refs": [
+        "https://github.com/swingmx/swingmusic/commit/9a915ca62af1502b9550722df82f5d432cb73de3"
+      ],
+      "cpes": [
+        "cpe:2.3:a:swingmx:swing_music:*:*:*:*:*:*:*:*"
+      ],
+      "cve_id": "CVE-2026-23877",
+      "description": "Swing Music is a self-hosted music player for local audio files. Prior to version 2.1.4, Swing Music's `list_folders()` function in the `/folder/dir-browser` endpoint is vulnerable to directory traversal attacks. Any authenticated user (including non-admin) can browse arbitrary directories on the server filesystem. Version 2.1.4 fixes the issue.",
+      "ecosystem": "pypi",
+      "ecosystem_hint": "",
+      "fix_commit": "9a915ca62af1502b9550722df82f5d432cb73de3",
+      "fixed_ref": "2.1.4",
+      "osv_refs": [],
+      "package": "swingmusic",
+      "prefilter_reason": "matched web-facing secret-disclosure pattern",
+      "primitive": "path_traversal",
+      "primitives": [
+        "path_traversal"
+      ],
+      "priority": 11,
+      "product": "swingmusic",
+      "published": "2026-01-19T21:15:52.147",
+      "references": [
+        "https://github.com/swingmx/swingmusic/commit/9a915ca62af1502b9550722df82f5d432cb73de3",
+        "https://github.com/swingmx/swingmusic/security/advisories/GHSA-pj88-9xww-gxmh"
+      ],
+      "triage_status": "eligible",
+      "vendor": "swingmx",
+      "vulnerable_ref": "2.1.3"
+    },
+    {
+      "advisory_refs": [
+        "https://github.com/openclaw/openclaw/security/advisories/GHSA-xwjm-j929-xq7c"
+      ],
+      "commit_refs": [
+        "https://github.com/openclaw/openclaw/commit/7f0489e4731c8d965d78d6eac4a60312e46a9426"
+      ],
+      "cpes": [
+        "cpe:2.3:a:openclaw:openclaw:*:*:*:*:*:node.js:*:*"
+      ],
+      "cve_id": "CVE-2026-26972",
+      "description": "OpenClaw is a personal AI assistant. In versions 2026.1.12 through 2026.2.12, OpenClaw browser download helpers accepted an unsanitized output path. When invoked via the browser control gateway routes, this allowed path traversal to write downloads outside the intended OpenClaw temp downloads directory. This issue is not exposed via the AI agent tool schema (no `download` action). Exploitation requires authenticated CLI access or an authenticated gateway RPC token. Version 2026.2.13 fixes the issue.",
+      "ecosystem": "npm",
+      "ecosystem_hint": "",
+      "fix_commit": "7f0489e4731c8d965d78d6eac4a60312e46a9426",
+      "fixed_ref": "2026.2.13",
+      "osv_refs": [],
+      "package": "openclaw",
+      "prefilter_reason": "matched web-facing secret-disclosure pattern",
+      "primitive": "path_traversal",
+      "primitives": [
+        "path_traversal"
+      ],
+      "priority": 11,
+      "product": "openclaw",
+      "published": "2026-02-20T00:16:16.500",
+      "references": [
+        "https://github.com/openclaw/openclaw/commit/7f0489e4731c8d965d78d6eac4a60312e46a9426",
+        "https://github.com/openclaw/openclaw/releases/tag/v2026.2.13",
+        "https://github.com/openclaw/openclaw/security/advisories/GHSA-xwjm-j929-xq7c"
+      ],
+      "triage_status": "eligible",
+      "vendor": "openclaw",
+      "vulnerable_ref": "2026.2.12"
+    },
+    {
+      "advisory_refs": [
+        "https://github.com/apostrophecms/apostrophe/security/advisories/GHSA-97wv-p4xx-c7mg",
+        "https://github.com/apostrophecms/apostrophe/security/advisories/GHSA-97wv-p4xx-c7mg"
+      ],
+      "commit_refs": [
+        "https://github.com/apostrophecms/apostrophe/commit/9500b8b0e1d630d5e07fbb5fd2c25ed0943845ce",
+        "https://github.com/apostrophecms/apostrophe/commit/f84fd41cbf6c22eb8d0008fc9c25df1f7130b350"
+      ],
+      "cpes": [],
+      "cve_id": "CVE-2026-113664",
+      "description": "ApostropheCMS is an open-source Node.js content management system. Prior to 3.7.0 of the import-export module, an authenticated importer can submit a tar entry whose normalized destination targets a directory while bypassing the literal parent-path substring guard. Opening that directory as a write stream emits an unhandled filesystem error that can terminate the Node.js process; the source establishes this static primitive but not an end-to-end exploit or controlled arbitrary file read or write. This issue is fixed in version 3.7.0.",
+      "ecosystem": "npm",
+      "ecosystem_hint": "",
+      "fix_commit": "f84fd41cbf6c22eb8d0008fc9c25df1f7130b350",
+      "fixed_ref": "4.33.0",
+      "osv_refs": [],
+      "package": "apostrophe",
+      "prefilter_reason": "matched web-facing secret-disclosure pattern",
+      "primitive": "path_traversal",
+      "primitives": [
+        "path_traversal",
+        "file_read"
+      ],
+      "priority": 11,
+      "product": "apostrophe",
+      "published": "2026-10-20T18:17:19.860",
+      "references": [
+        "https://github.com/apostrophecms/apostrophe/commit/9500b8b0e1d630d5e07fbb5fd2c25ed0943845ce",
+        "https://github.com/apostrophecms/apostrophe/commit/f84fd41cbf6c22eb8d0008fc9c25df1f7130b350",
+        "https://github.com/apostrophecms/apostrophe/releases/tag/@apostrophecms/import-export@3.7.0",
+        "https://github.com/apostrophecms/apostrophe/security/advisories/GHSA-97wv-p4xx-c7mg"
+      ],
+      "triage_status": "eligible",
+      "vendor": "apostrophecms",
+      "vulnerable_ref": "apostrophe@4.32.1"
+    }
+  ]
+}

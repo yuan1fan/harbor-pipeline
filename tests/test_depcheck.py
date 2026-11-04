@@ -197,3 +197,13 @@ def test_manifest_package_json_name_and_version_must_exist(monkeypatch):
     issues = depcheck.check_bundle(bundle, SourceSettings())
     assert any("ghost 9.9.9" in issue for issue in issues)
     assert any("missing-name" in issue for issue in issues)
+
+
+def test_wheel_pythons_lists_the_published_tags():
+    files = [
+        "onnx-1.3.0-cp27-cp27m-manylinux1_x86_64.whl",
+        "onnx-1.3.0-cp35-cp35m-manylinux1_x86_64.whl",
+        "onnx-1.3.0-cp36-cp36m-manylinux1_x86_64.whl",
+        "onnx-1.3.0.tar.gz",
+    ]
+    assert depcheck._wheel_pythons(files) == ["2.7", "3.5", "3.6"]
