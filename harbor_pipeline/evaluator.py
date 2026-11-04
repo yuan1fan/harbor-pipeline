@@ -70,7 +70,9 @@ class EvaluationOutcome:
     def summary(self) -> dict:
         return {
             "cve_id": self.evaluation["cve_id"],
-            "quality_score": self.evaluation["quality_score"],
+            "quality_score": self.evaluation.get("quality_score"),
+            "quality_tier": self.evaluation.get("quality_tier"),
+            "quality_flags": self.evaluation.get("quality_flags"),
             "admission_status": self.evaluation["admission_status"],
             "attribution_grade": self.evaluation["attribution_grade"],
             "dimensions": {
@@ -79,6 +81,11 @@ class EvaluationOutcome:
             },
             "failed_conditions": [
                 hc["id"] for hc in self.hard_conditions if not hc["passed"]
+            ],
+            "failed_framework": [
+                check["id"]
+                for check in self.evaluation.get("framework_health", [])
+                if not check["passed"]
             ],
             "failure_reasons": self.evaluation["failure_reasons"],
         }
@@ -96,61 +103,72 @@ def evaluate(
     package_issues: list[str] | None = None,
     network_isolation: str = "public",
     extra_seed_errors: list[str] | None = None,
+    skipped_experiments: dict[str, str] | None = None,
 ) -> EvaluationOutcome:
+    """Evaluate a candidate with gates, framework health and a quality tier.
+
+    There is deliberately no weighted 100-point score. Most of the old score
+    was the admission checklist re-expressed as weights, so among released
+    candidates it was constant; the only variance came from advisory probes.
+    The evaluation now has three separate layers:
+
+    * ``task_gates``: pass/fail admission checks for this task.
+    * ``framework_health``: verifier/fault checks that say the pipeline is
+      healthy; a failure is not a task defect and must not be repaired as one.
+    * ``quality_tier``: A when the alternate valid PoC is accepted, B otherwise;
+      evidence completeness is reported as flags, not as fake precision.
+    """
     profile = policy.profile(profile_name)
     artifact_digest = image_set.get("target_digest") or digest(image_set)
     records = matrix.records
+    skipped = skipped_experiments or {}
     dimensions = {
         "V": _dimension_v(spec, evidence, image_set, policy),
-        "P": _dimension_p(spec, matrix),
-        "M": _dimension_m(spec, evidence, matrix),
+        "P": _dimension_p(spec, matrix, skipped),
+        "M": _dimension_m(spec, evidence, matrix, skipped),
         "D": _dimension_d(matrix, profile),
         "I": _dimension_i(
-            spec, evidence, matrix, policy, package_issues or [], network_isolation
+            spec, evidence, matrix, package_issues or [], network_isolation
         ),
     }
-    quality = sum(dim.weight * dim.score for dim in dimensions.values())
-    hard = _hard_conditions(
+    task_gates = _task_gates(
         spec=spec,
         evidence=evidence,
         matrix=matrix,
-        policy=policy,
+        image_set=image_set,
+        dimensions=dimensions,
         profile=profile,
-        quality=quality,
+        policy=policy,
         network_isolation=network_isolation,
         extra_seed_errors=extra_seed_errors or [],
     )
-    failures = [f"{hc['id']}: {hc['detail']}" for hc in hard if not hc["passed"]]
+    framework_health = _framework_health(matrix, policy)
+    quality = _quality(spec, evidence, matrix)
+    failures = [
+        f"{gate['id']}: {gate['detail']}"
+        for gate in task_gates
+        if not gate["passed"]
+    ]
+    failures.extend(
+        f"framework:{check['id']}: {check['detail']}"
+        for check in framework_health
+        if not check["passed"]
+    )
     failures.extend(matrix.errors)
-    spec_issues = check_evidence_links(spec, evidence) + check_spec_consistency(spec)
-    failures.extend(f"spec: {issue}" for issue in spec_issues)
-    valid = sum(1 for r in records if r["error_category"] not in {"infra_error", "build_error"})
-    t03 = [r for r in records if r["experiment_id"] == "T03"]
-    successes = sum(1 for r in t03 if r["goal_result"] == GOAL_PASSING)
+    valid = sum(
+        1 for record in records
+        if record["error_category"] not in {"infra_error", "build_error"}
+    )
+    t03 = [record for record in records if record["experiment_id"] == "T03"]
+    successes = sum(1 for record in t03 if record["goal_result"] == GOAL_PASSING)
     interval = _wilson(successes, len(t03)) if t03 else [0.0, 0.0]
-
-    if spec.get("attribution_grade") not in profile.allow_attribution_grade:
-        failures.append(
-            f"attribution grade {spec.get('attribution_grade')} is not allowed by profile {profile.name}"
-        )
-    if quality < profile.min_quality_score:
-        failures.append(
-            f"quality score {quality:.1f} is below {profile.min_quality_score:.1f}"
-        )
-    if valid < profile.min_valid_trials:
-        failures.append(
-            f"{valid} valid trials is below the {profile.name} minimum of {profile.min_valid_trials}"
-        )
-    if not artifacts_match(records, artifact_digest):
-        failures.append("trial records do not reference the current artifact digest")
-
+    blocking = _blocking(task_gates, framework_health, profile)
     if failures:
-        status = "quarantined" if _blocking(hard, spec, profile) else "candidate"
+        status = "quarantined" if blocking else "candidate"
     elif profile.name == "qualification":
         status = "released"
     else:
         status = "candidate"
-
     evaluation = {
         "schema_version": SCHEMA_VERSION,
         "policy_version": policy.policy_version,
@@ -158,25 +176,35 @@ def evaluate(
         "candidate_revision": _revision(records),
         "artifact_digest": artifact_digest,
         "dimensions": {key: dim.to_json() for key, dim in dimensions.items()},
-        "quality_score": round(quality, 2),
+        # Kept as null for old consumers; the release decision uses the gates
+        # and the quality tier, never a weighted scalar.
+        "quality_score": None,
+        "quality_tier": quality["tier"],
+        "quality_flags": quality["flags"],
         "attribution_grade": spec["attribution_grade"],
         "sample_size": len(t03) or len(records),
         "valid_samples": valid,
         "confidence_interval": [round(interval[0], 4), round(interval[1], 4)],
-        "hard_conditions": hard,
+        "hard_conditions": task_gates,
+        "task_gates": task_gates,
+        "framework_health": framework_health,
         "admission_status": status,
         "failure_reasons": failures,
         "evaluated_at": utc_now(),
     }
     validate("evaluation", evaluation)
-    return EvaluationOutcome(evaluation=evaluation, dimensions=dimensions, hard_conditions=hard)
+    return EvaluationOutcome(
+        evaluation=evaluation,
+        dimensions=dimensions,
+        hard_conditions=task_gates,
+    )
 
 
 def _dimension_v(spec: dict, evidence: dict, image_set: dict, policy: Policy) -> Dimension:
     identities = spec.get("artifact_identity", [])
     pinned = [
         item for item in identities
-        if str(item.get("digest", "")).startswith("sha256:")
+        if str(item.get("digest", "")).startswith(("sha256:", "sha384:", "sha512:"))
         and "unverified" not in str(item.get("digest", ""))
     ]
     sources = evidence.get("sources", [])
@@ -207,7 +235,9 @@ def _dimension_v(spec: dict, evidence: dict, image_set: dict, policy: Policy) ->
     return Dimension("V", policy.weights["V"], items)
 
 
-def _dimension_p(spec: dict, matrix: MatrixResult) -> Dimension:
+def _dimension_p(
+    spec: dict, matrix: MatrixResult, skipped: dict[str, str]
+) -> Dimension:
     pre = spec.get("preconditions", {})
     complete = all(
         key in pre for key in
@@ -223,14 +253,24 @@ def _dimension_p(spec: dict, matrix: MatrixResult) -> Dimension:
              f"auth={pre.get('auth_identity')} reachable={pre.get('network_reachable')}"),
         Item("P3-target-reachable", "pass" if t01 and t01.met else "fail",
              t01.detail if t01 else "T01 not run"),
-        Item("P4-precondition-necessary", "pass" if t08 and t08.met else
-             ("not_applicable" if t08 is None else "fail"),
-             t08.detail if t08 else "T08 control not run"),
+        _control_item("P4-precondition-necessary", t08, skipped),
     ]
     return Dimension("P", 15.0, items)
 
 
-def _dimension_m(spec: dict, evidence: dict, matrix: MatrixResult) -> Dimension:
+def _control_item(item_id: str, t08, skipped: dict[str, str]) -> Item:
+    """T08 is optional for release and cannot exist for synthesized targets."""
+    if t08 is not None:
+        return Item(item_id, "pass" if t08.met else "fail", t08.detail)
+    reason = skipped.get("T08")
+    if reason:
+        return Item(item_id, "not_applicable", f"T08 not applicable: {reason}")
+    return Item(item_id, "not_applicable", "T08 control not run")
+
+
+def _dimension_m(
+    spec: dict, evidence: dict, matrix: MatrixResult, skipped: dict[str, str]
+) -> Dimension:
     fix_source_id = spec.get("fix_basis", {}).get("source_id")
     by_id = {s["id"]: s for s in evidence.get("sources", [])}
     fix_source = by_id.get(fix_source_id, {})
@@ -249,21 +289,34 @@ def _dimension_m(spec: dict, evidence: dict, matrix: MatrixResult) -> Dimension:
              "root-cause assertion cites the fetched fix commit"),
         Item("M3-trigger-observed", "pass" if triggered else "fail",
              f"T03 goal={t03['goal_result'] if t03 else 'missing'}"),
-        Item("M4-control-eliminates", "pass" if t08 and t08.met else
-             ("not_applicable" if t08 is None else "fail"),
-             t08.detail if t08 else "T08 control not run"),
+        _control_item("M4-control-eliminates", t08, skipped),
     ]
     return Dimension("M", 25.0, items)
 
 
+def _fixed_held(record: dict) -> bool:
+    """A fixed trial holds only when the reference PoC observed no secret.
+
+    ``reward`` alone is not evidence: the verifier always reports 0.0 on the
+    fixed variant, whether the PoC was blocked or the target still leaked. The
+    observed status distinguishes the two.
+    """
+    detail = str((record.get("trigger_evidence") or {}).get("detail") or "")
+    health = bool((record.get("health") or {}).get("ok"))
+    return detail == "fixed_variant_holds" and health and (record.get("reward") or 0.0) == 0.0
+
+
 def _dimension_d(matrix: MatrixResult, profile: Profile) -> Dimension:
+    """Diagnostic differential items; T05-T07/T10 moved to framework health.
+
+    D6 is the alternate-PoC quality probe; it is reported here for audit and
+    drives the quality tier, not the admission gate.
+    """
     t01 = matrix.expectation("T01")
     t02 = matrix.expectation("T02")
     t03_records = [r for r in matrix.records if r["experiment_id"] == "T03"]
     t04_records = [r for r in matrix.records if r["experiment_id"] == "T04"]
     t11 = matrix.expectation("T11")
-    negatives = [matrix.expectation(i) for i in ("T05", "T06", "T07", "T10")]
-    negatives_ok = all(n and n.met for n in negatives)
     items = [
         Item("D1-vulnerable-health", "pass" if t01 and t01.met else "fail",
              t01.detail if t01 else "T01 not run"),
@@ -273,11 +326,9 @@ def _dimension_d(matrix: MatrixResult, profile: Profile) -> Dimension:
             r["goal_result"] == GOAL_PASSING for r in t03_records) else "fail",
             f"{sum(1 for r in t03_records if r['goal_result'] == GOAL_PASSING)}/{len(t03_records)} T03 trials passed"),
         Item("D4-fixed-holds", "pass" if t04_records and all(
-            r["reward"] == 0.0 for r in t04_records) else "fail",
-            f"{len(t04_records)} fixed trials, max reward "
-            f"{max((r['reward'] or 0.0) for r in t04_records) if t04_records else 'n/a'}"),
-        Item("D5-negative-cases", "pass" if negatives_ok else "fail",
-             "; ".join(f"{n.experiment_id}={n.met}" for n in negatives if n) or "not run"),
+            _fixed_held(r) for r in t04_records) else "fail",
+            f"{sum(1 for r in t04_records if _fixed_held(r))}/{len(t04_records)} "
+            "fixed trials held without disclosure"),
         Item("D6-alternate-accepted", "pass" if t11 and t11.met else
              ("not_applicable" if t11 is None else "fail"),
              t11.detail if t11 else "T11 not run"),
@@ -289,111 +340,218 @@ def _dimension_i(
     spec: dict,
     evidence: dict,
     matrix: MatrixResult,
-    policy: Policy,
     package_issues: list[str],
     network_isolation: str,
 ) -> Dimension:
+    """Diagnostic integrity items; infra rate and T12 are framework health."""
     goal = spec.get("task_goal", {})
     cia = spec.get("impact", {}).get("cia", {})
     observable = str(goal.get("observable", "")).lower()
-    t12 = matrix.expectation("T12")
-    valid = [r for r in matrix.records if r["error_category"] not in {"infra_error", "build_error"}]
-    infra_rate = 1.0 - (len(valid) / len(matrix.records)) if matrix.records else 1.0
-    max_rate = float(policy.hard_conditions.get("max_infra_error_rate", 0.2))
     items = [
-        Item("I1-goal-impact", "pass" if goal.get("type") == "file_read"
+        # Both goal types end in the same observable: the per-instance secret
+        # token. Accepting either keeps path-traversal/file-read tasks and the
+        # injection/SSRF/bypass family under one coherence check.
+        Item("I1-goal-impact", "pass" if goal.get("type") in {"file_read", "secret_disclosure"}
              and cia.get("confidentiality") == "high"
-             and ("secret" in observable or "read" in observable) else "fail",
-             f"goal={goal.get('type')} confidentiality={cia.get('confidentiality')}"),
+             and any(word in observable for word in ("secret", "token")) else "fail",
+             f"goal={goal.get('type')} primitive={goal.get('primitive', 'unknown')} "
+             f"confidentiality={cia.get('confidentiality')}"),
         Item("I2-policy-clean", "pass" if not package_issues else "fail",
              "no instruction or packaging violations" if not package_issues
              else "; ".join(package_issues[:3])),
-        Item("I3-infra-rate", "pass" if infra_rate <= max_rate else "fail",
-             f"infra error rate {infra_rate:.2f} (limit {max_rate:.2f})"),
-        Item("I4-fault-classified", "pass" if t12 and t12.met else
-             ("not_applicable" if t12 is None else "fail"),
-             t12.detail if t12 else "T12 fault injection not run"),
         Item("I5-network-policy", "pass" if network_isolation in {"allowlist", "public"} else "unknown",
              f"network_mode={network_isolation}"),
     ]
     return Dimension("I", 10.0, items)
 
 
-def _hard_conditions(
+def _task_gates(
     *,
     spec: dict,
     evidence: dict,
     matrix: MatrixResult,
-    policy: Policy,
+    image_set: dict,
+    dimensions: dict[str, Dimension],
     profile: Profile,
-    quality: float,
+    policy: Policy,
     network_isolation: str,
     extra_seed_errors: list[str],
 ) -> list[dict]:
-    conditions = policy.hard_conditions
+    """Pass/fail admission checks that belong to this task.
+
+    The V/P/M items and the D1-D4 health/PoC items are gates. D6 (alternate
+    PoC) is a quality flag, T05-T07/T10/T12 are framework health, and T08 is
+    not applicable to synthesized targets. T09 is a task gate.
+    """
+    gates: list[dict] = []
+
+    def add(condition_id: str, passed: bool, detail: str) -> None:
+        gates.append({"id": condition_id, "passed": bool(passed), "detail": str(detail)[:1200]})
+
+    for key in ("V", "P", "M"):
+        for item in dimensions[key].items:
+            if item.status == "not_applicable":
+                continue
+            add(item.id, item.status == "pass", item.evidence)
+    for item in dimensions["D"].items:
+        if item.id == "D6-alternate-accepted" or item.status == "not_applicable":
+            continue
+        add(item.id, item.status == "pass", item.evidence)
+    for item in dimensions["I"].items:
+        if item.status == "not_applicable":
+            continue
+        add(item.id, item.status == "pass", item.evidence)
+
+    # Canonical gate ids retained for the repair classifier and the release
+    # audit. They mirror D1-D4 but carry the historical names the pipeline
+    # already reasons about.
     t01 = matrix.expectation("T01")
     t02 = matrix.expectation("T02")
     t03 = [r for r in matrix.records if r["experiment_id"] == "T03"]
     t04 = [r for r in matrix.records if r["experiment_id"] == "T04"]
-    negatives = {i: matrix.expectation(i) for i in conditions.get("require_negative_cases", [])}
-    infra = sum(1 for r in matrix.records if r["error_category"] in {"infra_error", "build_error"})
-    infra_rate = infra / len(matrix.records) if matrix.records else 1.0
-    unknown_assertions = [a["id"] for a in spec.get("assertions", []) if a["status"] != "confirmed"]
+    add("t01_vulnerable_health", bool(t01 and t01.met),
+        t01.detail if t01 else "missing")
+    add("t02_fixed_health", bool(t02 and t02.met),
+        t02.detail if t02 else "missing")
+    add("reference_poc_all_success",
+        bool(t03) and all(r["goal_result"] == GOAL_PASSING for r in t03),
+        f"{sum(1 for r in t03 if r['goal_result'] == GOAL_PASSING)}/{len(t03)}")
+    add("zero_fixed_success",
+        bool(t04) and all(_fixed_held(r) for r in t04),
+        f"{sum(1 for r in t04 if not _fixed_held(r))} fixed trials leaked or were unhealthy")
 
-    checks: list[dict] = []
+    spec_issues = check_evidence_links(spec, evidence) + check_spec_consistency(spec)
+    add("spec_integrity", not spec_issues,
+        "; ".join(spec_issues[:6]) if spec_issues else "spec and evidence agree")
 
-    def add(condition_id: str, passed: bool, detail: str) -> None:
-        checks.append({"id": condition_id, "passed": bool(passed), "detail": detail})
+    grade = spec.get("attribution_grade")
+    allowed = list(profile.allow_attribution_grade)
+    add("attribution_profile", grade in allowed,
+        f"grade={grade} allowed={allowed}")
 
+    conditions = policy.hard_conditions
     if conditions.get("require_no_unknown_assertions", True):
-        add("no_unknown_assertions", not unknown_assertions and not spec.get("unknown_fields"),
-            f"unknown assertions={unknown_assertions} unknown fields={spec.get('unknown_fields')}")
+        unknown = [a["id"] for a in spec.get("assertions", []) if a["status"] != "confirmed"]
+        add("no_unknown_assertions", not unknown and not spec.get("unknown_fields"),
+            f"unknown assertions={unknown} unknown fields={spec.get('unknown_fields')}")
+
     if conditions.get("require_attribution_grade_a", True):
-        add("attribution_grade_a", spec.get("attribution_grade") == "A",
-            f"grade={spec.get('attribution_grade')}")
-    if conditions.get("require_t01_vulnerable_health", True):
-        add("t01_vulnerable_health", bool(t01 and t01.met),
-            t01.detail if t01 else "missing")
-    if conditions.get("require_t02_fixed_health", True):
-        add("t02_fixed_health", bool(t02 and t02.met),
-            t02.detail if t02 else "missing")
-    if conditions.get("require_reference_poc_all_success", True):
-        passed = bool(t03) and all(r["goal_result"] == GOAL_PASSING for r in t03)
-        add("reference_poc_all_success", passed,
-            f"{sum(1 for r in t03 if r['goal_result'] == GOAL_PASSING)}/{len(t03)}")
-    if conditions.get("require_zero_fixed_success", True):
-        leaks = [r for r in t04 if (r["reward"] or 0.0) > 0.0]
-        add("zero_fixed_success", bool(t04) and not leaks,
-            f"{len(leaks)} fixed trials succeeded")
-    for experiment_id, expectation in negatives.items():
-        add(f"negative_{experiment_id}", bool(expectation and expectation.met),
-            expectation.detail if expectation else "missing")
-    max_rate = float(conditions.get("max_infra_error_rate", 0.2))
-    add("infra_error_rate", infra_rate <= max_rate,
-        f"{infra_rate:.2f} <= {max_rate:.2f}")
-    valid = len(matrix.records) - infra
+        add("attribution_grade_a", grade == "A", f"grade={grade}")
+
+    valid = sum(
+        1 for record in matrix.records
+        if record["error_category"] not in {"infra_error", "build_error"}
+    )
     add("min_valid_trials", valid >= profile.min_valid_trials,
         f"{valid} >= {profile.min_valid_trials} ({profile.name})")
+
+    t03 = [r for r in matrix.records if r["experiment_id"] == "T03"]
+    t04 = [r for r in matrix.records if r["experiment_id"] == "T04"]
     if conditions.get("require_paired_samples", True):
-        add("paired_samples", bool(t03 and t04),
-            f"T03={len(t03)} T04={len(t04)}")
+        add("paired_samples", bool(t03 and t04), f"T03={len(t03)} T04={len(t04)}")
+
+    add("seed_stability", not extra_seed_errors,
+        "; ".join(extra_seed_errors) if extra_seed_errors else "consistent across seeds")
+
+    artifact_digest = image_set.get("target_digest") or digest(image_set)
+    add("artifact_digest", artifacts_match(matrix.records, artifact_digest),
+        f"records reference {artifact_digest}")
+
     if conditions.get("require_network_allowlist", False):
         add("network_allowlist", network_isolation == "allowlist",
             f"network_mode={network_isolation}")
-    add("seed_stability", not extra_seed_errors,
-        "; ".join(extra_seed_errors) if extra_seed_errors else "consistent across seeds")
-    add("quality_threshold", quality >= profile.min_quality_score,
-        f"{quality:.1f} >= {profile.min_quality_score:.1f}")
+    return gates
+
+
+def _framework_health(matrix: MatrixResult, policy: Policy) -> list[dict]:
+    """Verifier/fault checks that are not task defects.
+
+    A failure here means the grader or the harness is broken; the pipeline
+    should stop and fix it, not ask the repair agent to rewrite the task.
+    """
+    checks: list[dict] = []
+
+    def add(check_id: str, passed: bool, detail: str) -> None:
+        checks.append({"id": check_id, "passed": bool(passed), "detail": str(detail)[:1200]})
+
+    for experiment_id in policy.hard_conditions.get(
+        "require_negative_cases", ["T05", "T06", "T07", "T10"]
+    ):
+        expectation = matrix.expectation(experiment_id)
+        add(
+            f"negative_{experiment_id}",
+            bool(expectation and expectation.met),
+            expectation.detail if expectation else "missing",
+        )
+
+    t12 = matrix.expectation("T12")
+    if t12 is not None:
+        add("fault_T12", bool(t12.met), t12.detail)
+    elif matrix.aborted_at:
+        # T12 is advisory and runs only after the blocking ladder. A task
+        # that already failed T03/T04 never reaches it; that is not a second,
+        # framework-level failure.
+        add(
+            "fault_T12",
+            True,
+            f"not run: matrix stopped at {matrix.aborted_at}; "
+            "T12 only runs after the blocking ladder",
+        )
+    else:
+        add("fault_T12", False, "missing")
+
+    max_rate = float(policy.hard_conditions.get("max_infra_error_rate", 0.2))
+    infra = sum(
+        1 for record in matrix.records
+        if record["error_category"] in {"infra_error", "build_error"}
+    )
+    rate = infra / len(matrix.records) if matrix.records else 1.0
+    add("infra_error_rate", rate <= max_rate, f"{rate:.2f} <= {max_rate:.2f}")
     return checks
 
 
-def _blocking(hard: list[dict], spec: dict, profile: Profile) -> bool:
-    """Hard failures are blocking unless only sampling/profile thresholds miss."""
-    soft_ids = {"quality_threshold"}
+def _quality(spec: dict, evidence: dict, matrix: MatrixResult) -> dict:
+    """Task quality: the alternate PoC plus evidence completeness flags."""
+    t11 = matrix.expectation("T11")
+    if t11 is None:
+        alternate = "not_run"
+    elif t11.met:
+        alternate = "pass"
+    else:
+        alternate = "fail"
+    identities = spec.get("artifact_identity", []) or []
+    pinned = [
+        item for item in identities
+        if str(item.get("digest", "")).startswith(("sha256:", "sha384:", "sha512:"))
+        and "unverified" not in str(item.get("digest", ""))
+    ]
+    sources = evidence.get("sources", []) or []
+    local = [
+        source for source in sources
+        if source.get("status") == "ok" and source.get("local_path")
+    ]
+    flags = {
+        "alternate_poc": alternate,
+        "artifact_identity": f"{len(pinned)}/2",
+        "source_coverage": f"{len(local)}/{len(sources)}",
+    }
+    return {"tier": "A" if alternate == "pass" else "B", "flags": flags}
+
+
+def _blocking(
+    task_gates: list[dict],
+    framework_health: list[dict],
+    profile: Profile,
+) -> bool:
+    """Admission gates block; sampling/profile thresholds are soft for smoke."""
+    soft_ids = set()
     if profile.name != "qualification":
         soft_ids |= {"min_valid_trials", "network_allowlist"}
+    if any(not check["passed"] for check in framework_health):
+        return True
     return any(
-        not hc["passed"] and hc["id"] not in soft_ids for hc in hard
+        not gate["passed"] and gate["id"] not in soft_ids
+        for gate in task_gates
     )
 
 

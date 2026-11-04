@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .errors import TaskError
-from .util import PipelineError, read_json, write_json
+from .util import PipelineError, hidden_console_kwargs, no_window_kwargs, read_json, write_json
 
 HARBOR_VERSION_REQUIRED = "0.23.0"
 
@@ -109,13 +109,17 @@ def classify_trial(trial: TrialOutcome) -> str | None:
         if "Build" in name or "Docker" in name or "Image" in name:
             return "build_error"
         return "infra_error"
-    if trial.reward is not None:
-        return None
+    # A verifier can write reward 0 even when the target never came up: the
+    # verifier's health check fails before scoring. The observed status is the
+    # stronger signal, so classify it before the "has a reward" shortcut. T12
+    # exists precisely to exercise this path.
     status = trial.evidence_status
-    if status in {"oracle_failure"}:
-        return "oracle_failure"
     if status in {"target_unhealthy", "verifier_error", "missing"}:
         return "infra_error"
+    if trial.reward is not None:
+        return None
+    if status in {"oracle_failure"}:
+        return "oracle_failure"
     return None
 
 
@@ -146,8 +150,11 @@ class HarborAdapter:
         return resolved
 
     def version(self) -> str:
+        # ``harbor`` is a uv trampoline: it allocates its own console when the
+        # parent has none, which is what popped a window per call.
         completed = subprocess.run(
-            [self.locate(), "--version"], capture_output=True, text=True, timeout=60
+            [self.locate(), "--version"], capture_output=True, text=True, timeout=60,
+            **hidden_console_kwargs(),
         )
         if completed.returncode != 0:
             raise TaskError("infra_error", f"harbor --version failed: {completed.stderr.strip()}")
@@ -165,6 +172,7 @@ class HarborAdapter:
             capture_output=True,
             text=True,
             timeout=60,
+            **no_window_kwargs(),
         )
         return completed.stdout.strip() or None if completed.returncode == 0 else None
 
@@ -178,6 +186,7 @@ class HarborAdapter:
                 capture_output=True,
                 text=True,
                 timeout=90,
+                **no_window_kwargs(),
             )
         except (OSError, subprocess.TimeoutExpired):
             return False
@@ -275,6 +284,7 @@ class HarborAdapter:
                 capture_output=True,
                 text=True,
                 timeout=timeout_sec or self.timeout_sec,
+                **hidden_console_kwargs(),
             )
             stdout, stderr, returncode = completed.stdout, completed.stderr, completed.returncode
         except subprocess.TimeoutExpired as exc:
@@ -299,6 +309,19 @@ class HarborAdapter:
                 detail={"job_name": name, "log": str(log_path), "elapsed_sec": round(elapsed, 1)},
             )
         result = read_json(result_path)
+        # Harbor checkpoints result.json while the job is still running, so a
+        # job that died mid-flight leaves a readable file with a null
+        # ``finished_at`` and most trials still pending. Accepting it would
+        # grade a truncated matrix as if it were complete.
+        if result.get("finished_at") is None:
+            stats = result.get("stats") or {}
+            raise TaskError(
+                "infra_error",
+                f"Harbor job {name} did not finish (exit {returncode}, "
+                f"{stats.get('n_completed_trials', 0)}/"
+                f"{result.get('n_total_trials', '?')} trials complete)",
+                detail={"job_name": name, "log": str(log_path)},
+            )
         trials = self.parse_trials(job_dir)
         if not trials:
             raise TaskError(

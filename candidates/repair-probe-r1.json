@@ -1,0 +1,19 @@
+{
+  "candidates": [
+    {
+      "cve_id": "CVE-2026-22871",
+      "priority": 0,
+      "notes": "T03 evidence: HTTP 200 but no token disclosed. The request reaches the app and the vulnerable branch is never taken. Built and cached; repair counter is still 0, so this run measures whether the repairer can rewrite the reference PoC against the app's real routes."
+    },
+    {
+      "cve_id": "CVE-2026-113613",
+      "priority": 1,
+      "notes": "Same failure shape as 22871 (status 200, no token). Built and cached; repair counter 0."
+    },
+    {
+      "cve_id": "CVE-2026-102904",
+      "priority": 2,
+      "notes": "Same failure shape as 22871 (status 200, no token). Built and cached; repair counter 0."
+    }
+  ]
+}

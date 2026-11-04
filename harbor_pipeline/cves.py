@@ -56,6 +56,7 @@ _BUILTINS: dict[str, BuiltinCve] = {
         cia={"confidentiality": "high", "integrity": "none", "availability": "none"},
         task_goal={
             "type": "file_read",
+            "primitive": "path_traversal",
             "target_asset": "/opt/app/secret/token",
             "observable": (
                 "The target's per-instance random secret token appears in the submitted "
@@ -99,6 +100,11 @@ def get(cve_id: str) -> BuiltinCve:
             f"No built-in currated facts for {cve_id}; "
             "this CVE needs a curated entry before generation"
         ) from exc
+
+
+def get_optional(cve_id: str) -> BuiltinCve | None:
+    """Curated facts for this CVE, or None when the auto path must synthesize."""
+    return _BUILTINS.get(cve_id)
 
 
 def supported_ids() -> list[str]:

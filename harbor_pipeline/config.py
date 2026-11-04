@@ -13,6 +13,13 @@ from .util import PipelineError
 class Settings:
     output_dir: str = "runs"
     workers: int = 1
+    # Trials inside one candidate's differential matrix. In a batch this is
+    # multiplied by the candidate concurrency, so keep it small: each trial
+    # starts its own compose project (target plus attacker container).
+    trial_workers: int = 2
+    # Remove a candidate's build images once it reaches a terminal state.
+    # Enable for campaign runs; keep it off when iterating on a single task.
+    prune_images: bool = False
     max_repairs: int = 2
     trials: int = 5
     min_trials: int = 5
@@ -27,7 +34,7 @@ class Settings:
 @dataclass
 class ModelSettings:
     provider: str = "claude-cli"
-    model: str = "sonnet"
+    model: str = "deepseek-flash-cyber"
     timeout_sec: int = 300
     max_output_tokens: int = 18000
     max_budget_usd: float = 3.0
@@ -37,9 +44,17 @@ class ModelSettings:
 
 @dataclass
 class SourceSettings:
-    allowed_hosts: list[str] = field(default_factory=lambda: ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org"])
+    allowed_hosts: list[str] = field(default_factory=lambda: ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org", "api.osv.dev", "api.github.com", "services.nvd.nist.gov", "registry.npmjs.org", "proxy.golang.org", "sum.golang.org", "repo1.maven.org"])
     max_bytes: int = 1500000
     timeout_sec: int = 30
+    # Serve per-CVE NVD records from a cached yearly feed instead of the
+    # rate-limited API. Point it at the harvest cache to reuse one download.
+    nvd_feed_cache: str | None = None
+    nvd_feed_max_age_sec: int = 7 * 24 * 3600
+    # Optional credentials are read from the environment by load_config, never
+    # from the TOML file, so a token cannot be committed by accident.
+    github_token: str | None = None
+    nvd_api_key: str | None = None
 
 
 @dataclass
@@ -79,8 +94,12 @@ def load_config(path: Path | None = None) -> Config:
         config.models.setdefault("default", ModelSettings(**defaults))
     except TypeError as exc:
         raise PipelineError(f"Invalid configuration: {exc}") from exc
+    # Credentials stay out of the TOML and out of run artifacts. At scale,
+    # authenticated API limits are required for GitHub advisories and NVD.
+    config.sources.github_token = os.environ.get("GITHUB_TOKEN") or config.sources.github_token
+    config.sources.nvd_api_key = os.environ.get("NVD_API_KEY") or config.sources.nvd_api_key
     settings = config.pipeline
-    for name in ("workers", "trials", "min_trials", "max_calls", "max_total_tokens", "max_context_bytes", "command_timeout_sec"):
+    for name in ("workers", "trial_workers", "trials", "min_trials", "max_calls", "max_total_tokens", "max_context_bytes", "command_timeout_sec"):
         if not isinstance(getattr(settings, name), int) or getattr(settings, name) < 1:
             raise PipelineError(f"{name} must be a positive integer")
     if settings.max_repairs < 0:

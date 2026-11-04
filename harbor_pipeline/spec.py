@@ -82,10 +82,13 @@ def check_spec_consistency(spec: dict) -> list[str]:
             issues.append("Grade A requires a fix commit")
         if spec.get("versions", {}).get("vulnerable_ref") == spec.get("versions", {}).get("fixed_ref"):
             issues.append("Vulnerable and fixed references must differ")
-    if spec.get("task_goal", {}).get("type") == "file_read":
-        if "read" not in spec["task_goal"].get("observable", "").lower() and \
-           "secret" not in spec["task_goal"].get("observable", "").lower():
-            issues.append("file_read goal needs an observable read result")
+    goal = spec.get("task_goal", {})
+    if goal.get("type") in {"file_read", "secret_disclosure"}:
+        observable = str(goal.get("observable", "")).lower()
+        if not any(word in observable for word in ("secret", "token", "read")):
+            issues.append(
+                f"{goal.get('type')} goal needs an observable secret disclosure"
+            )
     return issues
 
 

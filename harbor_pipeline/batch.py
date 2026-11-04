@@ -18,9 +18,11 @@ from statistics import median
 from typing import Iterable
 
 from . import SCHEMA_VERSION
+from .backend import prune_task_images
 from .budget import Ledger
 from .config import Config
-from .contracts import load_experiments, load_policy
+from .contracts import MAX_MATRIX_REPEATS, load_experiments, load_policy
+from .repair import MAX_BUILD_RUNS, MAX_VERIFIER_RUNS
 from .cves import supported_ids
 from .release import write_dataset_manifest
 from .util import PipelineError, read_json, write_json
@@ -50,6 +52,8 @@ class BatchPlan:
     rejected: list[dict] = field(default_factory=list)
     profile: str = "smoke"
     workers: int = 1
+    shard_index: int = 0
+    shard_count: int = 1
     limits: dict[str, float] = field(default_factory=dict)
 
     def to_json(self) -> dict:
@@ -58,6 +62,8 @@ class BatchPlan:
             "root": str(self.root),
             "profile": self.profile,
             "workers": self.workers,
+            "shard_index": self.shard_index,
+            "shard_count": self.shard_count,
             "candidates": [c.cve_id for c in self.candidates],
             "unsupported": self.unsupported,
             "duplicates": self.duplicates,
@@ -125,11 +131,20 @@ def plan_batch(
     limit: int | None = None,
     output_root: Path | None = None,
     max_repairs: int = 2,
+    shard_index: int = 0,
+    shard_count: int = 1,
+    per_candidate_calls: int = 48,
+    per_candidate_tokens: int = 540_000,
+    per_candidate_usd: float = 9.0,
 ) -> BatchPlan:
-    """Deduplicate, classify support, and size the shared budget."""
+    """Deduplicate candidates and size the shared budget.
+
+    Any well-formed CVE id is a candidate: the pipeline discovers evidence and
+    decides UNSUPPORTED only when public records cannot support a differential
+    task. Support is a per-CVE outcome, never a property of a curated list.
+    """
     policy = load_policy()
     profile_policy = policy.profile(profile)
-    supported = set(supported_ids())
 
     ordered = sorted(candidates, key=lambda c: (c.priority, c.cve_id))
     seen: dict[str, str] = {}
@@ -142,14 +157,18 @@ def plan_batch(
             duplicates.append({"cve_id": key, "duplicate_of": seen[key]})
             continue
         seen[key] = key
-        if key not in supported:
-            unsupported.append({
-                "cve_id": key,
-                "state": "UNSUPPORTED",
-                "reason": "no curated facts for this CVE in the current candidate pool",
-            })
-            continue
-        unique.append(candidate)
+        unique.append(Candidate(cve_id=key, priority=candidate.priority, notes=candidate.notes))
+    if shard_count < 1 or not 0 <= shard_index < shard_count:
+        raise PipelineError(
+            f"Invalid shard {shard_index}/{shard_count}; need 0 <= index < count"
+        )
+    if shard_count > 1:
+        # Stable modulo sharding keeps the same candidate on the same worker
+        # across retries, while every shard can run as an independent process.
+        unique = [
+            candidate for index, candidate in enumerate(unique)
+            if index % shard_count == shard_index
+        ]
     if limit is not None:
         for dropped in unique[limit:]:
             unsupported.append({
@@ -160,12 +179,39 @@ def plan_batch(
         unique = unique[:limit]
 
     mandatory = len([e for e in load_experiments() if e.id not in {"T03", "T04", "T09"}])
-    per_candidate = mandatory + 2 * profile_policy.trials + 3
+    repairs = max(0, max_repairs)
+    # The batch ledger is sized before any bundle exists, so it must cover the
+    # largest repeat count an author may request. The limit is a ceiling, not a
+    # spend: the actual reservation follows the bundle.
+    repeats = max(profile_policy.trials, MAX_MATRIX_REPEATS)
+    # Each repair reruns the full matrix at a new revision, so the trial budget
+    # per candidate covers the original run plus every repair attempt. The
+    # repair agent may execute up to MAX_VERIFIER_RUNS paired verifier trials
+    # and MAX_BUILD_RUNS build-only cycles.
+    per_candidate = (
+        (mandatory + 2 * repeats + 3) * (repairs + 1)
+        + 2 * MAX_VERIFIER_RUNS * repairs
+    )
     n = max(1, len(unique))
     limits = {
         "trials": float(per_candidate * n + 30),
-        "builds": float(3 * (max(0, max_repairs) + 1) * n + 6),
+        # Six images per revision plus six images per build or verifier tool
+        # call in a repair.
+        "builds": float(
+            (
+                6 * (repairs + 1)
+                + 6 * (MAX_VERIFIER_RUNS + MAX_BUILD_RUNS) * repairs
+            ) * n
+            + 6
+        ),
         "wall_sec": float(7200 * n),
+        # The ledger is shared by every worker in the batch, so the per-candidate
+        # model ceilings have to be multiplied out here. Leaving them at the
+        # ledger defaults (12 calls / 180k tokens for the whole run) would stop
+        # a campaign after the first few candidates.
+        "calls": float(per_candidate_calls * n + 24),
+        "tokens": float(per_candidate_tokens * n),
+        "usd": float(per_candidate_usd * n),
     }
     root = (output_root or Path("runs")) / run_id
     return BatchPlan(
@@ -177,6 +223,8 @@ def plan_batch(
         rejected=list(rejected),
         profile=profile,
         workers=max(1, workers),
+        shard_index=shard_index,
+        shard_count=shard_count,
         limits=limits,
     )
 
@@ -193,12 +241,19 @@ def run_batch(
     scenario: str | None = None,
     output_root: Path | None = None,
     workers: int | None = None,
+    prune_images: bool | None = None,
 ) -> dict:
     """Run every planned candidate in isolated threads under one ledger."""
     root = plan.root if output_root is None else output_root / plan.run_id
     root.mkdir(parents=True, exist_ok=True)
     ledger = Ledger.load_or_create(root / "budget.json", limits=plan.limits)
+    # A run directory outlives a batch. The ledger it carries was sized by
+    # whichever batch created it, and killed matrices leave reservations that
+    # nothing will ever commit; both would starve this batch before it starts.
+    ledger.raise_limits(plan.limits)
+    ledger.reclaim_orphans(root)
     concurrency = max(1, workers or plan.workers)
+    cleanup = config.pipeline.prune_images if prune_images is None else prune_images
     started_at = utc_now()
 
     results: dict[str, dict] = {}
@@ -249,6 +304,8 @@ def run_batch(
                         "message": f"{type(exc).__name__}: {exc}",
                         "retryable": True,
                     }
+                if cleanup and payload.get("state") in {"RELEASED", "QUARANTINED", "UNSUPPORTED"}:
+                    payload["pruned_images"] = _prune_candidate_images(root, candidate.cve_id)
                 results[candidate.cve_id] = payload
                 write_json(reports_dir / f"{candidate.cve_id}.json", payload)
 
@@ -256,6 +313,24 @@ def run_batch(
     _write_dataset(plan, results, root, summary)
     write_json(root / "batch-report.json", summary)
     return summary
+
+
+def _prune_candidate_images(root: Path, cve_id: str) -> list[str]:
+    """Drop a finished candidate's build images; never fail the batch for it."""
+    try:
+        image_set = read_json(root / cve_id / "image-set.json")
+    except (OSError, PipelineError):
+        return []
+    bases = image_set.get("tag_bases") or [image_set.get("tag_base")]
+    removed: list[str] = []
+    for base in bases:
+        if not base:
+            continue
+        try:
+            removed.extend(prune_task_images(str(base)))
+        except Exception:  # noqa: BLE001 - storage cleanup is best effort
+            continue
+    return removed
 
 
 def _summary(
@@ -273,6 +348,7 @@ def _summary(
             "state": payload.get("state"),
             "admission_status": payload.get("admission_status"),
             "quality_score": payload.get("quality_score"),
+            "quality_tier": payload.get("quality_tier"),
             "error_category": error.get("category"),
             "error_message": error.get("message"),
             "attempts": payload.get("attempts", 0),
@@ -319,13 +395,26 @@ def _write_dataset(
     root: Path,
     summary: dict,
 ) -> None:
-    entries: list[dict] = []
+    manifest_path = root / "dataset-manifest.json"
+    # A run directory outlives a single batch. Tonight's two releases arrived in
+    # two separate invocations, and each one rewrote this file with only its own
+    # entries, so the earlier RELEASED task silently vanished from the dataset.
+    # Keep the union, keyed by CVE id so a re-run cannot leave two rows.
+    merged: dict[str, dict] = {}
+    if manifest_path.is_file():
+        try:
+            previous = read_json(manifest_path).get("tasks") or []
+        except (PipelineError, OSError, ValueError):
+            previous = []
+        for entry in previous:
+            if isinstance(entry, dict) and entry.get("cve_id"):
+                merged[str(entry["cve_id"])] = entry
     for payload in results.values():
         release = payload.get("release") or {}
         entry = release.get("dataset_entry")
         if entry and payload.get("state") == "RELEASED":
-            entries.append(entry)
-    entries.sort(key=lambda item: item["cve_id"])
+            merged[str(entry["cve_id"])] = entry
+    entries = [merged[key] for key in sorted(merged)]
     summary["dataset"] = {
         "entries": entries,
         "path": None,
@@ -333,7 +422,7 @@ def _write_dataset(
     }
     if not entries:
         return
-    manifest_path = write_dataset_manifest(entries, root / "dataset-manifest.json")
+    manifest_path = write_dataset_manifest(entries, manifest_path)
     conflicts = _split_conflicts(entries)
     summary["dataset"] = {
         "entries": entries,
@@ -436,6 +525,7 @@ def _terminal_unsupported(run_id: str, item: dict) -> dict:
         "task_digest": None,
         "image_digest": None,
         "quality_score": None,
+        "quality_tier": None,
         "admission_status": None,
         "release": None,
         "evaluation": None,

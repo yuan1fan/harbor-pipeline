@@ -103,6 +103,49 @@ class Job:
         return job
 
 
+def _pid_alive(pid: int) -> bool:
+    """Best-effort liveness check used to reclaim a dead process's lease.
+
+    ``os.kill(pid, 0)`` would terminate the target on Windows, so that path
+    uses OpenProcess. When the check cannot be performed, the caller keeps the
+    lease: a false "dead" answer would let two runs write one job directory.
+    """
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        process_query_limited_information = 0x1000
+        still_active = 259
+        error_invalid_parameter = 87
+        # use_last_error keeps the error from OpenProcess from being clobbered
+        # by ctypes' own Win32 calls.
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle = kernel32.OpenProcess(
+            process_query_limited_information, False, pid
+        )
+        if not handle:
+            # A nonexistent pid yields ERROR_INVALID_PARAMETER. Access denied
+            # means the process exists but the handle cannot be queried; that
+            # must count as alive or two runs could share one job directory.
+            return ctypes.get_last_error() != error_invalid_parameter
+        try:
+            code = wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return True
+            return code.value == still_active
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
 class Lease:
     """A simple exclusive file lease with an expiry, safe across processes."""
 
@@ -120,7 +163,16 @@ class Lease:
                 fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             except FileExistsError:
                 existing = self._read()
-                if existing and existing.get("expires_at", 0) < time.time():
+                expired = bool(existing) and existing.get("expires_at", 0) < time.time()
+                # A killed worker leaves a lease that is otherwise valid for an
+                # hour. Reclaiming it keeps batch resume prompt, but only when
+                # the recorded process is provably gone.
+                dead = (
+                    bool(existing)
+                    and existing.get("pid") is not None
+                    and not _pid_alive(int(existing.get("pid") or 0))
+                )
+                if expired or dead:
                     try:
                         self.path.unlink()
                     except FileNotFoundError:
@@ -152,6 +204,21 @@ class Lease:
                 self.path.unlink()
         except FileNotFoundError:
             pass
+
+    def is_held(self) -> bool:
+        """True when a live, unexpired owner still holds this lease.
+
+        Used to decide whether a budget reservation belongs to work that may
+        still commit; reading the file is not enough, because a killed worker
+        leaves one behind until its expiry.
+        """
+        existing = self._read()
+        if not existing:
+            return False
+        if existing.get("expires_at", 0) < time.time():
+            return False
+        pid = existing.get("pid")
+        return pid is None or _pid_alive(int(pid))
 
     def _read(self) -> dict:
         try:

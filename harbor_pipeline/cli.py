@@ -13,11 +13,14 @@ import time
 from pathlib import Path
 
 from . import SCHEMA_VERSION, __version__
+from . import harvest as harvest_mod
+from .backend import prune_orphan_task_resources
 from .batch import load_candidates, plan_batch, run_batch
 from .benchmark import measure_model_baseline, prepare_benchmark_task, write_model_baseline
 from .config import load_config
 from .cves import supported_ids
 from .harbor_adapter import HarborAdapter, doctor
+from .nvd_feed import NvdFeedCache
 from .pipeline import CvePipeline
 from .state import new_run_id
 from .contracts import load_policy
@@ -49,13 +52,26 @@ def _add_output_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--output-dir", type=Path, help="override runs/ output root")
     parser.add_argument("--run-id", help="reuse an existing run id to resume it")
     parser.add_argument("--profile", default="smoke", help="acceptance profile")
-    parser.add_argument("--scenario", help="override the scenario template")
+    parser.add_argument(
+        "--scenario",
+        help="scenario template, or 'auto' to synthesize a task from evidence",
+    )
     parser.add_argument("--workers", type=int, default=None, help="concurrent CVE jobs")
+    parser.add_argument(
+        "--trial-workers",
+        type=int,
+        default=None,
+        help="concurrent trials inside one CVE job (overrides pipeline.trial_workers)",
+    )
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
 
 
 def _add_cve(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--cve", required=True, help="built-in CVE id, e.g. CVE-2024-23334")
+    parser.add_argument(
+        "--cve",
+        required=True,
+        help="any CVE id, e.g. CVE-2023-40587; curated CVEs reuse their template",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,6 +85,28 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor_cmd = sub.add_parser("doctor", help="check host, Harbor, Docker and policy")
     doctor_cmd.add_argument("--json", action="store_true")
+
+    preflight_cmd = sub.add_parser(
+        "preflight", help="check Docker, disk, ports and concurrency before a batch"
+    )
+    preflight_cmd.add_argument("--output-dir", type=Path)
+    preflight_cmd.add_argument("--workers", type=int)
+    preflight_cmd.add_argument("--trial-workers", type=int)
+    preflight_cmd.add_argument("--min-free-gb", type=float, default=60.0)
+    preflight_cmd.add_argument("--task-memory-mb", type=int, default=2048)
+    preflight_cmd.add_argument(
+        "--require-port", type=int, action="append", dest="required_port",
+        help="port that must be excluded from the Windows dynamic range (repeatable)",
+    )
+    preflight_cmd.add_argument(
+        "--clean", action="store_true",
+        help="remove exited task__* containers and dangling task__* networks",
+    )
+    preflight_cmd.add_argument(
+        "--clean-images", action="store_true",
+        help="also remove project-scoped task__* images",
+    )
+    preflight_cmd.add_argument("--json", action="store_true")
 
     run_cmd = sub.add_parser("run", help="run one CVE end to end")
     _add_cve(run_cmd)
@@ -86,7 +124,69 @@ def build_parser() -> argparse.ArgumentParser:
         help="JSON/TOML candidate file, comma-separated ids, or 'builtin'",
     )
     batch_cmd.add_argument("--limit", type=int, help="maximum candidates in this batch")
+    batch_cmd.add_argument(
+        "--shard-index", type=int, default=0,
+        help="zero-based shard to run on this host",
+    )
+    batch_cmd.add_argument(
+        "--shard-count", type=int, default=1,
+        help="number of stable shards across production hosts",
+    )
+    batch_cmd.add_argument(
+        "--plan-only", action="store_true",
+        help="write the resolved plan and exit without building anything",
+    )
+    batch_cmd.add_argument(
+        "--prune-images", action="store_true",
+        help="remove a candidate's images after it reaches a terminal state",
+    )
     _add_output_args(batch_cmd)
+
+    harvest_cmd = sub.add_parser(
+        "harvest", help="download an NVD year feed and rank CVE candidates"
+    )
+    harvest_cmd.add_argument("--year", type=int, default=2026)
+    harvest_cmd.add_argument(
+        "--output", type=Path, help="candidate manifest (default candidates/cve-<year>.json)"
+    )
+    harvest_cmd.add_argument(
+        "--cache-dir", type=Path, default=Path("work/harvest"),
+        help="directory for the cached NVD feed",
+    )
+    harvest_cmd.add_argument("--limit", type=int, help="keep the best N candidates")
+    harvest_cmd.add_argument(
+        "--include-all", action="store_true",
+        help="skip the web-facing prefilter and include every id in the year",
+    )
+    harvest_cmd.add_argument("--refresh", action="store_true", help="re-download the feed")
+    harvest_cmd.add_argument("--json", action="store_true")
+
+    triage_cmd = sub.add_parser(
+        "triage", help="run discovery-only evidence checks on a candidate manifest"
+    )
+    triage_cmd.add_argument("--input", type=Path, required=True)
+    triage_cmd.add_argument("--output", type=Path, help="eligible-candidate manifest")
+    triage_cmd.add_argument(
+        "--cache-dir", type=Path, default=Path("work/triage"),
+        help="per-CVE evidence cache; reruns do not refetch",
+    )
+    triage_cmd.add_argument("--workers", type=int, default=4)
+    triage_cmd.add_argument("--limit", type=int)
+    triage_cmd.add_argument("--no-cache", action="store_true")
+    triage_cmd.add_argument("--json", action="store_true")
+
+    nvd_cmd = sub.add_parser(
+        "nvd-cache",
+        help="index a cached NVD yearly feed so triage avoids the rate-limited API",
+    )
+    nvd_cmd.add_argument("--year", type=int, default=2026)
+    nvd_cmd.add_argument(
+        "--cache-dir",
+        type=Path,
+        help="feed and index directory (default: [sources].nvd_feed_cache)",
+    )
+    nvd_cmd.add_argument("--refresh", action="store_true", help="re-download the feed")
+    nvd_cmd.add_argument("--json", action="store_true")
 
     resume_cmd = sub.add_parser("resume", help="continue an interrupted run")
     _add_cve(resume_cmd)
@@ -106,7 +206,9 @@ def build_parser() -> argparse.ArgumentParser:
     bench_cmd.add_argument("--cve", help="released CVE to measure")
     bench_cmd.add_argument("--output-dir", type=Path)
     bench_cmd.add_argument("--agent", default="claude-code", help="Harbor agent name")
-    bench_cmd.add_argument("--model", default="sonnet", help="agent model name")
+    bench_cmd.add_argument(
+        "--model", default="deepseek-flash-cyber", help="agent model name"
+    )
     bench_cmd.add_argument("--attempts", type=int, default=3)
     bench_cmd.add_argument("--max-turns", type=int, default=30)
     bench_cmd.add_argument("--max-budget-usd", default="2.0")
@@ -140,8 +242,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "doctor":
             return _doctor(config, args)
+        if args.command == "preflight":
+            return _preflight(config, args)
         if args.command == "batch":
             return _batch(config, args)
+        if args.command == "harvest":
+            return _harvest(config, args)
+        if args.command == "triage":
+            return _triage(config, args)
+        if args.command == "nvd-cache":
+            return _nvd_cache(config, args)
         if args.command == "report":
             return _report_command(config, args)
         if args.command == "benchmark":
@@ -162,13 +272,16 @@ def _single(config, args) -> int:
     until = getattr(args, "until", until) if args.command in {"run", "resume"} else until
     run_id = args.run_id or new_run_id("run")
     output_root = Path(args.output_dir) if args.output_dir else None
+    # A killed earlier attempt leaves unused task__* networks behind; enough
+    # of them exhaust Docker's address pools and every trial fails to start.
+    prune_orphan_task_resources()
     pipeline = CvePipeline(
         config=config,
         cve_id=args.cve,
         run_id=run_id,
         profile=args.profile,
         scenario=args.scenario,
-        workers=args.workers or config.pipeline.workers,
+        workers=args.workers or config.pipeline.trial_workers,
         output_root=output_root,
     )
     report = pipeline.run(until=until)
@@ -188,8 +301,16 @@ def _single(config, args) -> int:
 
 
 def _batch(config, args) -> int:
+    if args.trial_workers:
+        # Trial concurrency is the memory-critical knob: every trial starts its
+        # own compose project with a target and an attacker container, so the
+        # load is workers × trial_workers. A host shared with other work needs
+        # a lower value than a dedicated campaign machine.
+        config.pipeline.trial_workers = max(1, args.trial_workers)
     run_id = args.run_id or new_run_id("batch")
     output_root = Path(args.output_dir) if args.output_dir else Path(config.pipeline.output_dir)
+    # Reclaim networks from killed trials before Docker's address pool runs out.
+    prune_orphan_task_resources()
     candidates, rejected = load_candidates(args.input)
     plan = plan_batch(
         candidates,
@@ -200,19 +321,125 @@ def _batch(config, args) -> int:
         limit=args.limit,
         output_root=output_root,
         max_repairs=config.pipeline.max_repairs,
+        shard_index=args.shard_index,
+        shard_count=args.shard_count,
+        # Convert the per-candidate model ceilings into shared-ledger limits.
+        # A repair reruns synthesis (with up to three JSON retries) and the
+        # matrix, so calls scale with max_repairs + 1 attempts.
+        per_candidate_calls=config.pipeline.max_calls * (config.pipeline.max_repairs + 2),
+        per_candidate_tokens=config.pipeline.max_total_tokens * (config.pipeline.max_repairs + 1),
+        per_candidate_usd=config.models["default"].max_budget_usd
+        * (config.pipeline.max_repairs + 2),
     )
+    if args.plan_only:
+        plan_path = plan.root / "batch-plan.json"
+        payload = plan.to_json()
+        payload["plan_path"] = str(plan_path)
+        _write_json(plan_path, payload)
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(
+                f"batch plan {plan.run_id}: {len(plan.candidates)} candidates "
+                f"shard={plan.shard_index}/{plan.shard_count} -> {plan_path}"
+            )
+        return 0
     summary = run_batch(
         plan,
         config,
         scenario=args.scenario,
         output_root=output_root,
         workers=args.workers or config.pipeline.workers,
+        prune_images=args.prune_images or config.pipeline.prune_images,
     )
     if args.json:
         print(json.dumps(summary, indent=2, ensure_ascii=False))
     else:
         _print_batch(summary)
     return 0 if summary["counts"].get("QUARANTINED", 0) == 0 else 3
+
+
+# ---------------------------------------------------------------------------
+# Harvest and triage
+# ---------------------------------------------------------------------------
+
+
+def _harvest(config, args) -> int:
+    output = args.output or Path(f"candidates/cve-{args.year}.json")
+    summary = harvest_mod.harvest(
+        settings=config.sources,
+        year=args.year,
+        output=output,
+        cache_dir=args.cache_dir,
+        limit=args.limit,
+        include_all=args.include_all,
+        refresh=args.refresh,
+    )
+    if args.json:
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
+    else:
+        stats = summary["stats"]
+        print(f"harvest {args.year}: {stats['kept']} candidates -> {summary['output']}")
+        print(
+            f"  feed={stats['feed_total']} kept={stats['kept']} "
+            f"with_commit={stats['with_commit']} with_advisory={stats['with_advisory']}"
+        )
+        if stats.get("by_primitive"):
+            print(f"  primitives: {json.dumps(stats['by_primitive'], ensure_ascii=False)}")
+        if stats.get("dropped"):
+            print(f"  dropped: {json.dumps(stats['dropped'], ensure_ascii=False)}")
+    return 0
+
+
+def _triage(config, args) -> int:
+    candidates = harvest_mod.load_manifest(args.input)
+    output = args.output or args.input.with_name(args.input.stem + "-triage.json")
+    summary = harvest_mod.triage(
+        settings=config.sources,
+        candidates=candidates,
+        output=output,
+        cache_dir=args.cache_dir,
+        workers=args.workers,
+        limit=args.limit,
+        no_cache=args.no_cache,
+    )
+    if args.json:
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
+    else:
+        stats = summary["stats"]
+        print(f"triage {args.input}: {stats['eligible']} eligible -> {summary['output']}")
+        print(
+            f"  inputs={stats['inputs']} eligible={stats['eligible']} "
+            f"unsupported={stats['unsupported']} errors={stats['errors']} "
+            f"yield={stats['yield_rate']:.3f} cache_hits={stats['cache_hits']}"
+        )
+        if stats.get("by_ecosystem"):
+            print(f"  ecosystems: {json.dumps(stats['by_ecosystem'], ensure_ascii=False)}")
+    return 0
+
+
+def _nvd_cache(config, args) -> int:
+    cache_dir = args.cache_dir or config.sources.nvd_feed_cache
+    if not cache_dir:
+        print(
+            "error: set [sources].nvd_feed_cache or pass --cache-dir",
+            file=sys.stderr,
+        )
+        return 2
+    cache = NvdFeedCache(
+        Path(cache_dir), max_age_sec=config.sources.nvd_feed_max_age_sec
+    )
+    provenance = cache.ensure(config.sources, args.year, refresh=args.refresh)
+    payload = provenance.to_json() | {"cache_dir": str(cache_dir)}
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        print(
+            f"nvd feed {args.year}: {provenance.records} records indexed in "
+            f"{provenance.elapsed_sec}s ({provenance.feed_sha256[:12]}, "
+            f"{provenance.database_bytes} bytes) -> {provenance.database}"
+        )
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +527,30 @@ def _benchmark(config, args) -> int:
 # ---------------------------------------------------------------------------
 # Doctor and report
 # ---------------------------------------------------------------------------
+
+
+def _preflight(config, args) -> int:
+    from .preflight import DEFAULT_REQUIRED_PORTS, run_preflight
+
+    output_dir = Path(args.output_dir) if args.output_dir else Path(config.pipeline.output_dir)
+    result = run_preflight(
+        output_dir=output_dir,
+        workers=args.workers or config.pipeline.workers,
+        trial_workers=args.trial_workers or config.pipeline.trial_workers,
+        min_free_gb=args.min_free_gb,
+        required_ports=tuple(args.required_port or DEFAULT_REQUIRED_PORTS),
+        task_memory_mb=args.task_memory_mb,
+        clean=args.clean,
+        clean_images=args.clean_images,
+    )
+    if getattr(args, "json", False):
+        print(json.dumps(result, indent=2))
+    else:
+        symbols = {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}
+        for check in result["checks"]:
+            print(f"{symbols[check['status']]:4}  {check['id']}: {check['detail']}")
+        print("preflight ok" if result["ok"] else "preflight failed")
+    return 0 if result["ok"] else 1
 
 
 def _doctor(config, args) -> int:
@@ -399,7 +650,6 @@ def _policy_summary() -> dict:
             name: {
                 "trials": profile.trials,
                 "min_valid_trials": profile.min_valid_trials,
-                "min_quality_score": profile.min_quality_score,
             }
             for name, profile in policy.profiles.items()
         },
@@ -433,9 +683,10 @@ def _print_or_json(payload: dict, as_json: bool) -> None:
 def _print_report(payload: dict) -> None:
     print(f"{payload['cve_id']}  {payload['state']}")
     if payload.get("admission_status"):
+        quality = payload.get("quality_tier") or payload.get("quality_score")
         print(
             f"  admission={payload['admission_status']} "
-            f"quality={payload['quality_score']} "
+            f"quality={quality} "
             f"trials={len(payload.get('trials') or [])}"
         )
     if payload.get("image_digest"):
@@ -462,7 +713,8 @@ def _print_batch(summary: dict) -> None:
     for item in summary["candidates"]:
         tail = ""
         if item.get("admission_status"):
-            tail = f" admission={item['admission_status']} quality={item.get('quality_score')}"
+            quality = item.get("quality_tier") or item.get("quality_score")
+            tail = f" admission={item['admission_status']} quality={quality}"
         if item.get("error_category"):
             tail += f" error={item['error_category']}"
         print(f"  {item['cve_id']}: {item['state']}{tail}")

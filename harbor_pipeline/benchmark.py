@@ -31,7 +31,7 @@ def measure_model_baseline(
     task_dir: Path,
     *,
     agent: str = "claude-code",
-    model_name: str | None = "sonnet",
+    model_name: str | None = "deepseek-flash-cyber",
     attempts: int = 3,
     max_turns: int | None = 30,
     max_budget_usd: str | None = "2.0",

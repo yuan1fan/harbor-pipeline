@@ -53,7 +53,26 @@ def test_unknown_error_category_is_rejected():
 def test_policy_weights_total_one_hundred():
     policy = contracts.load_policy()
     assert policy.weight_total() == 100.0
-    assert policy.profile("qualification").min_valid_trials == 20
+    assert policy.profile("qualification").min_valid_trials == 3
+
+
+def test_matrix_repeats_uses_the_profile_as_a_floor():
+    policy = contracts.load_policy()
+    qualification = policy.profile("qualification")
+    assert qualification.trials == 3
+    assert contracts.matrix_repeats(qualification) == 3
+    # A task author can raise the count for a nondeterministic exploit.
+    assert contracts.matrix_repeats(qualification, 8) == 8
+    assert contracts.matrix_repeats(qualification, "12") == 12
+
+
+def test_matrix_repeats_is_bounded_and_ignores_junk():
+    policy = contracts.load_policy()
+    qualification = policy.profile("qualification")
+    assert contracts.matrix_repeats(qualification, 2) == 3
+    assert contracts.matrix_repeats(qualification, 10_000) == contracts.MAX_MATRIX_REPEATS
+    assert contracts.matrix_repeats(qualification, None) == 3
+    assert contracts.matrix_repeats(qualification, "lots") == 3
 
 
 def test_mandatory_experiments_are_declared():

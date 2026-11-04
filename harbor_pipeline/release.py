@@ -112,7 +112,10 @@ def build_release(
                 "reward": item["reward"],
                 "error_category": item["error_category"],
             }
-            for item in matrix_result.get("records", [])
+            for item in (
+                list(matrix_result.get("records", []))
+                + list(matrix_result.get("derived_records", []))
+            )
         ],
         "matrix": matrix_result.get("job_name"),
     }
@@ -169,15 +172,25 @@ def build_release(
 
 
 def root_cause_group(spec: dict) -> str:
-    summary = str(spec.get("root_cause", {}).get("summary", "")).lower()
-    if "traversal" in summary or ".." in summary or "path" in summary:
+    """Classify by the vulnerability, not by an incidental word in its prose.
+
+    A summary that mentions ``path.resolve`` while describing argument
+    injection contains the word "path". Matching that bare substring filed
+    the task as path traversal and could group unrelated bugs together, so a
+    near-duplicate would be free to cross dataset splits. Only a traversal
+    phrase counts here; the remaining checks follow the same specificity
+    order, and the fallback normalises whitespace so reflowed prose still
+    lands in one group.
+    """
+    summary = " ".join(str(spec.get("root_cause", {}).get("summary", "")).lower().split())
+    if "traversal" in summary or "zip slip" in summary:
         return "path-traversal"
     if "deserial" in summary:
         return "deserialization"
-    if "injection" in summary:
-        return "injection"
-    if "ssrf" in summary:
+    if "ssrf" in summary or "server-side request forgery" in summary:
         return "ssrf"
+    if "inject" in summary:
+        return "injection"
     return "root-cause-" + digest(summary)[:8]
 
 
@@ -304,7 +317,19 @@ def _write_readme(root: Path, spec: dict, evaluation: dict, manifest: dict, task
         f"- Fixed: {spec['versions']['fixed_ref']}",
         f"- Fix commit: {spec['versions']['fix_commit']}",
         f"- Attribution grade: {spec['attribution_grade']}",
-        f"- Quality score: {evaluation['quality_score']}",
+        *(
+            [f"- Quality tier: {evaluation['quality_tier']}"]
+            if evaluation.get("quality_tier")
+            else [f"- Quality score (legacy): {evaluation.get('quality_score')}"]
+        ),
+        *(
+            [
+                f"- Quality flag {name}: {value}"
+                for name, value in sorted(
+                    (evaluation.get("quality_flags") or {}).items()
+                )
+            ]
+        ),
         f"- Admission: {evaluation['admission_status']}",
         f"- Task digest: {task.task_digest}",
         f"- Image digest: {manifest['image_digest']}",

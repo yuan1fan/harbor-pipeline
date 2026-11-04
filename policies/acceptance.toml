@@ -1,7 +1,9 @@
 schema_version = "1.0"
-policy_version = "2026-11-01.1"
+policy_version = "2026-11-03.1"
 
-# F = 20V + 15P + 25M + 30D + 10I, each dimension in [0, 1].
+# Diagnostic dimension weights. They are reported in the evaluation for
+# audit, but admission is a pass/fail gate and quality is a tier; there is
+# no weighted 100-point score.
 [weights]
 V = 20
 P = 15
@@ -10,7 +12,6 @@ D = 30
 I = 10
 
 [thresholds]
-min_quality_score = 90.0
 min_attribution_grade = "A"
 
 [hard_conditions]
@@ -22,7 +23,9 @@ require_reference_poc_all_success = true
 require_zero_fixed_success = true
 require_negative_cases = ["T05", "T06", "T07", "T10"]
 max_infra_error_rate = 0.2
-min_valid_trials = 20
+# Must stay at or below [profiles.qualification].min_valid_trials; the profile
+# value is the one the evaluator reads.
+min_valid_trials = 3
 require_paired_samples = true
 # Set to true when the release host can enforce network_mode='allowlist'.
 # Docker Desktop on Windows cannot (no CONFIG_NFT_FIB_INET); the limitation is
@@ -34,14 +37,22 @@ require_network_allowlist = false
 trials = 3
 min_valid_trials = 3
 require_paired = false
-min_quality_score = 0.0
 allow_attribution_grade = ["A", "B", "C"]
 
+# T03 and T04 are repeated three times each. For a deterministic oracle PoC the
+# result is bimodal (every trial passes or every trial fails), so a fourth
+# repeat only buys wall clock: 40 repeats were 75% of the measured trial time
+# and never once produced an intermediate pass rate. Three unanimous trials
+# still catch a PoC that only sometimes reaches the secret.
+#
+# The task author can raise this per task: the synthesis bundle may carry
+# `matrix_repeats` (3-20) when the exploit path is genuinely nondeterministic
+# (a race, a timing window, load-dependent routing). The pipeline uses the
+# larger of this profile value and the bundle value.
 [profiles.qualification]
-trials = 20
-min_valid_trials = 20
+trials = 3
+min_valid_trials = 3
 require_paired = true
-min_quality_score = 90.0
 allow_attribution_grade = ["A"]
 
 # Attribution evidence grades. Only A may enter a released training set.

@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://harbor-pipeline.local/schemas/synthesis-bundle.schema.json",
+  "title": "SynthesisBundle",
+  "description": "A model-authored, deterministically validated target environment for one CVE.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "supported", "unsupported_reason", "product", "versions", "preconditions",
+    "root_cause", "impact", "task_goal", "fix_basis", "assertions", "target", "poc"
+  ],
+  "properties": {
+    "supported": {"const": true},
+    "unsupported_reason": {"type": ["string", "null"]},
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "ecosystem", "component"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "ecosystem": {
+          "enum": ["pypi", "npm", "maven", "go", "nuget", "apt", "generic", "docker"]
+        },
+        "component": {"type": "string", "minLength": 1}
+      }
+    },
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["affected", "fixed", "vulnerable_ref", "fixed_ref", "fix_commit"],
+      "properties": {
+        "affected": {"type": "string", "minLength": 1},
+        "fixed": {"type": "string", "minLength": 1},
+        "vulnerable_ref": {"type": "string", "minLength": 1},
+        "fixed_ref": {"type": "string", "minLength": 1},
+        "fix_commit": {"type": "string", "minLength": 7, "maxLength": 40}
+      }
+    },
+    "preconditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "network_reachable", "auth_identity", "privileges", "configuration",
+        "user_interaction", "dependencies", "unknown"
+      ],
+      "properties": {
+        "network_reachable": {"type": "boolean"},
+        "auth_identity": {"type": "string"},
+        "privileges": {"type": "string"},
+        "configuration": {"type": "string", "minLength": 1},
+        "user_interaction": {"type": "boolean"},
+        "dependencies": {"type": "array", "items": {"type": "string"}},
+        "unknown": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "root_cause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "fix_location", "vulnerable_code_ref"],
+      "properties": {
+        "summary": {"type": "string", "minLength": 20},
+        "fix_location": {"type": "string", "minLength": 3},
+        "vulnerable_code_ref": {"type": "string", "minLength": 3}
+      }
+    },
+    "impact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "cia"],
+      "properties": {
+        "summary": {"type": "string", "minLength": 5},
+        "cia": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["confidentiality", "integrity", "availability"],
+          "properties": {
+            "confidentiality": {"enum": ["none", "low", "high"]},
+            "integrity": {"enum": ["none", "low", "high"]},
+            "availability": {"enum": ["none", "low", "high"]}
+          }
+        }
+      }
+    },
+    "task_goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "primitive", "target_asset", "observable"],
+      "properties": {
+        "type": {"enum": ["file_read", "secret_disclosure"]},
+        "primitive": {
+          "enum": [
+            "path_traversal", "file_read", "ssrf", "sql_injection",
+            "command_injection", "code_execution", "deserialization", "xxe",
+            "template_injection", "auth_bypass", "information_disclosure"
+          ]
+        },
+        "target_asset": {"const": "/opt/app/secret/token"},
+        "observable": {"type": "string", "minLength": 10}
+      }
+    },
+    "fix_basis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref", "source_id"],
+      "properties": {
+        "kind": {"const": "upstream_commit"},
+        "ref": {"type": "string", "minLength": 7},
+        "source_id": {"type": "string", "pattern": "^src-[a-z0-9-]+$"}
+      }
+    },
+    "assertions": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text", "source_id", "citation", "status"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^A[0-9]+$"},
+          "text": {"type": "string", "minLength": 5},
+          "source_id": {"type": "string", "pattern": "^src-[a-z0-9-]+$"},
+          "citation": {"type": "string", "minLength": 1},
+          "status": {"enum": ["confirmed", "unknown"]}
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fix_mode", "base_image", "port", "health_path", "business_path",
+        "business_body", "start_command", "files", "fixed_overrides"
+      ],
+      "properties": {
+        "fix_mode": {"enum": ["version", "image"]},
+        "base_image": {"type": "string", "minLength": 1},
+        "port": {"const": 8080},
+        "health_path": {"const": "/health"},
+        "business_path": {"const": "/business"},
+        "business_body": {"const": "ok"},
+        "start_command": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9_./@:=+ -]+$"
+        },
+        "files": {
+          "type": "object",
+          "minProperties": 2,
+          "maxProperties": 24,
+          "propertyNames": {"$ref": "#/$defs/targetPath"},
+          "additionalProperties": {"type": "string", "maxLength": 60000}
+        },
+        "fixed_overrides": {
+          "type": "object",
+          "maxProperties": 12,
+          "propertyNames": {"$ref": "#/$defs/targetPath"},
+          "additionalProperties": {"type": "string", "maxLength": 60000}
+        }
+      }
+    },
+    "poc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "alternate"],
+      "properties": {
+        "reference": {"type": "string", "minLength": 20, "maxLength": 60000},
+        "alternate": {"type": "string", "minLength": 10, "maxLength": 60000}
+      }
+    },
+    "matrix_repeats": {
+      "type": "integer",
+      "minimum": 3,
+      "maximum": 20,
+      "description": "Repetitions of T03 and T04 per variant. Omit for the profile default (3); raise only when the exploit path is genuinely nondeterministic."
+    },
+    "matrix_repeats_reason": {"type": "string", "maxLength": 500},
+    "notes": {"type": "string", "maxLength": 4000}
+  },
+  "$defs": {
+    "targetPath": {
+      "type": "string",
+      "maxLength": 120,
+      "pattern": "^(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+$"
+    }
+  }
+}

@@ -1,13 +1,14 @@
 # Harbor CVE 自动出题产线搭建计划
 
 日期：2026 年 11 月 1 日  
-状态：自动化产线已实现；首个真实 CVE 完成 qualification 并发布；12 输入试点批次与真实模型难度基线已完成  
+状态：自动化产线已实现；支持输入任意 CVE 编号自动发现证据、合成题目并差分验证；模板 CVE-2024-23334 已完成 qualification 并发布，自动合成 CVE-2023-40587 已完成真实 Docker/Harbor 验证  
 交接入口：[HANDOFF.md](../HANDOFF.md)  
-运维手册：[OPERATIONS.md](OPERATIONS.md)
+运维手册：[OPERATIONS.md](OPERATIONS.md)  
+10k 容量与分片运行：[CAPACITY_10K.md](CAPACITY_10K.md)
 
 本项目面向 LLM 的 Web 安全与渗透测试训练，批量将真实 CVE 转换为 Harbor 任务。每个 CVE 对应一道主任务，并附带漏洞事实规格、修复对照、参考解法和量化验收报告。框架的首要目标是证明任务考察了目标 CVE，然后才是提高产量和收集模型轨迹。
 
-全自动的含义是：系统自动处理输入、构建、验证、有限次数修复和归档；无法确认真实性或无法稳定判分的输入自动隔离。它不意味着任意 CVE 都必须产出一道正式题目。
+全自动的含义是：输入任意 CVE 编号后，系统自动发现证据、合成目标、构建、差分验证、有限次数修复和归档；无法确认真实性、无法稳定判分、或不属于未认证远程文件读取的输入自动进入 `UNSUPPORTED`。它不意味着任意 CVE 都必须产出一道正式题目，也不意味着每个 CVE 都需要人工先写模板。
 
 ## 1 项目目标与首版范围
 
@@ -15,16 +16,22 @@
 
 | 项目 | 首版约定 |
 | --- | --- |
-| 输入 | CVE ID 列表，可附带可信来源和已有环境线索 |
+| 输入 | CVE ID；未知 CVE 自动发现并合成，无需人工预先编写场景模板 |
 | 任务单位 | 一个 CVE 一个主任务，任务内部允许随机种子和修订版本 |
-| 优先覆盖 | 有公开源码、明确修复、可容器化的 Web CVE |
-| 题目目标 | 与该 CVE 的直接安全影响一致，不额外拼接无关漏洞链 |
+| 优先覆盖 | 有公开源码、可抓取修复 commit、有真实 vulnerable/fixed release pair 的 Web CVE |
+| 题目目标 | 首版固定为未认证远程文件读取：读取框架注入的 `/opt/app/secret/token` |
 | 运行环境 | Python 控制程序与 Linux 容器；Windows 本机可作为开发入口 |
 | 交付格式 | 固定 Harbor 版本可执行的任务目录，以及独立审计包 |
-| 试点规模 | 筛选 10 至 20 个候选 CVE，先跑通一个，再扩展批次（当前 12 个输入，1 个发布、11 个未支持） |
-| 首版暂不覆盖 | 内核与驱动漏洞、专用硬件、难以获得的商业制品、复杂多漏洞攻击链 |
+| 试点规模 | 12 输入模板试点（1 发布、11 未支持）+ 任意 CVE 自动合成路径；CVE-2023-40587 已端到端验证 |
+| 首版暂不覆盖 | 内核与驱动漏洞、专用硬件、难以获得的商业制品、复杂多漏洞攻击链、需要认证或非文件读取的 CVE |
 
 真实产品复现与自行编写的机制模拟必须使用不同标签。机制模拟不能进入真实 CVE 认证题库。缺少运行制品、修复依据或必要前提的 CVE，可以成为暂不支持的输入。
+
+自动路径的支持范围由证据决定，而不是由人工维护的 CVE 清单决定：
+
+- `UNSUPPORTED`：无法从公开记录得到具体版本对、无法抓取真实修复 commit、或合成模型判定该 CVE 不能表达为未认证远程文件读取。
+- `QUARANTINED`：证据齐全但构建、差分、oracle 或负例失败，需要修复或人工审查。
+- `RELEASED`：qualification 档位下 20 组成对样本通过，质量分达到阈值，硬条件全部满足。
 
 ## 2 当前基础与验收状态
 
@@ -40,9 +47,12 @@
 | 质量与准入 | 五维分、Wilson 区间、20 对 qualification、硬条件发布门 |
 | 发布与复检 | 不可变副本、审计包、`verify_release`、副本 oracle 复检 |
 | 批次与并发 | 去重/limit、共享预算、worker 异常终态、数据集 split 审计、oracle 与模型难度基线 |
-| 模型 provider 与修复 | fixture/anthropic/claude-cli；修复只能改 `environment/` 既有文件 |
+| 自动发现 | MITRE/OSV/GitHub Advisory/NVD + 修复 patch + PyPI/npm/Go/Maven 版本元数据与制品摘要；缺失版本对或 commit 即 `UNSUPPORTED` |
+| 自动合成 | synthesizer 生成 target/PoC 与根因；证据强制覆盖产品、版本与 fix_basis；确定性校验后才可构建 |
+| 通用 target 契约 | 服务监听 `0.0.0.0:8080`；`/health`、`/business` 返回 `ok`；secret 位于 `/opt/app/secret/token` |
+| 模型 provider 与修复 | fixture/anthropic/claude-cli；合成与修复必须使用 anthropic 补全端点；修复只能改 `environment/` 既有文件，结构错误最多重问 3 次，provider 故障归为可重试 `infra_error` |
 
-首个真实 CVE `CVE-2024-23334` 已 `RELEASED`，质量分 `100.0`，20 组成对样本，置信区间 `[0.8389, 1.0]`；任务摘要与制品 digest 记录在 [HANDOFF.md](../HANDOFF.md)。12 个真实 Web CVE 的试点批次已跑通：1 个发布、11 个明确 `UNSUPPORTED`、所有输入有终态，产出率 `8.33%`。模型难度基线也已实测（`claude-code` + `deepseek-v4-pro`，3/3 成功，中位 `81.2s`），但当前仍只内置 aiohttp 一个完整场景，候选覆盖的扩充是下一阶段工作。
+模板路径的首个 CVE `CVE-2024-23334` 已 `RELEASED`，质量分 `100.0`，20 组成对样本，置信区间 `[0.8389, 1.0]`。自动合成路径的首个 CVE `CVE-2023-40587` 也已完成 20 组成对 qualification 并 `RELEASED`，质量分 `98.0`：自动发现 Pyramid 2.0.1→2.0.2 与修复 commit，合成真实版本 target，oracle `20/20`、修复版 `20/20` 保持，唯一失分是旧 synthesis 低估 confidentiality。两个任务的摘要、digest 与限制记录在 [HANDOFF.md](../HANDOFF.md)。12 个真实 Web CVE 的模板试点批次已跑通：1 个发布、11 个明确 `UNSUPPORTED`、所有输入有终态，产出率 `8.33%`；该数字是模板路径的历史结果，不代表自动路径产出率。模型难度基线也已实测（`claude-code` + `deepseek-flash-cyber`，3/3 成功，中位 `68.34s`）。
 
 ## 3 关键设计决策
 
@@ -54,6 +64,8 @@
 6. **先保证正确性再并发。** 首版单 worker，完成隔离、恢复和验收后再开放多 worker。
 7. **失败保留原因。** 证据不足、基础设施故障、预算耗尽和模型解题失败分别记录。
 8. **实验结果绑定制品。** 环境、参考解法、判题器或补丁变化后，旧验收结果不得继续用于入库。
+9. **模型只补实现，不定义事实。** 合成模型的输出必须经过确定性规范化：产品名、版本对、修复 commit 与 fix_basis 由证据发现强制覆盖；模型只描述根因、写 target 与 PoC。任何“支持的 CVE 清单”都不应成为准入前提。
+10. **没有可控变体时如实降级。** 合成题的 target 由模型生成，框架无法确定性地移除单个前提，因此 T08 controlled 记为 `not_applicable` 并写明原因，不用修复版冒充 controlled，也不把它计入 M/P 分母。修复版对照由 mandatory T04 承担，且评分读取观察状态而不是只看 reward。
 
 ## 4 总体架构与模块职责
 
@@ -135,6 +147,14 @@ harbor_pipeline/
 
 优先选择能够获得真实受影响版本、修复代码和必要依赖的 CVE。以 [CVE 官方数据](https://github.com/CVEProject/cvelistV5)、厂商公告和上游仓库为事实来源，[Vulhub](https://github.com/vulhub/vulhub)等可作为复现线索。
 
+当前自动发现按以下顺序工作：
+
+1. 抓取 MITRE CVE JSON 5.0 记录；404 直接归类为 `unsupported`，不重试不伪造。
+2. 并行抓取 OSV、GitHub Advisory Database 与 NVD，抽取 package/ecosystem、受影响范围与 `first_patched_version`。
+3. 从所有公告引用中找 `/commit/<sha>`，补成 `.patch` 后抓取，并从 patch 头解析完整 commit；这是根因断言的唯一修复依据。
+4. 对 PyPI/npm，抓取 vulnerable 与 fixed 两个版本的 registry 元数据；PyPI sdist 的 SHA-256 与 npm tarball SRI 成为 `artifact_identity`。对 Go，抓取 `proxy.golang.org` 的 `.info` 与 `sum.golang.org/lookup` 的 `h1:` dirhash，并把 base64 dirhash 转成 SHA-256；`+incompatible` 版本先归一化为裸版本。对 Maven，抓取 `repo1.maven.org` 的 `.jar.sha256`。
+5. 选定 fixed 以下的最高已发布版本作为 `vulnerable_ref`；没有具体版本对或没有可抓取 commit 时抛出 `unsupported`，报告里保留 discovery notes。OSV 未声明生态的 generic 产品名只尝试 PyPI/npm registry probe；Go/Maven 必须由 OSV 或引用链接给出完整坐标，不能从产品名猜测。
+
 采集器保存原文和摘要，检查 URL、重定向目标、解析后的 IP、响应大小与超时。现有允许域名列表只是起点；扩展到厂商站点时必须显式记录来源策略变更。不得通过任意重定向访问宿主或内部管理接口。
 
 重复记录与别名合并到同一主任务；同一 CVE 的版本修订不算新增题量。已撤回、缺乏可获取制品、缺少可验证修复的输入保留结构化原因。
@@ -142,6 +162,8 @@ harbor_pipeline/
 ### 6.2 冻结事实与设计目标
 
 事实提取可以由模型辅助，但关键断言必须有定位引用，并经过确定性检查或后续运行验证。冻结记录包括来源摘要、事实摘要和验收策略版本。
+
+自动合成时，事实的权威顺序是固定的：discovery 解析出的 `product`、`ecosystem`、`vulnerable_ref`、`fixed_ref`、`fix_commit`、`fix_basis` 覆盖模型输出；模型只补 `root_cause`、`target`、`poc` 与 `impact` 描述。修复 commit 必须实际出现在已抓取的 patch 文本中；版本字符串必须出现在已抓取的 registry/advisory 文本中。目标固定为读取框架注入的 `/opt/app/secret/token`，因此 `impact.cia.confidentiality` 由框架强制为 `high`，不采信模型对敏感资产的低估。
 
 | 漏洞影响 | 合适的任务目标 | 防止考察点偏移 |
 | --- | --- | --- |
@@ -160,6 +182,19 @@ harbor_pipeline/
 两个版本使用匹配的业务数据、依赖、身份和资源配置。若只能比较两个完整发行版，记录额外变更与归因限制，先进入候选区。
 
 参考解法必须通过与模型相同的攻击面完成目标。不得使用 Docker 管理接口、宿主文件、判题凭据或官方答案。生成器只可写入约定目录；文件集合、路径、总大小和命令执行都由控制程序校验。
+
+自动合成路径把 target 分成“模型可写”和“框架所有”两部分：
+
+- **模型可写**：`Dockerfile`、应用代码、依赖文件、两个 PoC。模型不能写 secret、entrypoint、题面、verifier 或验收策略。
+- **框架所有**：每实例随机 secret 写入 `/opt/app/secret/token`，`/opt/app/index.html` 指向该 secret 的符号链接，entrypoint 启动模型声明的 `start_command`，题面与 verifier 由通用模板渲染。
+- **通用服务契约**：监听 `0.0.0.0:8080`；`GET /health` 与 `GET /business` 返回 `ok`；业务路由在漏洞版与修复版都保持可用。
+- **版本开关**：target 文件中的 `{{REF}}` 在漏洞版替换为 `vulnerable_ref`，修复版替换为 `fixed_ref`；至少一个文件必须包含 `{{REF}}`，否则修复版与漏洞版相同，直接判定生成失败。
+- **依赖真实性**：必须安装并调用真实的上游包，不能把漏洞实现复制进应用代码，否则版本升级无法触发修复。
+- **PoC 约束**：只允许攻击网络服务；必须跟随 301/302 并保留原始 NUL/编码字节；两个 PoC 必须用不同请求/API 读到同一个 token。
+
+确定性校验失败时不是“模型再试一次直到通过”，而是把违规项反馈给同一合成会话做有限修复；仍失败则 `generation_error`，不进入构建。
+
+自动路径不需要人工为每个 CVE 编写场景模板。人工工作集中在审查合成 target、复核 verifier 与独立 PoC，以及扩充通用契约本身。
 
 ### 6.4 生成判题器并封装任务
 
@@ -214,7 +249,7 @@ Harbor 使用 `main` 作为 agent 容器，其他服务可作为 sidecar；具�
 | T11 | 已确认正确的不同有效提交 | 应判成功 | 判题器过度绑定参考实现 |
 | T12 | 单个 trial 故障、超时或取消 | 分类准确、资源可清理 | 错把基础设施故障记成模型失败 |
 
-T08 只移除已证实必要的条件。无法开展的实验必须说明原因；不能人为加入与真实 CVE 无关的条件，再用其证明归因。
+T08 只移除已证实必要的条件。无法开展的实验必须说明原因；不能人为加入与真实 CVE 无关的条件，再用其证明归因。合成题的 target 由模型生成，框架没有确定性的“移除单个前提”变体，因此 T08 记为 `not_applicable`，理由写入 evaluation；修复版对照由 mandatory T04 承担。D4 与 `zero_fixed_success` 读取 verifier 的观察状态（`fixed_variant_holds`）而不是只看 `reward`，因为修复版无论拦截还是泄漏都报告 0 分。
 
 参考 PoC 的差分成立，只能证明已测路径与修复相关。它不能证明没有其他解法或旁路。对模型提交可重放 PoC 的差分复验，以及持续扩充负例库，用于降低这类风险。
 
@@ -284,13 +319,15 @@ DISCOVERED → EVIDENCE_READY → SPEC_FROZEN → GENERATED
 
 程序重启后从最近一个完整 checkpoint 恢复。更改任何影响结果的文件，必须失效相关构建或 trial；更改事实、目标或修复方案，则生成新规格版本并重新验收。历史失败不得覆盖或删除。
 
-错误分类至少包括 `source_error`、`evidence_insufficient`、`generation_error`、`build_error`、`infra_error`、`oracle_failure`、`attribution_failure`、`grader_failure`、`budget_exhausted` 和 `unsupported`。每类错误给出是否可重试、是否可自动修复和最终隔离原因。
+错误分类至少包括 `source_error`、`evidence_insufficient`、`generation_error`、`build_error`、`infra_error`、`oracle_failure`、`validation_error`、`attribution_failure`、`grader_failure`、`budget_exhausted` 和 `unsupported`。每类错误给出是否可重试、是否可自动修复和最终隔离原因。`validation_error` 表示健康与负例都正常，但参考 PoC 在合成应用上拿不到 secret；它只允许修复 `environment/` 中的既有文件，不得修改 verifier、题面或 qualification 策略。
 
 ## 10 预算与自动修复约束
 
-保留当前配置中的 worker、调用次数、token、上下文字节、命令超时和修复次数限制。已有 `max_budget_usd` 注释明确它是单次 CLI 调用预算，不是整题费用上限。后续需要另加整题与整批费用、总墙钟时间、构建次数、trial 次数和磁盘使用上限。
+保留当前配置中的 worker、调用次数、token、上下文字节、命令超时和修复次数限制。已有 `max_budget_usd` 注释明确它是单次 CLI 调用预算，不是整题费用上限。整题与整批费用、总墙钟时间、构建次数、trial 次数和磁盘使用上限均已进入共享账本（`calls`/`tokens`/`context_bytes`/`usd`/`wall_sec`/`builds`/`trials`/`disk_bytes`）。
 
 调用前应预留预算；多 worker 共享预算必须原子扣减或预留，不能在全部调用完成后才发现超支。用量缺失或无法获得真实计费时，报告估算及计价版本，不声称精确费用。
+
+trial 上限按修复轮次放大：单候选为 `(mandatory + 2 × trials + 3) × (max_repairs + 1) + 10`，批次再乘候选数并预留重试余量。原因是每次 `validation_error`/`build_error` 修复都会以新 revision 重跑整套矩阵；不乘修复轮次会在第一次 repair 后误报 `budget_exhausted`。
 
 自动修复接收结构化失败原因，只能修改被授权的候选文件。修复参考解法后重跑相关实验；修复判题器后重跑全部判题与差分验收。不得通过减少强制负例、降低 trial 数、放宽目标或直接改写 `evaluation.json` 来获得通过。
 
@@ -337,6 +374,7 @@ DISCOVERED → EVIDENCE_READY → SPEC_FROZEN → GENERATED
 | TSK12 | P1 | 本地发布包、审计包与恢复检查 | TSK10 | 从不可变制品重建并复验 |
 | TSK13 | P1 | 候选批次、去重切分与难度基线 | TSK11 TSK12 | 全输入有终态，训练评测分组无交叉 |
 | TSK14 | P2 | 并发 worker、缓存与存储扩展 | TSK13 | 先证明并发隔离和预算一致性，再增加吞吐 |
+| TSK15 | P0 | 任意 CVE 自动发现、合成与通用校验 | TSK10 TSK11 | 输入 CVE 编号即可产出带量化指标的 Harbor；缺证据时 `UNSUPPORTED` |
 
 建议预留的 CLI 能力为环境诊断、输入检查、生成、验证、恢复、批次报告和本地发布。命令名称在 CLI 契约确定后写入操作手册；本计划不将尚未实现的命令列为可执行步骤。
 
@@ -358,10 +396,37 @@ DISCOVERED → EVIDENCE_READY → SPEC_FROZEN → GENERATED
 | TSK12 | 完成 | 发布包、审计包、`verify_release`、副本 oracle 复检 |
 | TSK13 | 完成 | 批次计划、去重、共享账本、批次报告、split 审计；12 输入试点全部终态；oracle 与真实模型难度基线均已测量 |
 | TSK14 | 完成（单机线程池） | 文件锁预算一致性、worker 隔离与异常终态；真实多 CVE 并发待候选池扩充后压测 |
+| TSK15 | 完成 | MITRE/OSV/GHSA/NVD 发现、fix patch、registry 版本元数据、synthesizer、确定性校验、通用 target/verifier；CVE-2023-40587 端到端验证；CVE-2021-41773 以量化原因 `UNSUPPORTED` |
 
-M5 的“10 至 20 个候选”已达成：`candidates/pilot-web-cves.json` 提供 12 个真实 Web CVE，`work/runs/qual-01` 的批次报告记录输入 12、`RELEASED = 1`、`UNSUPPORTED = 11`、`inputs = 12`、产出率 `0.0833`，所有输入都有终态；数据集清单 1 条且 `split_audit.ok = true`。验收结果同时记录 oracle 成功率 `1.0`（中位 `52.6s`）与模型难度基线 `3/3`（中位 `81.2s`，`$0.53961`）。
+M5 的“10 至 20 个候选”已达成：`candidates/pilot-web-cves.json` 提供 12 个真实 Web CVE，`work/runs/qual-01` 的批次报告记录输入 12、`RELEASED = 1`、`UNSUPPORTED = 11`、`inputs = 12`、产出率 `0.0833`，所有输入都有终态；数据集清单 1 条且 `split_audit.ok = true`。验收结果同时记录 oracle 成功率 `1.0`（中位 `52.6s`）与模型难度基线 `3/3`（中位 `68.34s`，`$0.58558`）。
 
-需要明确边界：12 个候选里只有 aiohttp 有完整场景模板，其余 11 个是“有终态的未支持”，不是 11 道已验收题目。下一阶段的产出率提升取决于为 Apache httpd、Struts2、Spring、Log4j 等新增事实条目和场景模板，不能靠模型自由发挥；在此之前不得把 `UNSUPPORTED` 计入题库。
+需要明确边界：12 个模板试点里只有 aiohttp 有完整场景模板，其余 11 个是“有终态的未支持”，不是 11 道已验收题目。这条历史试点验证的是批次隔离与终态，不是自动合成的产出率。自动路径不依赖人工模板：CVE-2023-40587 已由 synthesizer 从公开证据生成真实 Pyramid 2.0.1→2.0.2 环境并通过差分验证；CVE-2021-41773 因公开记录中没有可抓取的上游修复 commit 而明确 `UNSUPPORTED`。不得把 `UNSUPPORTED` 计入题库。
+
+### 13.2 增量完成情况（2026-11-02）
+
+| 工作项 | 状态 | 交付证据 |
+| --- | --- | --- |
+| 合成应用差分失败的自动修复 | 完成 | 新增 `validation_error`：目标健康、负例被拒、T03 拿不到 secret 或 T04 仍泄漏时，只允许改 `environment/` 并重跑矩阵；`repair.py` 的提示明确要求保持 route/method/参数与 PoC 接口一致 |
+| 修复预算 | 完成 | `pipeline._ledger` 与 `batch.plan_batch` 的 trial 上限乘以 `(max_repairs + 1)`，避免 repair 后 qualification 超支；对应单元测试 |
+| 修复模型可用性与上下文 | 完成 | repairer 改用 `anthropic` 补全端点；修复响应结构错误最多重问 3 次；provider 故障归为可重试 `infra_error`；提示附带只读参考 PoC 与子进程 stdio 捕获约束，避免“修好崩溃但仍拿不到 secret” |
+| 端到端自动合成与自动修复 | 完成 | 仅输入 `CVE-2026-87794`，自动发现 bestzip `3.0.2 → 3.0.3`、合成 Node.js target 与 PoC；模型 3 次修复后 `RELEASED`，quality `95.0`，T03/T04 均 `20/20`，发布复检 `reward = 1.0`。前两次失败分别是 provider 与子进程 stdio 捕获；第三次按只读 PoC 契约修复 |
+| root cause 分组 | 修复 | `root_cause_group()` 不再把摘要中偶然出现的 "path"（如 `path.resolve`）判成 `path-traversal`；参数注入归入 `injection`，避免无关 CVE 共享分组、近重复跨 split |
+| 合成路径规范化 | 修复 | Go 冒烟暴露模型返回 `./go.mod` 导致生成器以“非规范路径”隔离整题；`normalize_bundle()` 现在折叠 `./` 与重复分隔符并记录 note，父目录与归一化后重复仍拒绝。若所有非 Dockerfile 文件都带 `opt/app/` 前缀且 Dockerfile 使用 `/opt/app`，则去前缀，避免源码落到 `/opt/app/opt/app` 后修复器无法重命名 |
+| 修复提示按 runtime 裁剪 | 完成 | Node.js 的 `child_process.spawn`/stdio 约束只在 editable 集含 `.js/.mjs/.cjs`/`package.json` 时追加；Go 目标追加 `GOTOOLCHAIN=local` 与“按日志抬高 `FROM golang:` 版本”的规则，Go/Python 修复不再收到无关的 Node API 指导 |
+| 合成与修复的确定性护栏 | 完成 | 合成阶段拒绝 `COPY` 引用不存在的 target 文件；修复阶段禁止删除 pinned release、禁止把真实依赖改写成内联实现，并在合并后的 environment 文件中校验 release 字符串仍在 |
+| token 记账 | 完成 | `input_tokens` 与 `cache_creation_input_tokens`/`cache_read_input_tokens` 相加；网关回报低于 prompt 估算四分之一时改用估算并标记 `input_tokens_estimated` |
+| Go/Maven registry 身份 | 完成 | Go sumdb `h1:` 转 SHA-256（含 `+incompatible` fallback 与版本归一化）、Maven `.jar.sha256`、`go.mod`/`pom.xml` 进入 `dependency_lock`；CVE-2022-24769 实网 collect 得到两版 `sha256:` 身份 |
+| 10k 批量运维 | 完成 | `--shard-index/--shard-count`、`--plan-only`、`--prune-images`；`prune_orphan_networks()` 在 CLI 启动清理残留 `task__*` 网络；lease 按 pid 回收已死 owner |
+| 2026 候选覆盖 | 完成样本统计，全量待运行 | 300 条原始样本中 257 条 eligible；对 257 条重跑 triage 得 eligible 237、unsupported 14、error 6；生态 npm 36、PyPI 36、Go 16、Maven 1、NuGet 1、generic 147；两版 registry 身份齐全 85 条（PyPI 36、npm 36、Go 12、Maven 1）。全量 13,687 候选的最终 `RELEASED` 待 Linux 主机 shard 运行统计 |
+| 生态 yield 观察 | 进行中 | PyPI/npm 已有 `RELEASED`；Go 冒烟 `CVE-2026-32758` 通过合成与构建，但 T04 发现修复版仍泄漏（修复器自写复制逻辑而未走 pinned package handler），最终 `QUARANTINED`，Go 样本 `0/1`。T04 正确阻止了假题发布；10k 前需按生态分别测量 yield |
+| 运行期依赖声明校验 | 完成 | PyPI 冒烟发现模型生成的 `app.py` 导入 `starlette` 但 `requirements.txt` 未声明：镜像可构建，容器启动即退出，全部 trial 变成 `infra_error` 且不可修复。`synthesis._validate_python_dependencies`/`_validate_node_dependencies` 现在对比 import 与 manifest（含 Dockerfile 的 `pip install`、import/distribution 别名、本地模块与标准库），未声明即触发带反馈的合成重试 |
+| target 启动 preflight | 完成 | `backend.preflight_target` 在构建后直接 `docker run` target 并轮询 `/health`；容器退出或超时抛 `build_error`，把容器日志交给修复循环。PyPI 冒烟实测 0.7s 通过；修复器现在会补依赖而不是让 40+ 个 trial 以 `infra_error` 失败 |
+| resume 的可修复语义 | 修复 | `_prepare_retry` 对 `build_error`/`generation_error`/`validation_error` 在恢复时先调用一次有上限的修复再重跑；只重跑相同输入无法改变模型缺陷的结论。`infra_error` 仍按可重试处理；`attempts.repair`/`attempts.retry` 都受 `max_repairs` 限制 |
+| 修复不得在应用层“修掉”漏洞 | 完成 | PyPI 冒烟中修复器第二次给文件上传加应用层文件名净化，虽让 T04 不再泄漏却也会让 vulnerable 变体失去漏洞。修复提示现在明确禁止应用层净化/校验，要求 fixed 变体只靠 upstream release 切换生效；T04 仍是最终裁决 |
+| symlink 资产的题面约束 | 完成 | 合成 prompt 明确 `/opt/app/index.html` 是漏洞要触达的资产而不是可直接挂载的路由；把 `/` 直接映射到该 symlink 会让 PoC 无漏洞即可成功，fixed 变体必然泄漏 |
+| 本地 NVD feed 索引 | 完成 | 新增 `harbor_pipeline/nvd_feed.py` 与 `nvd-cache` 命令：年度 feed 建成单 CVE 的 SQLite 索引（2026 年 83,505 条、415 MB、实测 8.6s），`discovery` 优先从索引取 NVD 记录并在证据里引用 feed 与 sha256；未命中、feed 损坏或年份早于 2002 时回落 API，原因写入 notes。索引构建由 `util.file_lock` 跨进程串行化，预算账本复用同一把锁 |
+| 凭据边界 | 完成 | `GITHUB_TOKEN`/`NVD_API_KEY` 只从环境变量读取；`sources._request_headers` 只对 `api.github.com` 与 `services.nvd.nist.gov` 附加凭据，重定向逐跳校验、不跨主机转发；token 不进入 TOML、产物或日志 |
+| 生态失败归因 | 完成 | 拆分三类失败：基础设施（未声明依赖 → `infra_error`）、题面设计（symlink 直接挂载 → T04 泄漏）、未真正走 upstream 代码（Go 目标自写遍历 → T04 泄漏）。Go 冒烟复盘中确认 `main.go` 只 import `filebrowser/v2/rules` 用于无关端点，资源读取由 `filepath.Join` + `os.ReadFile` 自实现 |
 
 ## 14 验证与测试要求
 
@@ -390,4 +455,4 @@ M5 的“10 至 20 个候选”已达成：`candidates/pilot-web-cves.json` 提�
 
 交接应包含以下可检查结果：当前源码与配置、版本基线、数据契约、固定 Harbor 版本、一个真实 CVE 的完整产物和审计包、可重复的验收记录、失败样例、资源清理与恢复步骤、预算策略及未决项。接收方应能在约定环境从清洁状态复跑首题，并解释其为何属于指定 CVE。
 
-接收方首先执行 [HANDOFF.md](../HANDOFF.md) 中的接手清单，再按 [OPERATIONS.md](OPERATIONS.md) 复跑首个 CVE。当前交付已包含可运行的产线、Git 基线、锁定依赖、首题发布包、12 输入试点报告、oracle 与模型难度基线；下一阶段工作是扩充场景模板与候选覆盖，不应把未实现的 CVE 场景描述为已验收。
+接收方首先执行 [HANDOFF.md](../HANDOFF.md) 中的接手清单，再按 [OPERATIONS.md](OPERATIONS.md) 复跑首个 CVE。当前交付已包含可运行的产线、Git 基线、锁定依赖、模板首题发布包、任意 CVE 自动合成路径、12 输入试点报告、oracle 与模型难度基线。下一阶段工作是扩大自动合成的覆盖类别（目前固定为未认证远程文件读取）、提高合成题 qualification 产出率、补人工审查记录，不应把 `UNSUPPORTED` 描述为已验收。

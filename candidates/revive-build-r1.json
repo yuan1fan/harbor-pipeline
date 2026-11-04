@@ -1,0 +1,8 @@
+{
+  "candidates": [
+    {"cve_id": "CVE-2026-102904", "priority": 0, "notes": "build timed out at 300s; retried under the 600s ceiling"},
+    {"cve_id": "CVE-2026-113613", "priority": 0, "notes": "build timed out at 300s; retried under the 600s ceiling"},
+    {"cve_id": "CVE-2026-115924", "priority": 0, "notes": "build timed out at 300s; retried under the 600s ceiling"},
+    {"cve_id": "CVE-2026-22871", "priority": 0, "notes": "build timed out at 300s; retried under the 600s ceiling"}
+  ]
+}

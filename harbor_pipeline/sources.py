@@ -13,6 +13,7 @@ import ipaddress
 import json
 import socket
 import ssl
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -86,25 +87,54 @@ def _public_addresses(host: str, port: int) -> AllowedAddress:
     return AllowedAddress(host=host, port=port, addresses=tuple(dict.fromkeys(addresses)))
 
 
+_DNS_LOCK = threading.Lock()
+_DNS_USERS = 0
+_DNS_STATE = threading.local()
+_ORIGINAL_GETADDRINFO = socket.getaddrinfo
+
+
+def _pinned_getaddrinfo(host, port, *args, **kwargs):
+    """Resolve only the host pinned for the calling thread.
+
+    A process-wide monkeypatch is unavoidable with urllib, but the pinned
+    address itself is thread-local. Parallel source collection therefore
+    cannot make one candidate's DNS answer satisfy another candidate's
+    request.
+    """
+    allowed = getattr(_DNS_STATE, "allowed", None)
+    if allowed is not None and str(host).casefold() == allowed.host.casefold():
+        results = []
+        for raw in allowed.addresses:
+            family = socket.AF_INET6 if ":" in raw else socket.AF_INET
+            sockaddr = (
+                (raw, port or allowed.port, 0, 0)
+                if family == socket.AF_INET6
+                else (raw, port or allowed.port)
+            )
+            results.append(
+                (family, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", sockaddr)
+            )
+        return results
+    return _ORIGINAL_GETADDRINFO(host, port, *args, **kwargs)
+
+
 @contextlib.contextmanager
 def _pinned_dns(allowed: AllowedAddress) -> Iterator[None]:
-    original = socket.getaddrinfo
-
-    def pinned(host, port, *args, **kwargs):
-        if str(host).casefold() == allowed.host.casefold():
-            results = []
-            for raw in allowed.addresses:
-                family = socket.AF_INET6 if ":" in raw else socket.AF_INET
-                sockaddr = (raw, port or allowed.port, 0, 0) if family == socket.AF_INET6 else (raw, port or allowed.port)
-                results.append((family, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", sockaddr))
-            return results
-        return original(host, port, *args, **kwargs)
-
-    socket.getaddrinfo = pinned
+    global _DNS_USERS
+    previous = getattr(_DNS_STATE, "allowed", None)
+    with _DNS_LOCK:
+        if _DNS_USERS == 0:
+            socket.getaddrinfo = _pinned_getaddrinfo
+        _DNS_USERS += 1
+    _DNS_STATE.allowed = allowed
     try:
         yield
     finally:
-        socket.getaddrinfo = original
+        _DNS_STATE.allowed = previous
+        with _DNS_LOCK:
+            _DNS_USERS -= 1
+            if _DNS_USERS == 0:
+                socket.getaddrinfo = _ORIGINAL_GETADDRINFO
 
 
 def validate_url(settings: SourceSettings, url: str) -> AllowedAddress:
@@ -143,6 +173,63 @@ def fetch(url: str, settings: SourceSettings, max_redirects: int = DEFAULT_MAX_R
     raise last or TaskError("source_error", f"Fetch failed for {url}")
 
 
+def download(
+    url: str,
+    settings: SourceSettings,
+    destination: Path,
+    *,
+    max_bytes: int = 512 * 1024 * 1024,
+) -> dict:
+    """Download a bounded public feed to disk with the same URL policy.
+
+    This is intentionally separate from :func:`fetch`: bulk harvest feeds are
+    far larger than a single evidence source, but they still must pass the
+    HTTPS, allowlist, public-address, and DNS-pinning checks.
+    """
+    bounded = SourceSettings(
+        allowed_hosts=list(settings.allowed_hosts),
+        max_bytes=max_bytes,
+        timeout_sec=max(settings.timeout_sec, 120),
+        github_token=settings.github_token,
+        nvd_api_key=settings.nvd_api_key,
+    )
+    result = fetch(url, bounded)
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(destination.name + ".part")
+    temporary.write_bytes(result.body)
+    temporary.replace(destination)
+    return {
+        "url": result.url,
+        "final_url": result.final_url,
+        "status": result.status,
+        "sha256": result.sha256,
+        "size": result.size,
+        "media_type": result.media_type,
+        "fetched_at": result.fetched_at,
+        "path": str(destination),
+    }
+
+
+def _request_headers(settings: SourceSettings, url: str) -> dict[str, str]:
+    """Attach credentials only to the exact host that owns them.
+
+    Redirects are followed manually, so a token can never be forwarded to a
+    different allowlisted host.
+    """
+    headers = {
+        "User-Agent": "harbor-cve-pipeline/0.1 (source collector)",
+        "Accept": "*/*",
+    }
+    host = (urllib.parse.urlsplit(url).hostname or "").casefold()
+    if host == "api.github.com" and settings.github_token:
+        headers["Authorization"] = f"Bearer {settings.github_token}"
+        headers["X-GitHub-Api-Version"] = "2022-11-28"
+    if host == "services.nvd.nist.gov" and settings.nvd_api_key:
+        headers["apiKey"] = settings.nvd_api_key
+    return headers
+
+
 def _fetch_once(url: str, settings: SourceSettings, max_redirects: int = DEFAULT_MAX_REDIRECTS) -> FetchResult:
     current = url
     chain: list[str] = []
@@ -151,10 +238,7 @@ def _fetch_once(url: str, settings: SourceSettings, max_redirects: int = DEFAULT
         allowed = validate_url(settings, current)
         request = urllib.request.Request(
             current,
-            headers={
-                "User-Agent": "harbor-cve-pipeline/0.1 (source collector)",
-                "Accept": "*/*",
-            },
+            headers=_request_headers(settings, current),
         )
         with _pinned_dns(allowed):
             try:
@@ -236,64 +320,98 @@ class EvidenceCollector:
     settings: SourceSettings
     run_dir: Path
     fetched_at: str = field(default_factory=utc_now)
+    sources: list[dict] = field(default_factory=list)
 
-    def collect(self, cve_id: str, urls: list[tuple[str, str, str]]) -> dict:
-        """Fetch (url, source_type, citation) tuples and write the evidence index."""
+    def add(self, url: str, source_type: str, citation: str) -> dict:
+        """Fetch one source, persist it, and return its evidence entry.
+
+        Collection is incremental because automatic discovery has to read the
+        CVE record before it knows which references deserve a second fetch.
+        """
         evidence_dir = self.run_dir / "evidence"
         evidence_dir.mkdir(parents=True, exist_ok=True)
-        sources = []
-        for index, (url, source_type, citation) in enumerate(urls, start=1):
-            source_id = f"src-{index}-{source_type.replace('_', '-')}"
-            try:
-                result = fetch(url, self.settings)
-            except TaskError as exc:
-                # Persist the failure snapshot too: the evidence contract
-                # requires a traceable local artifact for every source, and an
-                # empty local_path would make the index unverifiable.
-                snapshot = json.dumps(
-                    {"url": url, "error": str(exc), "category": exc.category.code},
-                    sort_keys=True,
-                ).encode("utf-8")
-                local_name = f"{source_id}.error.json"
-                (evidence_dir / local_name).write_bytes(snapshot)
-                sources.append({
-                    "id": source_id,
-                    "url": url,
-                    "fetched_at": self.fetched_at,
-                    "content_sha256": hashlib.sha256(snapshot).hexdigest(),
-                    "source_type": source_type,
-                    "citation": citation,
-                    "status": "error",
-                    "error": str(exc),
-                    "local_path": f"evidence/{local_name}",
-                    "media_type": "application/json",
-                    "redirect_chain": [],
-                })
-                continue
-            suffix = _suffix_for(result.media_type, result.final_url)
-            local_name = f"{source_id}{suffix}"
-            (evidence_dir / local_name).write_bytes(result.body)
-            sources.append({
+        source_id = f"src-{len(self.sources) + 1}-{source_type.replace('_', '-')}"
+        try:
+            result = fetch(url, self.settings)
+        except TaskError as exc:
+            # Persist the failure snapshot too: the evidence contract
+            # requires a traceable local artifact for every source, and an
+            # empty local_path would make the index unverifiable.
+            snapshot = json.dumps(
+                {"url": url, "error": str(exc), "category": exc.category.code},
+                sort_keys=True,
+            ).encode("utf-8")
+            local_name = f"{source_id}.error.json"
+            (evidence_dir / local_name).write_bytes(snapshot)
+            entry = {
                 "id": source_id,
                 "url": url,
-                "fetched_at": result.fetched_at,
-                "content_sha256": result.sha256,
+                "fetched_at": self.fetched_at,
+                "content_sha256": hashlib.sha256(snapshot).hexdigest(),
                 "source_type": source_type,
                 "citation": citation,
-                "status": "ok",
-                "error": None,
+                "status": "error",
+                "error": str(exc),
                 "local_path": f"evidence/{local_name}",
-                "media_type": result.media_type,
-                "redirect_chain": result.redirect_chain,
-            })
+                "media_type": "application/json",
+                "redirect_chain": [],
+            }
+            self.sources.append(entry)
+            return entry
+        return self.record(url, source_type, citation, result)
+
+    def record(
+        self,
+        url: str,
+        source_type: str,
+        citation: str,
+        result: FetchResult,
+    ) -> dict:
+        """Persist an already fetched body as evidence.
+
+        Probes use this after a direct fetch so that a registry that does not
+        publish a package does not leave a failed source in the evidence index.
+        """
+        evidence_dir = self.run_dir / "evidence"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        source_id = f"src-{len(self.sources) + 1}-{source_type.replace('_', '-')}"
+        suffix = _suffix_for(result.media_type, result.final_url)
+        local_name = f"{source_id}{suffix}"
+        (evidence_dir / local_name).write_bytes(result.body)
+        entry = {
+            "id": source_id,
+            "url": url,
+            "fetched_at": result.fetched_at,
+            "content_sha256": result.sha256,
+            "source_type": source_type,
+            "citation": citation,
+            "status": "ok",
+            "error": None,
+            "local_path": f"evidence/{local_name}",
+            "media_type": result.media_type,
+            "redirect_chain": result.redirect_chain,
+        }
+        self.sources.append(entry)
+        return entry
+
+    def has_url(self, url: str) -> bool:
+        return any(source.get("url") == url for source in self.sources)
+
+    def save(self, cve_id: str) -> dict:
         index = {
             "schema_version": SCHEMA_VERSION,
             "cve_id": cve_id,
             "collected_at": self.fetched_at,
-            "sources": sources,
+            "sources": list(self.sources),
         }
         write_json(self.run_dir / "evidence-index.json", index)
         return index
+
+    def collect(self, cve_id: str, urls: list[tuple[str, str, str]]) -> dict:
+        """Fetch (url, source_type, citation) tuples and write the evidence index."""
+        for url, source_type, citation in urls:
+            self.add(url, source_type, citation)
+        return self.save(cve_id)
 
 
 def _suffix_for(media_type: str, url: str) -> str:
@@ -334,6 +452,6 @@ def default_urls(cve_id: str, record: dict) -> list[tuple[str, str, str]]:
 
 
 __all__ = [
-    "FetchResult", "AllowedAddress", "fetch", "validate_url", "parse_cve_record",
-    "default_urls", "cve_record_url", "EvidenceCollector",
+    "FetchResult", "AllowedAddress", "fetch", "download", "validate_url",
+    "parse_cve_record", "default_urls", "cve_record_url", "EvidenceCollector",
 ]

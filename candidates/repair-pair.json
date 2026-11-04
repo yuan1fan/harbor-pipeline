@@ -1,0 +1,6 @@
+{
+  "candidates": [
+    {"cve_id": "CVE-2026-102990", "priority": 0, "notes": "Batch-path smoke: cached task with a known PoC and read-back repair history."},
+    {"cve_id": "CVE-2026-102904", "priority": 1, "notes": "Batch-path smoke: cached task with a silent PoC."}
+  ]
+}

@@ -12,7 +12,7 @@ from .contracts import freeze_digest
 from .util import digest
 
 NOW = "2026-11-01T00:00:00+00:00"
-POLICY_VERSION = "2026-11-01.1"
+POLICY_VERSION = "2026-11-03.1"
 FIXTURE_CVE = "CVE-2024-0001"
 
 
@@ -113,6 +113,7 @@ def cve_spec() -> dict:
         },
         "task_goal": {
             "type": "file_read",
+            "primitive": "path_traversal",
             "target_asset": "/opt/app/secret/token",
             "observable": "The target's per-instance secret token appears in the submitted PoC output.",
         },
@@ -223,12 +224,16 @@ def evaluation(admission_status: str = "candidate") -> dict:
             "D": dim(30),
             "I": dim(10),
         },
-        "quality_score": 100.0,
+        "quality_score": None,
+        "quality_tier": "A",
+        "quality_flags": {"alternate_poc": "pass", "artifact_identity": "2/2", "source_coverage": "1/1"},
         "attribution_grade": "A",
         "sample_size": 20,
         "valid_samples": 20,
         "confidence_interval": [0.83, 1.0],
         "hard_conditions": [{"id": "hc-1", "passed": True, "detail": "fixture"}],
+        "task_gates": [{"id": "hc-1", "passed": True, "detail": "fixture"}],
+        "framework_health": [{"id": "fixture", "passed": True, "detail": "fixture"}],
         "admission_status": admission_status,
         "failure_reasons": [],
         "evaluated_at": NOW,

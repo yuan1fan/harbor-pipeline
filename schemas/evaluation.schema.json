@@ -5,74 +5,251 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version", "policy_version", "cve_id", "candidate_revision",
-    "artifact_digest", "dimensions", "quality_score", "attribution_grade",
-    "sample_size", "valid_samples", "confidence_interval",
-    "hard_conditions", "admission_status", "failure_reasons", "evaluated_at"
+    "schema_version",
+    "policy_version",
+    "cve_id",
+    "candidate_revision",
+    "artifact_digest",
+    "dimensions",
+    "attribution_grade",
+    "sample_size",
+    "valid_samples",
+    "confidence_interval",
+    "hard_conditions",
+    "admission_status",
+    "failure_reasons",
+    "evaluated_at"
   ],
   "properties": {
-    "schema_version": {"const": "1.0"},
-    "policy_version": {"type": "string", "minLength": 1},
-    "cve_id": {"type": "string", "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$"},
-    "candidate_revision": {"type": "integer", "minimum": 1},
-    "artifact_digest": {"type": "string", "minLength": 1},
+    "schema_version": {
+      "const": "1.0"
+    },
+    "policy_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cve_id": {
+      "type": "string",
+      "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$"
+    },
+    "candidate_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "artifact_digest": {
+      "type": "string",
+      "minLength": 1
+    },
     "dimensions": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["V", "P", "M", "D", "I"],
+      "required": [
+        "V",
+        "P",
+        "M",
+        "D",
+        "I"
+      ],
       "properties": {
-        "V": {"$ref": "#/$defs/dimension"},
-        "P": {"$ref": "#/$defs/dimension"},
-        "M": {"$ref": "#/$defs/dimension"},
-        "D": {"$ref": "#/$defs/dimension"},
-        "I": {"$ref": "#/$defs/dimension"}
+        "V": {
+          "$ref": "#/$defs/dimension"
+        },
+        "P": {
+          "$ref": "#/$defs/dimension"
+        },
+        "M": {
+          "$ref": "#/$defs/dimension"
+        },
+        "D": {
+          "$ref": "#/$defs/dimension"
+        },
+        "I": {
+          "$ref": "#/$defs/dimension"
+        }
       }
     },
-    "quality_score": {"type": "number", "minimum": 0, "maximum": 100},
-    "attribution_grade": {"enum": ["A", "B", "C"]},
-    "sample_size": {"type": "integer", "minimum": 0},
-    "valid_samples": {"type": "integer", "minimum": 0},
+    "quality_score": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "attribution_grade": {
+      "enum": [
+        "A",
+        "B",
+        "C"
+      ]
+    },
+    "sample_size": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "valid_samples": {
+      "type": "integer",
+      "minimum": 0
+    },
     "confidence_interval": {
       "type": "array",
       "minItems": 2,
       "maxItems": 2,
-      "items": {"type": "number", "minimum": 0, "maximum": 1}
+      "items": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
     },
     "hard_conditions": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "passed", "detail"],
+        "required": [
+          "id",
+          "passed",
+          "detail"
+        ],
         "properties": {
-          "id": {"type": "string", "minLength": 1},
-          "passed": {"type": "boolean"},
-          "detail": {"type": "string"}
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          }
         }
       }
     },
-    "admission_status": {"enum": ["released", "candidate", "quarantined", "unsupported"]},
-    "failure_reasons": {"type": "array", "items": {"type": "string"}},
-    "evaluated_at": {"type": "string", "format": "date-time"}
+    "admission_status": {
+      "enum": [
+        "released",
+        "candidate",
+        "quarantined",
+        "unsupported"
+      ]
+    },
+    "failure_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evaluated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "quality_tier": {
+      "enum": [
+        "A",
+        "B",
+        "C"
+      ]
+    },
+    "quality_flags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "task_gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "passed",
+          "detail"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "framework_health": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "passed",
+          "detail"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    }
   },
   "$defs": {
     "dimension": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["weight", "score", "items"],
+      "required": [
+        "weight",
+        "score",
+        "items"
+      ],
       "properties": {
-        "weight": {"type": "number", "minimum": 0},
-        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "weight": {
+          "type": "number",
+          "minimum": 0
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
         "items": {
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "status", "evidence"],
+            "required": [
+              "id",
+              "status",
+              "evidence"
+            ],
             "properties": {
-              "id": {"type": "string", "minLength": 1},
-              "status": {"enum": ["pass", "fail", "unknown", "not_applicable"]},
-              "evidence": {"type": "string"}
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "unknown",
+                  "not_applicable"
+                ]
+              },
+              "evidence": {
+                "type": "string"
+              }
             }
           }
         }

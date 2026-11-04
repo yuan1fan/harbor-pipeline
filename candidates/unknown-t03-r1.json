@@ -1,0 +1,24 @@
+{
+  "candidates": [
+    {
+      "cve_id": "CVE-2026-100520",
+      "priority": 0,
+      "notes": "Synthesized and built before the overnight job timeout killed its matrix; its T03 trials never completed, so the reference PoC is still unmeasured."
+    },
+    {
+      "cve_id": "CVE-2026-103061",
+      "priority": 0,
+      "notes": "Synthesized and built before the overnight job timeout killed its matrix; T03 unmeasured."
+    },
+    {
+      "cve_id": "CVE-2026-24486",
+      "priority": 0,
+      "notes": "Synthesized and built before the overnight job timeout killed its matrix; T03 unmeasured."
+    },
+    {
+      "cve_id": "CVE-2026-24884",
+      "priority": 0,
+      "notes": "Synthesized and built before the overnight job timeout killed its matrix; T03 unmeasured."
+    }
+  ]
+}

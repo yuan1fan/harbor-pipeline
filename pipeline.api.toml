@@ -1,11 +1,12 @@
 [pipeline]
 output_dir = "runs"
-workers = 1
+workers = 4
+trial_workers = 2
 max_repairs = 2
-trials = 5
-min_trials = 5
-max_calls = 12
-max_total_tokens = 180000
+trials = 20
+min_trials = 20
+max_calls = 60
+max_total_tokens = 2000000
 max_context_bytes = 600000
 command_timeout_sec = 300
 python_image = "python:3.12.10-slim-bookworm"
@@ -13,13 +14,30 @@ require_harbor_lint = true
 
 [models.default]
 provider = "anthropic"
-model = "${CLAUDE_MODEL}"
+model = "deepseek-flash-cyber"
 timeout_sec = 300
 max_output_tokens = 18000
-api_base = "https://api.anthropic.com"
+api_base = "${ANTHROPIC_BASE_URL}"
 api_version = "2023-06-01"
 
+[models.repairer]
+provider = "anthropic"
+model = "deepseek-flash-cyber"
+max_output_tokens = 32000
+api_base = "${ANTHROPIC_BASE_URL}"
+api_version = "2023-06-01"
+
+[models.synthesizer]
+provider = "anthropic"
+model = "deepseek-flash-cyber"
+max_output_tokens = 32000
+
 [sources]
-allowed_hosts = ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org"]
+allowed_hosts = ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org", "api.osv.dev", "api.github.com", "services.nvd.nist.gov", "registry.npmjs.org", "proxy.golang.org", "sum.golang.org", "repo1.maven.org"]
 max_bytes = 1500000
 timeout_sec = 30
+# Serve per-CVE NVD records from the cached yearly feed instead of the API,
+# which allows only 5 requests per 30 seconds without a key. The directory is
+# shared with `harvest`, so the feed is downloaded once.
+nvd_feed_cache = "work/harvest"
+nvd_feed_max_age_sec = 604800

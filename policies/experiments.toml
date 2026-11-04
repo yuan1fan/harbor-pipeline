@@ -1,5 +1,5 @@
 schema_version = "1.0"
-policy_version = "2026-11-01.1"
+policy_version = "2026-11-03.1"
 
 # The differential matrix from FRAMEWORK_PLAN.md section 8.1.
 # `probe` selects the harness behaviour; `expect` is the required decision.

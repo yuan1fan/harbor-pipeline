@@ -9,3 +9,7 @@ dist/
 runs/
 work/
 *.local.toml
+
+# Office lock files and scratch notes
+~$*
+_new_eval_block.txt

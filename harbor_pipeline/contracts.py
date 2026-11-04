@@ -17,6 +17,7 @@ from .util import PipelineError, digest, read_json
 SCHEMA_NAMES: tuple[str, ...] = (
     "evidence-index",
     "cve-spec",
+    "synthesis-bundle",
     "build-manifest",
     "trial-record",
     "evaluation",
@@ -97,14 +98,36 @@ def freeze_digest(spec: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
+# Upper bound for an author-raised repeat count. Also encoded as the maximum of
+# `matrix_repeats` in schemas/synthesis-bundle.schema.json; keep the two in sync.
+MAX_MATRIX_REPEATS = 20
+
+
 @dataclass(frozen=True)
 class Profile:
     name: str
     trials: int
     min_valid_trials: int
     require_paired: bool
-    min_quality_score: float
     allow_attribution_grade: tuple[str, ...]
+
+
+def matrix_repeats(profile: Profile, requested: Any = None) -> int:
+    """T03/T04 repetitions: the profile floor, raised by the task author.
+
+    A synthesized task may declare `matrix_repeats` when its exploit path is
+    genuinely nondeterministic. The profile value is a floor, never a ceiling,
+    and the request is clamped so a malformed bundle cannot schedule an
+    unbounded matrix.
+    """
+    floor = max(1, int(profile.trials))
+    if requested is None:
+        return floor
+    try:
+        value = int(requested)
+    except (TypeError, ValueError):
+        return floor
+    return max(floor, min(value, MAX_MATRIX_REPEATS))
 
 
 @dataclass(frozen=True)
@@ -112,7 +135,6 @@ class Policy:
     schema_version: str
     policy_version: str
     weights: dict[str, float]
-    min_quality_score: float
     min_attribution_grade: str
     hard_conditions: dict[str, Any]
     profiles: dict[str, Profile]
@@ -143,7 +165,6 @@ def load_policy() -> Policy:
             schema_version=raw["schema_version"],
             policy_version=raw["policy_version"],
             weights={k: float(v) for k, v in raw["weights"].items()},
-            min_quality_score=float(raw["thresholds"]["min_quality_score"]),
             min_attribution_grade=raw["thresholds"]["min_attribution_grade"],
             hard_conditions=dict(raw.get("hard_conditions", {})),
             profiles=profiles,
@@ -156,6 +177,14 @@ def load_policy() -> Policy:
         raise PipelineError(f"Policy weights missing dimensions: {sorted(missing)}")
     if abs(policy.weight_total() - 100.0) > 1e-9:
         raise PipelineError(f"Policy weights must total 100, got {policy.weight_total()}")
+    for profile in policy.profiles.values():
+        # A validity floor above the number of scheduled samples can never be
+        # met, which would quarantine every candidate without saying why.
+        if profile.min_valid_trials > profile.trials:
+            raise PipelineError(
+                f"Profile {profile.name!r} requires {profile.min_valid_trials} valid "
+                f"trials but schedules only {profile.trials}"
+            )
     return policy
 
 

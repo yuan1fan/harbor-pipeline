@@ -1,0 +1,19 @@
+{
+  "candidates": [
+    {
+      "cve_id": "CVE-2026-26057",
+      "priority": 0,
+      "notes": "Smoke sweep of never-attempted candidates. Unauthenticated API upload in a small Python server: the app can plausibly expose the written file back, which is what T03 needs."
+    },
+    {
+      "cve_id": "CVE-2026-22171",
+      "priority": 1,
+      "notes": "Smoke sweep. Path traversal in a media download flow that writes into os.tmpdir(); a download endpoint can plausibly read the result back."
+    },
+    {
+      "cve_id": "CVE-2026-22810",
+      "priority": 2,
+      "notes": "Smoke sweep. Importer writes embedded files without sanitizing names; read-back depends on the synthesized app exposing the import result."
+    }
+  ]
+}

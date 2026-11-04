@@ -52,7 +52,7 @@ def run_candidate(job: CandidateJob, config: Config) -> dict:
             run_id=job.run_id,
             profile=job.profile,
             scenario=job.scenario,
-            workers=1,
+            workers=config.pipeline.trial_workers,
             ledger=job.ledger,
             output_root=job.output_root,
         )
@@ -86,6 +86,7 @@ def _failure(job: CandidateJob, error: TaskError, *, traceback: str | None = Non
         "task_digest": None,
         "image_digest": None,
         "quality_score": None,
+        "quality_tier": None,
         "admission_status": None,
         "release": None,
         "evaluation": None,

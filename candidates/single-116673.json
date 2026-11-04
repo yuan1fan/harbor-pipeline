@@ -1,0 +1,9 @@
+{
+  "candidates": [
+    {
+      "cve_id": "CVE-2026-116673",
+      "priority": 0,
+      "notes": "Only candidate whose reference PoC reached the secret on every measured T03 trial (10/10 and 8/8 in two earlier matrices). Its handler is library-mediated: the iface parameter goes straight into si.networkStats and the response is the library's own rows, with no read-back of a caller-assembled path, so the fixed build has a real chance of holding. Run alone with high trial concurrency so the full 48-trial matrix finishes well inside the job ceiling."
+    }
+  ]
+}

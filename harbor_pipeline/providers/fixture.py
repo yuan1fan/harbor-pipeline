@@ -33,6 +33,13 @@ class FixtureProvider:
             }
         elif request.role in {"repair", "repairer"}:
             body = {"files": [], "reason": "fixture provider never repairs"}
+        elif request.role == "synthesizer":
+            # Synthesis needs a real model; offline runs must decline, not fake
+            # a target that no evidence supports.
+            body = {
+                "supported": False,
+                "unsupported_reason": "fixture provider does not synthesize targets",
+            }
         else:
             body = {"status": "ok", "role": request.role}
         text = json.dumps(body, sort_keys=True)

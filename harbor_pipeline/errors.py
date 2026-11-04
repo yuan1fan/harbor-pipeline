@@ -38,6 +38,11 @@ ERROR_CLASSES: dict[str, ErrorClass] = {
         "build_error", False, True, "QUARANTINED",
         "A candidate image or Harbor package failed to build or lint.",
     ),
+    "validation_error": ErrorClass(
+        "validation_error", False, True, "QUARANTINED",
+        "The differential failed in the synthesized application: healthy target, "
+        "rejected negatives, but the reference exploit reached no secret.",
+    ),
     "infra_error": ErrorClass(
         "infra_error", True, False, "QUARANTINED",
         "Docker, Harbor, or the host failed; the candidate was never exercised.",

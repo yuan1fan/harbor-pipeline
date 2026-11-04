@@ -9,8 +9,15 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from . import GENERATOR_VERSION, PROMPT_VERSION
-from .scenario import ScenarioContext, get_scenario
-from .util import PipelineError, digest, read_json, write_files
+from .repair import FRAMEWORK_PATHS, POC_PATH
+from .scenario import (
+    _SYNTHESIS_LAYER,
+    ScenarioContext,
+    get_scenario,
+    render_synthesis,
+    wrap_solution,
+)
+from .util import PipelineError, digest, image_base as image_tag_base, read_json, write_files
 
 ALLOWED_PREFIXES: tuple[str, ...] = (
     "instruction.md",
@@ -57,6 +64,7 @@ class GeneratedTask:
     spec_digest: str
     task_digest: str
     files: dict[str, str]
+    synthesis_digest: str = ""
 
     def write(self, root: Path) -> Path:
         task_root = root / "task"
@@ -77,11 +85,21 @@ def render_task(
     controlled: bool = False,
     fault: bool = False,
     overrides: dict[str, str] | None = None,
+    synthesis=None,
+    revision: int = 1,
+    prebuilt: bool = False,
+    prebuilt_base: str | None = None,
 ) -> GeneratedTask:
     if variant not in {"vulnerable", "fixed"}:
         raise PipelineError(f"Unknown variant {variant!r}")
-    scenario = get_scenario(scenario_name)
     version = spec["versions"]["vulnerable_ref"] if variant == "vulnerable" else spec["versions"]["fixed_ref"]
+    synthesis_digest = synthesis.digest if synthesis is not None else ""
+    # Validation probes use the images the pipeline just built; the release
+    # copy is rendered without this so it can be rebuilt anywhere. A repair
+    # debug run passes its own base so it never clobbers the validation tags.
+    tag_base = prebuilt_base or (
+        image_tag_base(spec["cve_id"], variant, revision) if prebuilt else None
+    )
     ctx = ScenarioContext(
         cve_id=spec["cve_id"],
         product=spec["product"]["name"],
@@ -91,14 +109,52 @@ def render_task(
         secret_path=spec["task_goal"]["target_asset"],
         spec_digest=spec["frozen_digest"],
         attribution_grade=spec["attribution_grade"],
-        synthetic=synthetic,
+        synthetic=synthetic or synthesis is not None,
         controlled=controlled,
         fault=fault,
+        business_path="/business" if synthesis is not None else "/static/hello.txt",
+        business_body="ok" if synthesis is not None else "hello",
+        synthesis_digest=synthesis_digest,
+        revision=revision,
+        image_base=tag_base,
     )
-    files = scenario.render(ctx)
-    files = _apply_overrides(files, overrides)
+    if synthesis is not None:
+        files = render_synthesis(ctx, synthesis)
+    else:
+        files = get_scenario(scenario_name).render(ctx)
+    files = _apply_overrides(files, overrides, version=version)
+    if variant == "fixed" and synthesis is not None:
+        # A repair overlay is variant-agnostic. When the bundle defines a
+        # fixed-only file (typically the fixed package pin), it must win over
+        # a vulnerable-side repair to that file, or the fixed build silently
+        # reverts to the vulnerable release.
+        for name, body in (synthesis.target.get("fixed_overrides") or {}).items():
+            files[f"environment/target/{name}"] = body.replace("{{REF}}", version)
+    if synthesis is not None and "environment/target/Dockerfile" in files:
+        # The framework layer owns the secret lifecycle, the entrypoint and the
+        # curl health tooling. A repair overlay may rewrite the target
+        # Dockerfile, but it must not be able to drop this layer: T12's fault
+        # switch and the verifier's health path live there.
+        layer = _SYNTHESIS_LAYER.strip()
+        if layer not in files["environment/target/Dockerfile"]:
+            files["environment/target/Dockerfile"] = (
+                files["environment/target/Dockerfile"].rstrip()
+                + "\n\n"
+                + _SYNTHESIS_LAYER
+            )
+    # A repaired reference PoC must also replace the payload the oracle agent
+    # submits. Otherwise the verifier's reference run uses the fix while the
+    # submitted artifact still contains the broken PoC, so T03 can never pass.
+    if probe == "reference" and POC_PATH in files:
+        files["solution/solve.sh"] = wrap_solution(files[POC_PATH])
     task_digest = compute_task_digest(
-        files, spec=spec, variant=variant, probe=probe, controlled=controlled, fault=fault
+        files,
+        spec=spec,
+        variant=variant,
+        probe=probe,
+        controlled=controlled,
+        fault=fault,
+        synthesis_digest=synthesis_digest,
     )
     files["task.toml"] = _task_toml(
         spec=spec,
@@ -106,11 +162,13 @@ def render_task(
         probe=probe,
         scenario_name=scenario_name,
         task_digest=task_digest,
-        synthetic=synthetic,
+        synthetic=synthetic or synthesis is not None,
         network_mode=network_mode,
         allowed_hosts=allowed_hosts,
         controlled=controlled,
         fault=fault,
+        synthesis_digest=synthesis_digest,
+        image_base=tag_base,
     )
     generated = GeneratedTask(
         cve_id=spec["cve_id"],
@@ -120,16 +178,25 @@ def render_task(
         spec_digest=spec["frozen_digest"],
         task_digest=task_digest,
         files=files,
+        synthesis_digest=synthesis_digest,
     )
     check_task(generated, spec)
     return generated
 
 
-def _apply_overrides(files: dict[str, str], overrides: dict[str, str] | None) -> dict[str, str]:
-    """Apply reviewed repair edits before the task digest is computed.
+def _apply_overrides(
+    files: dict[str, str],
+    overrides: dict[str, str] | None,
+    *,
+    version: str | None = None,
+) -> dict[str, str]:
+    """Apply the authoring agent's file edits before the task digest.
 
-    Repairs are restricted to existing files under `environment/`: the
-    instruction, verifier, and reference solution are never model-editable.
+    The agent may rewrite or add files under ``environment/`` and the reference
+    exploit. The instruction, verifier and frozen spec are not in this map and
+    cannot be reached here, so the grading gate stays outside the write scope.
+    ``{{REF}}`` in an override is substituted per variant, which lets a repair
+    keep the vulnerable and fixed pins distinct.
     """
     if not overrides:
         return files
@@ -137,12 +204,23 @@ def _apply_overrides(files: dict[str, str], overrides: dict[str, str] | None) ->
     for name, body in overrides.items():
         if not isinstance(name, str) or not isinstance(body, str):
             raise PipelineError("Repair overrides must map paths to text")
-        if not name.startswith("environment/") or "/" not in name or ".." in name.split("/"):
+        if ".." in name.split("/") or name.startswith("/") or "\\" in name:
             raise PipelineError(f"Repair may not modify {name!r}")
-        if name not in patched:
-            raise PipelineError(f"Repair may not create new file {name!r}")
+        if name in FRAMEWORK_PATHS:
+            raise PipelineError(
+                f"Repair may not modify framework-owned file {name!r}; "
+                "use set_start_command for the launch command"
+            )
+        allowed = (
+            name == POC_PATH
+            or (name.startswith("environment/") and "/" in name)
+        )
+        if not allowed:
+            raise PipelineError(f"Repair may not modify {name!r}")
         if len(body.encode("utf-8")) > 256_000:
             raise PipelineError(f"Repair for {name} exceeds 256 KB")
+        if version is not None:
+            body = body.replace("{{REF}}", version)
         patched[name] = body
     return patched
 
@@ -155,6 +233,7 @@ def compute_task_digest(
     probe: str,
     controlled: bool = False,
     fault: bool = False,
+    synthesis_digest: str = "",
 ) -> str:
     body = {
         "files": {name: digest(content.encode("utf-8")) for name, content in sorted(files.items()) if name != "task.toml"},
@@ -163,6 +242,7 @@ def compute_task_digest(
         "probe": probe,
         "controlled": controlled,
         "fault": fault,
+        "synthesis_digest": synthesis_digest,
         "generator_version": GENERATOR_VERSION,
     }
     return digest(body)
@@ -180,8 +260,21 @@ def _task_toml(
     allowed_hosts: tuple[str, ...],
     controlled: bool,
     fault: bool,
+    synthesis_digest: str = "",
+    image_base: str | None = None,
 ) -> str:
     suffix = "-control" if controlled else ("-fault" if fault else "")
+    verifier_image = (
+        "[verifier.environment]\n"
+        f"docker_image = {_q(image_base + '-verifier')}\n"
+        if image_base else ""
+    )
+    agent_image = (
+        f"docker_image = {_q(image_base + '-agent')}\n"
+        if image_base else ""
+    )
+    primitive = str(spec["task_goal"].get("primitive") or "file_read")
+    primitive_keyword = primitive.replace("_", "-")
     name = f"harbor-cve/{spec['cve_id'].lower()}-{variant}{suffix}"
     description = (
         f"Replayable web security task derived from {spec['cve_id']} "
@@ -198,7 +291,7 @@ schema_version = "1.4"
 name = {_q(name)}
 version = "1.0.0"
 description = {_q(description)}
-keywords = ["web", "file-read", "cve"]
+keywords = ["web", {_q(primitive_keyword)}, "cve"]
 [[task.authors]]
 name = "harbor-cve-pipeline"
 
@@ -209,6 +302,8 @@ variant = {_q(variant)}
 probe = {_q(probe)}
 scenario = {_q(scenario_name)}
 synthetic = {str(synthetic).lower()}
+generation_mode = {_q("synthesized" if synthesis_digest else "template")}
+synthesis_digest = {_q(synthesis_digest)}
 controlled = {str(controlled).lower()}
 fault_injected = {str(fault).lower()}
 attribution_grade = {_q(spec['attribution_grade'])}
@@ -219,20 +314,21 @@ prompt_version = {_q(PROMPT_VERSION)}
 prompt_policy = "service-only"
 network_isolation = {_q(network_mode)}
 goal_type = {_q(spec['task_goal']['type'])}
+goal_primitive = {_q(primitive)}
 target_secret_path = {_q(spec['task_goal']['target_asset'])}
 
 [verifier]
 environment_mode = "separate"
 timeout_sec = 600.0
 network_mode = {_q(network_mode)}
-{allow}
+{allow}{verifier_image}
 [agent]
 timeout_sec = 900.0
 network_mode = {_q(network_mode)}
 {allow}
 [environment]
 network_mode = {_q(network_mode)}
-{allow}build_timeout_sec = 900.0
+{allow}{agent_image}build_timeout_sec = 900.0
 os = "linux"
 cpus = 2
 memory_mb = 2048
