@@ -2,6 +2,10 @@
 
 把公开 CVE 证据自动转换成 **Harbor 安全训练题**：每道题包含一个真实漏洞应用、一个参考 PoC、一个修复后版本，以及一套固定的差分测试矩阵。评分不依赖 LLM。
 
+> **0.2 版本说明（2026-11-06）**：本版增加了运行时依赖身份、候选级负例、随机 listing 答案、断言证据引用、T09 干净重建、分层质量抽样、独立复核字段和精确镜像归档。旧版 `RELEASED` 产物不能直接混入 0.2 数据集，需要按新协议重新验收。
+>
+> `quality_tier=A` 只表示备选 PoC 通过，不代表独立专家认证；真实正确率见 `quality` 报告的独立复核统计，未复核时明确写 `null`。
+
 ---
 
 ## 1. 来源（Evidence Sources）
@@ -52,7 +56,10 @@ agent 只能通过 `harbor-author` 接触外部世界：
 | `build` | 只构建 vulnerable/fixed 两个 **target** 镜像；agent 镜像全局共享，verifier 按 variant 薄构建（Harbor 必须把 `tests/` 烘进 verifier 镜像） |
 | `probe` | 直连 compose 跑真实 `tests/verify.py`：target + observer（file_write）+ verifier main |
 | `probe --alternate` | 用备选 PoC 作为 submitted，验证另一条等价 payload |
-| `exec -- <cmd>` | 在最后一次构建的 vulnerable target 镜像内执行（`--network none`） |
+| `exec -- <cmd>` / `exec --variant fixed -- <cmd>` | 在最后一次构建的对应 variant 镜像内执行（`--network none`），用于检查运行现场或库源码 |
+| `shell -- <cmd>` | 在持久 author 沙箱中执行通用命令；`target/`、`target-fixed/`、`poc/` 可写，`inputs/` 只读，不挂载 Docker socket 或宿主凭据 |
+| `debug --variant vulnerable\|fixed start\|exec\|logs\|stop` | 启动并反复检查持久调试靶机；vulnerable 和 fixed 可分别调试 |
+| `cleanup` | 停止该 author 工作区的 sandbox 与 debug 容器 |
 | `registry` | 查询 PyPI / npm / Go / Maven 真实版本 |
 | `submit` / `decline` | 提交已验证的树，或明确声明该 CVE 不适合当前 Web 契约 |
 
@@ -134,9 +141,9 @@ agent 只能通过 `harbor-author` 接触外部世界：
 
 - **必须**：T03 全部成功、T04 全部不泄漏、T05/T06/T07/T10 固定负载全部被拒绝、目标健康、spec/证据一致。
 - **认证题**：verifier 会额外用**去掉凭据**的同一参考 PoC 再打一次；仍然成功则判失败（说明认证不是必需前置条件）。
-- **质量档**：T11 通过 = A，否则 B；没有 100 分加权总分。
+- **质量档**：T11 通过 = A，否则 B；没有 100 分加权总分。A 档只表示备选 PoC 通过，不等于独立专家认证。
 - 评分输出：`task_gates`（卡点）、`framework_health`（框架自检）、`quality_tier` / `quality_flags`。
-- 评分器或验证器本身修复后，用 `recheck` 复用已存储的 matrix 重新评分：不重建镜像、不重跑试验；只有 admission 变回 `released` 才解除隔离并进入 release 重放。
+- 评分器修复后，`recheck` 会校验执行签名：spec、task 文件、镜像 digest、生成器/verifier 代码都一致时才复用已存储的 matrix；否则自动重建并重跑试验。只有 admission 变回 `released` 才解除隔离并进入 release 重放。
 
 ### 3.3 权限与隔离
 
@@ -232,3 +239,60 @@ policies/                 # 验收策略与实验定义
 tests/                    # 单元与集成测试
 docs/                     # 设计与运维文档
 ```
+
+
+## 7. 质量度量、校验与交付
+
+### 7.1 开发与测试
+
+```bash
+python -m pip install -e ".[dev]"
+python -m pytest
+# Linux 上额外跑容器级回归（需要 Docker/Compose）
+HARBOR_RUN_DOCKER_TESTS=1 python -m pytest tests/test_container_hardening.py
+# 真实的 aiohttp CVE canary：走 author/solver，不发布
+python -m harbor_pipeline -c examples/canary.toml run --cve CVE-2024-23334 --profile qualification --until validate --json
+```
+
+PowerShell 用 `$env:HARBOR_RUN_DOCKER_TESTS = '1'`。wheel 必须包含 `schemas/`、`policies/`、Harbor task schema 与 verifier 资源；CI 在 Windows/Linux 上构建 wheel 后用 `tests/check_wheel.py` 脱离源码目录导入验证。
+
+### 7.2 author 的 0.2 约束
+
+- 每条 assertion 必须带 `evidence_quote`，且是引用来源文件中的**精确摘录**；仅引用一个抓取成功的来源不再自动记为 `confirmed`。来源文件被改动后 checksum 校验会失败。
+- `target.business_probes` 必填：除 `/health`、`/business` 外至少一条正常业务探针，vulnerable 和 fixed 都必须通过。
+- 版本对只能来自上游 ref/依赖 manifest：fixed-only 的应用代码改写、无 `{{REF}}` 的固定版本切换、在注释里伪造版本字符串都会被拒绝。Go/Maven 的依赖身份从构建后的元数据读取，不读 Dockerfile 注释。
+- 白盒 `source/` 只包含 author 的应用源码，排除 `Dockerfile`、`entrypoint.sh`、compose、patch/diff 和隐藏文件；listing 答案在 target 启动时用 `/dev/urandom` 生成，verifier 读取后立即删除，源码和任务元数据中都不含可复用答案。
+- T09 使用 `--no-cache` 重建 vulnerable 与 fixed，并记录实际 image ID；复用预构建镜像不算干净重建。
+- `recheck` 只在执行签名（spec、task 文件、镜像 digest、生成器/verifier 代码）一致时复用旧 matrix；改动 verifier、模板、target 或镜像后必须重建并重跑 trial。
+
+### 7.3 `quality` 报告
+
+```bash
+python -m harbor_pipeline quality --run-dir runs/scale-20261106-r5   --output work/quality-r5.json --sample-size 30 --seed 0
+```
+
+报告按 ecosystem × goal-family 分层轮转抽样，分别给出候选状态、失败类别、release 率，以及独立复核的接受数与 Wilson 区间。发布率不是正确率；没有独立复核时 `accuracy` 必须写 `null`。复核文件格式：
+
+```json
+{"reviews":[{"cve_id":"CVE-2024-23334","task_digest":"<发布任务的 task_digest>","reviewer":"<姓名或机构>","independent":true,"verdict":"accepted"}]}
+```
+
+复核必须绑定 `task_digest`，不能只按 CVE id 复用旧结论；不一致或重复的复核会被拒绝。
+
+### 7.4 数据集合并
+
+```bash
+python -m harbor_pipeline dataset-merge   --input runs/shard-0/dataset-manifest.json runs/shard-1/dataset-manifest.json   --output work/dataset-v2.json
+```
+
+划分先归一化项目/包身份（含 `_`/`-` 等别名），再按仓库、patch commit、CVE alias 和 task digest 建连通分量，最后整体分到 train/validation/test（数据集版本 `2026.11.2`）。旧协议 manifest 会被归档到 `dataset-history/` 并标为 `excluded_legacy`，不会被静默并入新数据集。
+
+### 7.5 离线镜像归档
+
+```bash
+python -m harbor_pipeline archive-release   --release-dir runs/RUN/CVE-2024-23334/release --output-dir work/canary-archive
+# 目标机恢复精确镜像后，Harbor 直接使用 archive 里的 task/
+docker load -i work/canary-archive/images.tar
+```
+
+归档按 image ID 导出，不依赖本地 tag；`image-lock.json` 记录 archive SHA-256 和每个镜像 ID。需要长期保留镜像时设置 `[pipeline] archive_images = true`。源码重建不能替代二进制恢复：只有 `docker save` 的精确镜像才是可复现的执行环境。

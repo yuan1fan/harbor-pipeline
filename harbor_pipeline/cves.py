@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .util import PipelineError
+from . import GENERATOR_VERSION
 
 
 @dataclass(frozen=True)
@@ -144,6 +145,7 @@ def raw_spec(cve: BuiltinCve, evidence: dict, artifact_identity: list[dict]) -> 
 
     return {
         "cve_id": cve.cve_id,
+        "curation_revision": GENERATOR_VERSION,
         "aliases": [],
         "product": {
             "name": cve.product,

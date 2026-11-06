@@ -15,7 +15,6 @@ from .goals import (
     auth_material,
     auth_scheme,
     goal_family,
-    listing_name,
     target_asset,
 )
 from .repair import FRAMEWORK_PATHS, POC_PATH
@@ -26,7 +25,7 @@ from .scenario import (
     render_synthesis,
     wrap_solution,
 )
-from .util import PipelineError, digest, image_base as image_tag_base, read_json, write_files
+from .util import PipelineError, digest, image_base as image_tag_base, read_json, write_files, tree_hashes, child_path
 
 ALLOWED_PREFIXES: tuple[str, ...] = (
     "instruction.md",
@@ -57,6 +56,7 @@ def harbor_task_schema() -> dict:
     candidates = [
         _REPO_ROOT / "docs" / "reference" / "harbor-task-schema.json",
         Path(__file__).resolve().parent / "reference" / "harbor-task-schema.json",
+        Path(__file__).resolve().parent / "resources" / "reference" / "harbor-task-schema.json",
     ]
     for path in candidates:
         if path.is_file():
@@ -77,8 +77,13 @@ class GeneratedTask:
 
     def write(self, root: Path) -> Path:
         task_root = root / "task"
+        if task_root.is_symlink():
+            raise PipelineError("Task directory must not be a symlink")
+        old_files = set(tree_hashes(task_root)) if task_root.exists() else set()
         items = [{"path": name, "content": body} for name, body in self.files.items()]
         write_files(task_root, items, ALLOWED_PREFIXES)
+        for stale in old_files - self.files.keys():
+            child_path(task_root, stale).unlink()
         return task_root
 
 
@@ -101,6 +106,7 @@ def render_task(
     environment_image: str | None = None,
     verifier_image: str | None = None,
     agent_timeout_sec: float | None = None,
+    paired_verification: bool = True,
 ) -> GeneratedTask:
     if variant not in {"vulnerable", "fixed"}:
         raise PipelineError(f"Unknown variant {variant!r}")
@@ -113,6 +119,7 @@ def render_task(
         image_tag_base(spec["cve_id"], variant, revision) if prebuilt else None
     )
     family = goal_family(spec)
+    allowed_hosts = tuple(dict.fromkeys((*allowed_hosts, "target-fixed", "observer", "observer-fixed")))
     material = auth_material(spec)
     bundle = getattr(synthesis, "bundle", None) if synthesis is not None else None
     presentation = (bundle or {}).get("presentation") or {}
@@ -136,6 +143,8 @@ def render_task(
         synthesis_digest=synthesis_digest,
         revision=revision,
         image_base=tag_base,
+        paired_verification=paired_verification and variant == "vulnerable" and scenario_name != "fixture",
+        business_probes=tuple((getattr(synthesis, "target", {}) or {}).get("business_probes") or []),
         goal_family=family,
         goal_primitive=str((spec.get("task_goal") or {}).get("primitive") or ""),
         auth_identity=auth_identity(spec),
@@ -143,7 +152,7 @@ def render_task(
         auth_user=material["user"],
         auth_password=material["password"],
         auth_token=material["token"],
-        listing_name=listing_name(spec) if family == "directory_listing" else "",
+        listing_name="",  # Answers are generated at target startup, never from the spec.
         target_asset=target_asset(spec, family),
         presentation_mode=presentation_mode,
         presentation_hints=tuple(str(x) for x in (presentation.get("hints") or ())),
@@ -173,6 +182,40 @@ def render_task(
                 + "\n\n"
                 + _SYNTHESIS_LAYER
             )
+    if ctx.paired_verification:
+        fixed_task = render_task(
+            spec, scenario_name=scenario_name, variant="fixed", probe="reference",
+            synthetic=synthetic, network_mode=network_mode, allowed_hosts=allowed_hosts,
+            overrides=overrides, synthesis=synthesis, revision=revision,
+            paired_verification=False,
+        )
+        for name, body in fixed_task.files.items():
+            prefix = "environment/target/"
+            if name.startswith(prefix):
+                files["tests/fixed-target/" + name[len(prefix):]] = body
+        files["tests/fixed/verify.py"] = fixed_task.files["tests/verify.py"]
+        files["tests/fixed/reference_poc.py"] = fixed_task.files["tests/reference_poc.py"]
+        files["tests/fixed_runner.py"] = (Path(__file__).parent / "assets" / "fixed_runner.py").read_text(encoding="utf-8")
+    if presentation_mode == "white_box":
+        # Publish only authored application context. Framework entrypoints and
+        # deployment/patch files are not solver source, even when source_paths
+        # is omitted. Explicit selections are checked against this boundary.
+        authored = (getattr(synthesis, "target", {}) or {}).get("files", {})
+        selected = presentation.get("source_paths") or list(authored)
+        for name in selected:
+            path = Path(name)
+            forbidden = (
+                path.name.lower() in {"dockerfile", "entrypoint.sh", "docker-compose.yaml", "docker-compose.yml"}
+                or path.suffix.lower() in {".patch", ".diff"}
+                or any(part.startswith(".") for part in path.parts)
+            )
+            if forbidden:
+                if name in (presentation.get("source_paths") or []):
+                    raise PipelineError(f"White-box source cannot expose deployment/patch file {name}")
+                continue
+            key = f"environment/target/{name}"
+            if key in files:
+                files[f"environment/source/{name}"] = files[key]
     # A repaired reference PoC must also replace the payload the oracle agent
     # submits. Otherwise the verifier's reference run uses the fix while the
     # submitted artifact still contains the broken PoC, so T03 can never pass.
@@ -281,6 +324,38 @@ def compute_task_digest(
         "generator_version": GENERATOR_VERSION,
     }
     return digest(body)
+
+
+def pin_task_images(task: GeneratedTask, *image_sets: dict) -> GeneratedTask:
+    """Pin execution copies to measured image IDs, including the fixed runner."""
+    identities: dict[str, str] = {}
+
+    def visit(value):
+        if not isinstance(value, dict):
+            return
+        ref, identity = value.get("image_ref"), value.get("image_digest")
+        if ref and identity:
+            if ref in identities and identities[ref] != identity:
+                raise PipelineError(f"Conflicting measured image identities for {ref}")
+            identities[ref] = identity
+        for child in value.values():
+            visit(child)
+
+    for image_set in image_sets:
+        visit(image_set)
+    old_digest = task.task_digest
+    metadata = tomllib.loads(task.files["task.toml"])["metadata"]
+    for name in ("task.toml", "environment/docker-compose.yaml", "tests/docker-compose.yaml"):
+        body = task.files[name]
+        for ref, identity in identities.items():
+            body = body.replace(f"image: {ref}\n", f"image: {identity}\n")
+            body = body.replace(f'docker_image = "{ref}"', f'docker_image = "{identity}"')
+        task.files[name] = body
+    task.task_digest = compute_task_digest(task.files, spec={"frozen_digest": task.spec_digest},
+        variant=task.variant, probe=task.probe, controlled=metadata.get("controlled", False),
+        fault=metadata.get("fault_injected", False), synthesis_digest=task.synthesis_digest)
+    task.files["task.toml"] = task.files["task.toml"].replace(f'task_digest = "{old_digest}"', f'task_digest = "{task.task_digest}"')
+    return task
 
 
 def _task_toml(
@@ -400,11 +475,11 @@ def inspect_task(files: dict[str, str], spec: dict) -> list[str]:
     for required in REQUIRED_FILES:
         if required not in files:
             issues.append(f"missing {required}")
-    if len(files) > 80:
-        issues.append("more than 80 files")
+    if len(files) > 160:
+        issues.append("more than 160 files")
     total = sum(len(content.encode("utf-8")) for content in files.values())
-    if total > 4_000_000:
-        issues.append("bundle exceeds 4 MB")
+    if total > 8_000_000:
+        issues.append("bundle exceeds 8 MB")
     for name in files:
         if name.startswith("/") or ".." in Path(name).parts or "\\" in name:
             issues.append(f"unsafe path {name}")

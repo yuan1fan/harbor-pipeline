@@ -982,6 +982,7 @@ def normalize_bundle(
         by_id=by_id,
         versions=versions,
         fix_source=fix_source,
+        run_dir=run_dir,
     )
     issues.extend(assertion_issues)
 
@@ -998,6 +999,7 @@ def normalize_bundle(
     known_target_keys = {
         "fix_mode", "base_image", "port", "health_path", "business_path",
         "business_body", "start_command", "files", "fixed_overrides",
+        "business_probes",
     }
     stray = [
         key for key, value in target.items()
@@ -1032,6 +1034,8 @@ def normalize_bundle(
         target["files"] = files
     target_issues = _validate_target(target)
     issues.extend(target_issues)
+    from .provenance import version_pair_issues
+    issues.extend(version_pair_issues(target, versions))
     bundle["target"] = target
 
     poc = bundle.get("poc") or {}
@@ -1140,7 +1144,10 @@ def _normalize_assertions(
     by_id: dict[str, dict],
     versions: dict[str, Any],
     fix_source: dict | None,
+    run_dir: Path | None = None,
 ) -> tuple[list[dict], list[str]]:
+    from .provenance import cited_excerpt
+
     issues: list[str] = []
     kept: list[dict] = []
     for entry in assertions:
@@ -1155,85 +1162,27 @@ def _normalize_assertions(
         if not str(entry.get("text", "")).strip():
             issues.append("assertion text is empty")
             continue
-        status = "confirmed" if source.get("status") == "ok" else "unknown"
-        if entry.get("status") == "unknown":
-            status = "unknown"
+        quote, checksum, error = cited_excerpt(entry, source, run_dir)
+        if error:
+            issues.append(f"assertion {source_id}: {error}")
+        status = "confirmed" if not error and entry.get("status") != "unknown" else "unknown"
         kept.append({
-            "id": "A0",
+            "id": f"A{len(kept) + 1}",
             "text": str(entry["text"])[:2000],
             "source_id": source_id,
             "citation": str(entry.get("citation") or source["url"]),
             "status": status,
+            "evidence_quote": quote,
+            "evidence_sha256": checksum,
         })
-
-    # Anchor the two facts that the release gate actually inspects.
-    cve_source = next(
-        (s for s in by_id.values() if s.get("source_type") == "cve_record"), None
-    )
-    anchors: list[dict] = []
-    if fix_source is not None:
-        anchors.append({
-            "id": "A0",
-            "text": (
-                f"The upstream fix commit {versions.get('fix_commit')} changes the "
-                "vulnerable code path in the release pair under test."
-            ),
-            "source_id": fix_source["id"],
-            "citation": fix_source["url"],
-            "status": "confirmed" if fix_source.get("status") == "ok" else "unknown",
-        })
-    if cve_source is not None:
-        anchors.append({
-            "id": "A0",
-            "text": (
-                "The official CVE record describes the vulnerability, its affected "
-                "product, and the impact used by this task."
-            ),
-            "source_id": cve_source["id"],
-            "citation": cve_source["url"],
-            "status": "confirmed" if cve_source.get("status") == "ok" else "unknown",
-        })
-    if versions.get("fixed_ref"):
-        registry = next(
-            (
-                s for s in by_id.values()
-                if s.get("source_type") == "release_notes" and s.get("status") == "ok"
-            ),
-            None,
-        )
-        if registry is not None:
-            anchors.append({
-                "id": "A0",
-                "text": (
-                    f"The vulnerable release {versions.get('vulnerable_ref')} and the "
-                    f"fixed release {versions.get('fixed_ref')} are published "
-                    "artifacts of the affected package."
-                ),
-                "source_id": registry["id"],
-                "citation": registry["url"],
-                "status": "confirmed",
-            })
-
-    merged: list[dict] = []
-    seen_text: set[str] = set()
-    for entry in anchors + kept:
-        key = entry["text"].strip().lower()
-        if key in seen_text:
-            continue
-        seen_text.add(key)
-        merged.append(entry)
-    for index, entry in enumerate(merged, start=1):
-        entry["id"] = f"A{index}"
-    if len(merged) < 3:
-        issues.append("at least three grounded assertions are required")
-    if not any(e["source_id"] == (fix_source or {}).get("id") for e in merged):
+    if len(kept) < 3:
+        issues.append("at least three source-backed assertions are required; include exact evidence_quote excerpts")
+    if not any(e["source_id"] == (fix_source or {}).get("id") for e in kept):
         issues.append("no assertion cites the upstream fix commit")
-    if not any(
-        by_id.get(e["source_id"], {}).get("source_type") == "cve_record"
-        for e in merged
-    ):
+    if not any(by_id.get(e["source_id"], {}).get("source_type") == "cve_record" for e in kept):
         issues.append("no assertion cites the official CVE record")
-    return merged, issues
+    return kept, issues
+
 
 
 def _canonical_files(
@@ -1300,6 +1249,14 @@ def _strip_app_prefix(
 
 def _validate_target(target: dict[str, Any]) -> list[str]:
     issues: list[str] = []
+    probes = target.get("business_probes") or []
+    if not isinstance(probes, list) or not probes:
+        issues.append("target.business_probes needs at least one normal application request; /health and /business alone do not verify functionality")
+    else:
+        for probe in probes:
+            path = str(probe.get("path", "")) if isinstance(probe, dict) else ""
+            if not path.startswith("/") or path.startswith("//") or path.split("?", 1)[0] in {"/health", "/business"} or any(c in path for c in "\r\n"):
+                issues.append("business probe must use a relative application path other than /health or /business")
     if target.get("port") != TARGET_PORT:
         issues.append(f"target.port must be {TARGET_PORT}")
     if target.get("health_path") != HEALTH_PATH:
@@ -1767,6 +1724,7 @@ def build_spec(
         "assertions": assertions,
         "attribution_grade": grade,
         "unknown_fields": [],
+        "business_probes": list(bundle["target"].get("business_probes") or []),
     }
 
 
@@ -1776,6 +1734,11 @@ def build_spec(
 
 
 _SYSTEM = """\
+Every assertion must include evidence_quote, an exact excerpt from its cited
+source. Include target.business_probes for at least one normal application
+feature (path/status/contains); health endpoints are insufficient. Keep the
+application code and configuration identical across variants, changing only
+the upstream version/commit pin. Do not implement a custom fixed-side guard.
 You are a vulnerability reproduction engineer building a containerised
 security-training task. You work only from the supplied evidence and the
 deterministic facts. You never invent versions, commits, or packages, and you

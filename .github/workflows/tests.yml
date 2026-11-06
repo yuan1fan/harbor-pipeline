@@ -1,0 +1,30 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  unit-and-wheel:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.11', '3.12']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e ".[dev]" wheel
+      - run: python -m pytest
+      - run: python -m pip wheel --no-deps --wheel-dir dist .
+      - run: python tests/check_wheel.py dist/harbor_cve_pipeline-0.2.0-py3-none-any.whl
+  container-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e ".[dev]"
+      - run: docker pull python:3.12-slim-bookworm
+      - run: python -m pytest tests/test_container_hardening.py
+        env:
+          HARBOR_RUN_DOCKER_TESTS: '1'

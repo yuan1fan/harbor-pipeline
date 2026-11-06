@@ -431,9 +431,8 @@ def test_dependency_lock_reads_go_mod_and_pom(tmp_path: Path):
     assert lock["org.apache.commons:commons-lang3"] == "3.11.0"
 
 
-def test_dependency_lock_records_vendored_upstream_ref(tmp_path: Path):
-    """A target that builds the component from a pinned tarball has no package
-    lock entry, but the Dockerfile still names the ref it vendors."""
+def test_dependency_lock_does_not_claim_vendored_upstream_ref(tmp_path: Path):
+    """A Dockerfile download reference is not runtime package identity."""
     from harbor_pipeline.backend import dependency_lock
 
     (tmp_path / "Dockerfile").write_text(
@@ -446,7 +445,7 @@ def test_dependency_lock_records_vendored_upstream_ref(tmp_path: Path):
 
     lock = dependency_lock(tmp_path, product="whodb", ref="0.134.0")
 
-    assert lock["whodb"] == "0.134.0"
+    assert "whodb" not in lock  # Source text cannot attest an installed version.
 
 
 def test_dependency_lock_strips_requirement_extras_and_markers(tmp_path: Path):

@@ -22,10 +22,11 @@ from .backend import prune_task_images
 from .budget import Ledger
 from .config import Config
 from .contracts import MAX_MATRIX_REPEATS, load_experiments, load_policy
+from .dataset import assign_splits, split_conflicts
 from .repair import MAX_BUILD_RUNS, MAX_VERIFIER_RUNS
 from .cves import supported_ids
 from .release import write_dataset_manifest
-from .util import PipelineError, read_json, write_json
+from .util import PipelineError, digest, read_json, write_json
 from .worker import CandidateJob, run_candidate
 
 _CVE_RE = re.compile(r"^CVE-[0-9]{4}-[0-9]{4,}$")
@@ -189,7 +190,7 @@ def plan_batch(
     # repair agent may execute up to MAX_VERIFIER_RUNS paired verifier trials
     # and MAX_BUILD_RUNS build-only cycles.
     per_candidate = (
-        (mandatory + 2 * repeats + 3) * (repairs + 1)
+        (mandatory + 2 * repeats + 6) * (repairs + 1)
         + 2 * MAX_VERIFIER_RUNS * repairs
     )
     n = max(1, len(unique))
@@ -199,7 +200,7 @@ def plan_batch(
         # call in a repair.
         "builds": float(
             (
-                6 * (repairs + 1)
+                18 * (repairs + 1)
                 + 6 * (MAX_VERIFIER_RUNS + MAX_BUILD_RUNS) * repairs
             ) * n
             + 6
@@ -395,38 +396,52 @@ def _write_dataset(
     root: Path,
     summary: dict,
 ) -> None:
+    from .util import file_lock
+    with file_lock(root / "dataset-manifest.json"):
+        _write_dataset_unlocked(plan, results, root, summary)
+
+
+def _write_dataset_unlocked(plan, results, root, summary) -> None:
     manifest_path = root / "dataset-manifest.json"
     # A run directory outlives a single batch. Tonight's two releases arrived in
     # two separate invocations, and each one rewrote this file with only its own
     # entries, so the earlier RELEASED task silently vanished from the dataset.
     # Keep the union, keyed by CVE id so a re-run cannot leave two rows.
     merged: dict[str, dict] = {}
+    excluded_legacy: list[str] = []
     if manifest_path.is_file():
         try:
-            previous = read_json(manifest_path).get("tasks") or []
-        except (PipelineError, OSError, ValueError):
-            previous = []
+            previous_manifest = read_json(manifest_path)
+            previous = previous_manifest.get("tasks") or []
+        except (PipelineError, OSError, ValueError) as exc:
+            raise PipelineError("Cannot merge the existing dataset manifest: " + str(exc)) from exc
         for entry in previous:
             if isinstance(entry, dict) and entry.get("cve_id"):
-                merged[str(entry["cve_id"])] = entry
+                if entry.get("validation_protocol") == 2:
+                    merged[str(entry["cve_id"])] = entry
+                else:
+                    excluded_legacy.append(str(entry["cve_id"]))
+        if excluded_legacy:
+            write_json(root / "dataset-history" / (digest(previous_manifest) + ".json"), previous_manifest)
     for payload in results.values():
         release = payload.get("release") or {}
         entry = release.get("dataset_entry")
-        if entry and payload.get("state") == "RELEASED":
+        if entry and payload.get("state") == "RELEASED" and entry.get("validation_protocol") == 2:
             merged[str(entry["cve_id"])] = entry
-    entries = [merged[key] for key in sorted(merged)]
+        elif payload.get("cve_id"):
+            merged.pop(str(payload["cve_id"]), None)
+    entries = assign_splits([merged[key] for key in sorted(merged)])
     summary["dataset"] = {
         "entries": entries,
         "path": None,
         "split_audit": {"ok": True, "conflicts": []},
     }
-    if not entries:
-        return
     manifest_path = write_dataset_manifest(entries, manifest_path)
     conflicts = _split_conflicts(entries)
     summary["dataset"] = {
         "entries": entries,
         "path": str(manifest_path),
+        "excluded_legacy": excluded_legacy,
         "split_audit": {
             "ok": not conflicts,
             "conflicts": conflicts,
@@ -435,20 +450,7 @@ def _write_dataset(
 
 
 def _split_conflicts(entries: list[dict]) -> list[dict]:
-    """Grouping keys must never appear in two dataset splits."""
-    seen: dict[tuple[str, str], str] = {}
-    conflicts: list[dict] = []
-    for entry in entries:
-        key = (entry["project"], entry["root_cause_group"])
-        split = entry["split"]
-        previous = seen.setdefault(key, split)
-        if previous != split:
-            conflicts.append({
-                "project": key[0],
-                "root_cause_group": key[1],
-                "splits": sorted({previous, split}),
-            })
-    return conflicts
+    return split_conflicts(entries)
 
 
 def _yield_summary(plan: BatchPlan, counts: dict[str, int]) -> dict:

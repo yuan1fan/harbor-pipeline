@@ -20,6 +20,7 @@ class Settings:
     # Remove a candidate's build images once it reaches a terminal state.
     # Enable for campaign runs; keep it off when iterating on a single task.
     prune_images: bool = False
+    archive_images: bool = False
     max_repairs: int = 2
     trials: int = 5
     min_trials: int = 5
@@ -36,6 +37,8 @@ class Settings:
     author_build_runs: int = 8
     author_probe_runs: int = 20
     author_exec_runs: int = 20
+    author_sandbox_image: str = "python:3.12-slim-bookworm"
+    author_sandbox_network: str = "none"
     # Solver feedback: run a real claude-code solver against the task, then
     # review it with the intended solution. A revise verdict resumes the author.
     solver_review: bool = True
@@ -123,6 +126,9 @@ def load_config(path: Path | None = None) -> Config:
     config.sources.github_token = os.environ.get("GITHUB_TOKEN") or config.sources.github_token
     config.sources.nvd_api_key = os.environ.get("NVD_API_KEY") or config.sources.nvd_api_key
     settings = config.pipeline
+    for name in ("archive_images", "prune_images", "solver_review", "require_harbor_lint"):
+        if not isinstance(getattr(settings, name), bool):
+            raise PipelineError(f"{name} must be a boolean")
     for name in ("workers", "trial_workers", "trials", "min_trials", "max_calls", "max_total_tokens", "max_context_bytes", "command_timeout_sec"):
         if not isinstance(getattr(settings, name), int) or getattr(settings, name) < 1:
             raise PipelineError(f"{name} must be a positive integer")
@@ -130,6 +136,8 @@ def load_config(path: Path | None = None) -> Config:
         raise PipelineError("max_repairs must be nonnegative")
     if settings.authoring not in {"agent", "legacy"}:
         raise PipelineError("authoring must be 'agent' or 'legacy'")
+    if settings.author_sandbox_network not in {"none", "bridge"}:
+        raise PipelineError("author_sandbox_network must be 'none' or 'bridge'")
     for name in ("author_max_resumes", "author_build_runs", "author_probe_runs", "author_exec_runs"):
         if not isinstance(getattr(settings, name), int) or getattr(settings, name) < 0:
             raise PipelineError(f"{name} must be a nonnegative integer")

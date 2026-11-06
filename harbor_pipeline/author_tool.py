@@ -204,7 +204,7 @@ def _spec_for(ctx: ToolContext, bundle: dict) -> dict:
         policy_version=ctx.policy.policy_version,
     )
     spec = freeze(raw, ctx.policy.policy_version)
-    issues = check_evidence_links(spec, ctx.evidence) + check_spec_consistency(spec)
+    issues = check_evidence_links(spec, ctx.evidence, run_dir=ctx.run_dir) + check_spec_consistency(spec)
     if issues:
         raise PipelineError("; ".join(issues))
     return spec
@@ -234,6 +234,7 @@ def _render_variants(
             prebuilt_base=image_tag_base(ctx.cve_id, variant, ctx.revision),
             environment_image=base_images["environment"]["image_ref"],
             verifier_image=base_images["verifier"]["image_ref"],
+            paired_verification=False,  # probe_pair explicitly replays both images
         )
         task_dir = task.write(root / variant)
         tasks[variant] = task_dir
@@ -438,8 +439,8 @@ def cmd_probe(ctx: ToolContext, *, alternate: bool = False, quiet: bool = False)
     work_root = ctx.run_dir / "author-probe" / f"probe-r{ctx.revision}-{int(alternate)}"
     summary = author_probe.probe_pair(
         spec=spec,
-        target_images={name: variants[name]["image_ref"] for name in variants},
-        verifier_image=state["base"]["verifier"]["image_ref"],
+        target_images={name: variants[name].get("image_digest") or variants[name]["image_ref"] for name in variants},
+        verifier_image=state["base"]["verifier"].get("image_digest") or state["base"]["verifier"]["image_ref"],
         task_dirs={name: Path(variants[name]["task_dir"]) for name in variants},
         submitted={name: submitted for name in variants},
         work_root=work_root,
@@ -545,13 +546,14 @@ def cmd_decline(ctx: ToolContext, reason: str) -> int:
     return 0
 
 
-def cmd_exec(ctx: ToolContext, command: str, timeout: int) -> int:
+def cmd_exec(ctx: ToolContext, command: str, timeout: int, variant: str = "vulnerable") -> int:
     _charge(ctx, "execs")
     state_path = ctx.workspace / BUILD_STATE_FILE
     state = read_json(state_path) if state_path.is_file() else {}
-    image = ((state.get("variants") or {}).get("vulnerable") or {}).get("image_ref")
+    built = (state.get("variants") or {}).get(variant) or {}
+    image = built.get("image_digest") or built.get("image_ref")
     if not image:
-        _print({"ok": False, "error": "build the vulnerable target first"})
+        _print({"ok": False, "error": f"build the {variant} target first"})
         return 1
     result = run_in_image(
         image,
@@ -626,6 +628,7 @@ def build_parser() -> argparse.ArgumentParser:
     probe_cmd.add_argument("--alternate", action="store_true")
     exec_cmd = sub.add_parser("exec", help="run a command in the vulnerable image")
     exec_cmd.add_argument("--timeout", type=int, default=60)
+    exec_cmd.add_argument("--variant", choices=("vulnerable", "fixed"), default="vulnerable")
     exec_cmd.add_argument("command", nargs=argparse.REMAINDER)
     registry_cmd = sub.add_parser("registry", help="published versions")
     registry_cmd.add_argument("ecosystem")
@@ -634,6 +637,16 @@ def build_parser() -> argparse.ArgumentParser:
     decline_cmd = sub.add_parser("decline", help="decline this CVE")
     decline_cmd.add_argument("--reason", required=True)
     sub.add_parser("status", help="show counters and recent logs")
+    shell_cmd = sub.add_parser("shell", help="general shell in a persistent author sandbox, available before build")
+    shell_cmd.add_argument("--timeout", type=int, default=120)
+    shell_cmd.add_argument("--runtime", choices=("configured", "python", "node", "go", "java"), default="configured")
+    shell_cmd.add_argument("command", nargs=argparse.REMAINDER)
+    debug_cmd = sub.add_parser("debug", help="start, inspect, execute in, or stop a live target")
+    debug_cmd.add_argument("action", choices=("start", "exec", "logs", "stop"))
+    debug_cmd.add_argument("--variant", choices=("vulnerable", "fixed"), default="vulnerable")
+    debug_cmd.add_argument("--timeout", type=int, default=120)
+    debug_cmd.add_argument("command", nargs=argparse.REMAINDER)
+    sub.add_parser("cleanup", help="remove this author's sandbox and debug containers")
     return parser
 
 
@@ -641,6 +654,44 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         ctx = _load_context()
+        if args.subcommand in {"shell", "debug", "cleanup"}:
+            from . import author_debug
+            if args.subcommand == "cleanup":
+                author_debug.cleanup(ctx.workspace)
+                _print({"ok": True})
+                return 0
+            _charge(ctx, "execs")
+            command = list(args.command)
+            if command and command[0] == "--":
+                command = command[1:]
+            if args.subcommand == "shell":
+                if not command:
+                    raise PipelineError("shell needs a command after --")
+                runtime_image = {
+                    "configured": ctx.config.pipeline.author_sandbox_image,
+                    "python": "python:3.12-slim-bookworm", "node": "node:24-bookworm-slim",
+                    "go": "golang:1.25-bookworm", "java": "maven:3.9-eclipse-temurin-17",
+                }[args.runtime]
+                author_debug.start(ctx.workspace, kind="scratch", image=runtime_image,
+                                   network=ctx.config.pipeline.author_sandbox_network)
+                result = author_debug.execute(ctx.workspace, "scratch", shlex.join(command), timeout=args.timeout)
+            elif args.action == "start":
+                state = read_json(ctx.workspace / BUILD_STATE_FILE)
+                built = (state.get("variants") or {}).get(args.variant) or {}
+                image = built.get("image_digest") or built.get("image_ref")
+                if not image:
+                    raise PipelineError(f"Build {args.variant} before starting its debug service")
+                result = author_debug.start(ctx.workspace, kind=args.variant, image=image)
+            elif args.action == "exec":
+                if not command:
+                    raise PipelineError("debug exec needs a command after --")
+                result = author_debug.execute(ctx.workspace, args.variant, shlex.join(command), timeout=args.timeout)
+            elif args.action == "logs":
+                result = author_debug.logs(ctx.workspace, args.variant)
+            else:
+                result = author_debug.stop(ctx.workspace, args.variant)
+            _print(result)
+            return 0 if result.get("ok") else 1
         if args.subcommand == "validate":
             return cmd_validate(ctx)
         if args.subcommand == "build":
@@ -657,7 +708,7 @@ def main(argv: list[str] | None = None) -> int:
             # The shell already split the agent's command into argv. Re-quote
             # each argument so `node -e "..."` reaches the container as one
             # shell string instead of losing its quotes.
-            return cmd_exec(ctx, shlex.join(command), args.timeout)
+            return cmd_exec(ctx, shlex.join(command), args.timeout, args.variant)
         if args.subcommand == "registry":
             return cmd_registry(ctx, args.ecosystem, args.name)
         if args.subcommand == "submit":

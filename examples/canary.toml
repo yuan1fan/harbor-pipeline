@@ -1,0 +1,14 @@
+# Real curated CVE canary, without paid author/solver calls.
+# python -m harbor_pipeline -c examples/canary.toml run --cve CVE-2024-23334 --profile qualification --until validate --json
+[pipeline]
+output_dir = "work/canary"
+workers = 1
+trial_workers = 1
+solver_review = false
+max_repairs = 0
+author_max_resumes = 0
+command_timeout_sec = 1800
+
+[models.default]
+provider = "fixture"
+model = "fixture"

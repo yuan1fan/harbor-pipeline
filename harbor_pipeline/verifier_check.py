@@ -213,6 +213,7 @@ def _run_one(
         "VERIFY_EVIDENCE_PATH": str(evidence_path),
         "VERIFY_OBSERVER_URL": observer_url,
         "VERIFY_EXPECTED_LISTING": expected_listing,
+        "VERIFY_EXPECTED_SECRET": STUB_SECRET,
     }
     if os.name == "posix":
         # Run the replayed payload as the invoking user. The production image

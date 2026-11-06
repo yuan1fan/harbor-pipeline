@@ -114,7 +114,7 @@ def classify_trial(trial: TrialOutcome) -> str | None:
     # stronger signal, so classify it before the "has a reward" shortcut. T12
     # exists precisely to exercise this path.
     status = trial.evidence_status
-    if status in {"target_unhealthy", "verifier_error", "missing"}:
+    if status in {"target_unhealthy", "verifier_error", "missing", "fixed_replay_error"}:
         return "infra_error"
     if trial.reward is not None:
         return None

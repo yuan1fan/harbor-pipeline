@@ -1,5 +1,5 @@
 schema_version = "1.0"
-policy_version = "2026-11-03.1"
+policy_version = "2026-11-06.2"
 
 # Diagnostic dimension weights. They are reported in the evaluation for
 # audit, but admission is a pass/fail gate and quality is a tier; there is

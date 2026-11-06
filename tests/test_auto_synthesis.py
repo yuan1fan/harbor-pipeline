@@ -28,13 +28,14 @@ def _write_evidence(root: Path) -> dict:
     evidence_dir = root / "evidence"
     evidence_dir.mkdir(parents=True, exist_ok=True)
     bodies = {
-        "cve.json": json.dumps({"cveMetadata": {"cveId": CVE}}).encode(),
+        "cve.json": json.dumps({"cveMetadata": {"cveId": CVE}, "description": "The CVE record describes a static path traversal."}).encode(),
         "patch.txt": (
             f"From {COMMIT} Mon Sep 17 00:00:00 2001\n"
             "Subject: reject NUL bytes in static paths\n"
+            "The fix commit rejects NUL bytes in static paths.\n"
             "--- a/src/pyramid/static.py\n+++ b/src/pyramid/static.py\n"
         ).encode(),
-        "release.json": b'{"name": "pyramid", "version": "2.0.1", "next": "2.0.2"}',
+        "release.json": b'{"name": "pyramid", "version": "2.0.1", "next": "2.0.2", "description": "2.0.1 and 2.0.2 are published releases of Pyramid."}',
     }
     for name, body in bodies.items():
         (evidence_dir / name).write_bytes(body)
@@ -172,6 +173,7 @@ def _bundle(**overrides) -> dict:
             "health_path": "/health",
             "business_path": "/business",
             "business_body": "ok",
+            "business_probes": [{"path": "/static/hello.txt", "status": 200, "contains": "hello"}],
             "start_command": "python /opt/app/app.py",
             "files": {
                 "Dockerfile": (

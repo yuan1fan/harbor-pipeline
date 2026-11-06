@@ -545,13 +545,13 @@ def test_derived_health_reports_an_unhealthy_vulnerable_build():
     assert matrix.derived_records[0]["health"]["ok"] is False
 
 
-def test_plan_matrix_steps_keeps_framework_negatives_out_of_the_ladder():
+def test_plan_matrix_steps_runs_candidate_negatives():
     from harbor_pipeline.differential import plan_matrix_steps
 
     steps = plan_matrix_steps(repeats=3)
     experiment_ids = [eid for step in steps for eid in step.experiment_ids]
     # T05/T06/T07/T10 run once per verifier template, not per candidate.
-    assert not {"T05", "T06", "T07", "T10"} & set(experiment_ids)
+    assert {"T05", "T06", "T07", "T10"} <= set(experiment_ids)
     # T01/T02 are derived from T03/T04 instead of starting their own target.
     assert not {"T01", "T02"} & set(experiment_ids)
     assert [step.key for step in steps if not step.blocking] == ["t11", "t12"]
@@ -812,7 +812,8 @@ def test_root_cause_group_normalises_the_fallback_summary():
 def _released_payload(cve_id: str, run_id: str) -> dict:
     entry = {
         "cve_id": cve_id,
-        "task_version": "1.0.0",
+        "task_version": "2.0.0",
+        "validation_protocol": 2,
         "artifact_digest": "sha256:" + "a" * 64,
         "project": "aiohttp",
         "root_cause_group": "path-traversal",

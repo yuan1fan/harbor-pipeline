@@ -12,7 +12,6 @@ from pathlib import Path
 from . import SCHEMA_VERSION
 from .backend import (
     build_task_images,
-    dependency_lock,
     preflight_target,
     prune_task_images,
     run_in_image,
@@ -872,7 +871,7 @@ class CvePipeline:
         # and the reservation is taken before the bundle is visible here, so the
         # ceiling has to assume the largest count the schema permits.
         repeats = max(self.profile.trials, MAX_MATRIX_REPEATS)
-        per_matrix = mandatory + 2 * repeats + 3
+        per_matrix = mandatory + 2 * repeats + 6
         repairs = max(0, self.config.pipeline.max_repairs)
         agent_authoring = self.config.pipeline.authoring == "agent"
         author_model = self.config.model_for("author")
@@ -912,7 +911,7 @@ class CvePipeline:
                     + 2 * MAX_VERIFIER_RUNS * repairs + 10,
                 )
             ),
-            "builds": builds,
+            "builds": builds + 12 * (repairs + resumes + 1),
             "wall_sec": wall_sec,
             "calls": calls,
             "tokens": tokens,
@@ -1113,14 +1112,25 @@ class CvePipeline:
         }
         if self.config.source_path:
             extra_env["HARBOR_AUTHOR_CONFIG"] = str(self.config.source_path)
-        outcome = agent.run(
-            prompt=prompt,
-            workspace=workspace.root,
-            contract=workspace.contract,
-            settings_path=workspace.settings_path,
-            extra_env=extra_env,
-            resume=resume,
-        )
+        try:
+            outcome = agent.run(
+                prompt=prompt,
+                workspace=workspace.root,
+                contract=workspace.contract,
+                settings_path=workspace.settings_path,
+                extra_env=extra_env,
+                resume=resume,
+            )
+        finally:
+            # Debug/sandbox containers outlive the agent process; stop only
+            # this workspace's labelled containers so a killed or declined
+            # session cannot leak memory across the batch.
+            try:
+                from . import author_debug
+
+                author_debug.cleanup(workspace.root)
+            except Exception:  # noqa: BLE001 - cleanup must not mask the outcome
+                pass
         # The completion providers reserved per call; a native session reports
         # its totals once. Charge what the CLI reported without turning a
         # completed submission into a budget failure.
@@ -1338,7 +1348,7 @@ class CvePipeline:
             self._clear_derived()
         raw = self._raw_spec(evidence)
         spec = freeze(raw, self.policy.policy_version)
-        issues = check_evidence_links(spec, evidence) + check_spec_consistency(spec)
+        issues = check_evidence_links(spec, evidence, run_dir=self.store.root) + check_spec_consistency(spec)
         if issues:
             raise TaskError("evidence_insufficient", "; ".join(issues), detail={"issues": issues})
         self.store.write_artifact("cve-spec.json", spec)
@@ -1370,13 +1380,16 @@ class CvePipeline:
                     network_mode=self.network_mode,
                     overrides=self._task_overlay(),
                     synthesis=self.synthesis,
+                    revision=job.revision,
                 )
                 if task.task_digest == manifest.get("task_digest"):
                     return task, task_dir
-                raise TaskError(
-                    "generation_error",
-                    "Frozen spec no longer renders the recorded task; invalidate the candidate",
-                )
+        if job.state in {"BUILT", "VALIDATING", "VALIDATED", "RELEASED"}:
+            if job.state == "RELEASED":
+                raise TaskError("generation_error", "Published releases are immutable; regenerate in a new run")
+            job = self.store.transition(job, "REPAIRING", "generated files changed; invalidate build and trials")
+            job.revision += 1
+            self.store.save(job)
         task = render_task(
             spec,
             scenario_name=self.scenario,
@@ -1385,6 +1398,7 @@ class CvePipeline:
             network_mode=self.network_mode,
             overrides=self._task_overlay(),
             synthesis=self.synthesis,
+            revision=job.revision,
         )
         task.write(self.store.root)
         manifest = {
@@ -1516,13 +1530,32 @@ class CvePipeline:
         job = job or self.store.load()
         if job.state in {"VALIDATING", "VALIDATED", "RELEASED"}:
             try:
-                evaluation = self.store.read_artifact("evaluation.json")
                 trials = self.store.read_artifact("trials.json")
-                outcome = _reload_evaluation(evaluation)
-                return _ReloadedMatrix(trials), outcome  # type: ignore[return-value]
+                from .validation_evidence import validation_signature
+                if trials.get("validation_signature") == validation_signature(spec, task, image_set):
+                    matrix = _reload_matrix(trials)
+                    outcome = evaluate(
+                        spec=spec, evidence=evidence, matrix=matrix, image_set=image_set,
+                        policy=self.policy, profile_name=self.profile.name,
+                        package_issues=inspect_task(task.files, spec), network_isolation=self.network_mode,
+                        extra_seed_errors=list(trials.get("seed_errors") or []),
+                        skipped_experiments={"T08": "no framework-owned control"} if self.auto else {},
+                    )
+                    self.store.write_artifact("evaluation.json", outcome.evaluation)
+                    if job.state == "VALIDATING":
+                        self.store.transition(job, "QUARANTINED" if outcome.evaluation["admission_status"] == "quarantined" else "VALIDATED", "cached execution re-evaluated")
+                    elif job.state == "VALIDATED" and outcome.evaluation["admission_status"] == "quarantined":
+                        self.store.transition(job, "QUARANTINED", "updated admission gates failed")
+                    return matrix, outcome
             except PipelineError:
                 pass
         job = self.store.load()
+        if job.state == "RELEASED":
+            raise TaskError("validation_error", "Published releases are immutable; revalidate in a new run")
+        if job.state == "VALIDATED":
+            job = self.store.transition(job, "REPAIRING", "execution evidence is stale")
+            job = self.store.transition(job, "GENERATED", "reuse unchanged source")
+            job = self.store.transition(job, "BUILT", "reuse unchanged images")
         if job.state == "BUILT":
             job = self.store.transition(job, "VALIDATING", "differential matrix started")
         artifact_digest = image_set["target_digest"]
@@ -1582,6 +1615,10 @@ class CvePipeline:
                 environment_image=image_set["images"]["agent"]["image_ref"],
             )
             rendered.extend(cases)
+            from .generator import pin_task_images
+            for case in cases:
+                pin_task_images(case.task, image_set)
+                case.task.write(case.task_dir.parent)
             reservation = f"{self.cve_id}-trials-{job.revision}-{step.key}"
             try:
                 ledger.reserve(reservation, {"trials": len(cases)}, reuse=True)
@@ -1634,6 +1671,7 @@ class CvePipeline:
                 synthesis=self.synthesis,
                 fail_fast=True,
                 environment_image=image_set["images"]["agent"]["image_ref"],
+                ledger=ledger,
             )
             matrix.records.extend(seed_records)
             if seed_errors:
@@ -1686,12 +1724,12 @@ class CvePipeline:
                 )
         # Fold the framework-owned negative checks into the matrix so the
         # evaluator and the release audit keep the same shape as a trial.
-        self._fold_framework_checks(
-            matrix, spec, job, artifact_digest, framework_checks
-        )
+        # Host regression checks are diagnostics. Admission uses the negative
+        # trials executed against this candidate, never fabricated task records.
         # T01/T02 are the same health probe T03/T04 already performed.
         self._derive_health_verdicts(matrix, spec, job, artifact_digest)
 
+        matrix.matrix_repeats = repeats
         outcome = evaluate(
             spec=spec,
             evidence=evidence,
@@ -1718,6 +1756,9 @@ class CvePipeline:
             }
             for experiment_id, evidence in framework_checks.items()
         }
+        from .validation_evidence import validation_signature
+        matrix.validation_signature = validation_signature(spec, task, image_set)
+        matrix.seed_errors = list(seed_errors)
         matrix_json = matrix.to_json()
         matrix_json["cases"] = case_manifest(rendered)
         if self.synthesis:
@@ -1781,6 +1822,8 @@ class CvePipeline:
             environment_image=self._base_images["solver"]["image_ref"],
             agent_timeout_sec=self.config.pipeline.solver_agent_timeout_sec,
         )
+        from .generator import pin_task_images
+        pin_task_images(task, self.store.read_artifact("image-set.json"), self._base_images)
         return task, task.write(self.store.path("solver-task"))
 
     def solver_review(self, spec: dict, job=None) -> dict | None:
@@ -1789,6 +1832,18 @@ class CvePipeline:
             return None
         job = job or self.store.load()
         solver_task, solver_dir = self._solver_task(spec, job)
+        evidence_context = (
+            json.dumps({"spec": spec, "runtime_images": self.store.read_artifact("image-set.json")}, ensure_ascii=False, sort_keys=True)
+            + "\n" + synthesis_mod._evidence_excerpts(self._evidence(), self.store.root, limit=60000)
+        )
+        review_input = digest({
+            "task_files": solver_task.files,
+            "evidence_context": evidence_context,
+            "solver": vars(self.config.model_for("solver")),
+            "reviewer": vars(self.config.model_for("reviewer")),
+            "limits": {key: value for key, value in vars(self.config.pipeline).items() if key.startswith("solver_")},
+            "review_code": digest(Path(solver_review_mod.__file__).read_bytes()),
+        })
         # A release run follows a solver run on the same rendered instruction;
         # do not spend another solver attempt just to reach release.
         try:
@@ -1797,6 +1852,9 @@ class CvePipeline:
             existing = None
         if (
             isinstance(existing, dict)
+            and existing.get("input_sha256") == review_input
+            and existing.get("review_protocol") == 2
+            and existing.get("task_digest") == solver_task.task_digest
             and existing.get("instruction_sha256")
             == digest(solver_task.files.get("instruction.md", ""))
         ):
@@ -1826,8 +1884,19 @@ class CvePipeline:
             solver,
             self.config,
             presentation=presentation,
+            evidence_context=evidence_context,
         )
+        review["input_sha256"] = review_input
         self.store.write_artifact("solver-review.json", review)
+        usage = review.get("usage") or {}
+        ledger = self._ledger()
+        try:
+            ledger.charge("calls", 1)
+            ledger.charge("tokens", float(usage.get("input_tokens") or 0) + float(usage.get("output_tokens") or 0))
+            if usage.get("cost_usd") is not None:
+                ledger.charge("usd", float(usage["cost_usd"]))
+        except PipelineError as exc:
+            raise TaskError("budget_exhausted", str(exc)) from exc
         verdict = review["review"].get("verdict")
         score = int(review["review"].get("score") or 0)
         if verdict == "decline":
@@ -1835,7 +1904,7 @@ class CvePipeline:
             raise TaskError(
                 "unsupported", reason, detail={"solver_review": review}
             )
-        if verdict == "revise" or score < self.config.pipeline.solver_min_score:
+        if verdict == "revise" or score < self.config.pipeline.solver_min_score or review["review"].get("fidelity") != "supported":
             raise TaskError(
                 "validation_error",
                 f"Solver review: verdict={verdict!r} score={score}; "
@@ -1876,7 +1945,7 @@ class CvePipeline:
                     detail={"solver_review": {}},
                 ) from exc
             verdict = str((review.get("review") or {}).get("verdict") or "")
-            if verdict != "release":
+            if verdict != "release" or review.get("review_protocol") != 2 or (review.get("review") or {}).get("fidelity") != "supported":
                 raise TaskError(
                     "validation_error",
                     f"Solver review verdict is {verdict!r}, not 'release'",
@@ -1905,6 +1974,9 @@ class CvePipeline:
                 detail=recheck,
             )
         record = {**result.to_json(), "recheck": recheck}
+        if self.config.pipeline.archive_images:
+            from .image_archive import archive_release_images
+            record["image_archive"] = archive_release_images(result.root, result.root / "image-archive")
         self.store.write_artifact("release.json", record)
         job = self.store.load()
         if job.state == "VALIDATED":
@@ -1912,15 +1984,10 @@ class CvePipeline:
         return record
 
     def recheck(self) -> PipelineReport:
-        """Re-score a quarantine after a verifier or evaluator defect is fixed.
+        """Rescore unchanged execution evidence; otherwise rebuild and rerun.
 
-        The stored matrix is the evidence the candidate was quarantined on, so
-        a defect in the scoring code does not justify rebuilding images or
-        rerunning the trials: both are unchanged. The build lock is recomputed
-        from the rendered target (a fixed ``dependency_lock`` now records
-        vendored upstream refs), the matrix is re-evaluated with current code,
-        and only a passing admission lifts the quarantine. The normal release
-        stage then publishes and rechecks the package.
+        Legacy records or changed verifier/environment code invalidate the old
+        matrix. Archived records remain available under recheck-history/.
         """
         self.store.create()
         with self.store.lease:
@@ -1942,32 +2009,30 @@ class CvePipeline:
         except (PipelineError, OSError):
             self.synthesis = None
         task, _ = self.generate(spec, job)
-        product = spec["product"]["name"]
-        image_set["dependencies"] = dependency_lock(
-            self.store.path("task", "environment", "target"),
-            product=product,
-            ref=spec["versions"]["vulnerable_ref"],
-        )
-        variants = image_set.get("variants") or {}
-        for variant, ref in (
-            ("vulnerable", spec["versions"]["vulnerable_ref"]),
-            ("fixed", spec["versions"]["fixed_ref"]),
-        ):
-            entry = variants.get(variant)
-            if not isinstance(entry, dict):
-                continue
-            context = self.store.path(
-                "task" if variant == "vulnerable" else "fixed-build/task",
-                "environment",
-                "target",
-            )
-            if not context.is_dir():
-                continue
-            deps = dependency_lock(context, product=product, ref=ref)
-            entry["dependencies"] = deps
-            target_image = (entry.get("images") or {}).get("target")
-            if isinstance(target_image, dict):
-                target_image["dependencies"] = deps
+        from .validation_evidence import validation_signature
+        if trials.get("validation_signature") != validation_signature(spec, task, image_set):
+            # An evaluator-only change can reuse execution evidence. Changed
+            # templates, targets, verifier, or missing legacy provenance cannot.
+            archive = self.store.path("recheck-history", datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f"))
+            archive.mkdir(parents=True, exist_ok=True)
+            for name in ("trials.json", "evaluation.json", "image-set.json"):
+                source = self.store.path(name)
+                if source.is_file():
+                    shutil.copyfile(source, archive / name)
+            job = self.store.transition(self.store.load(), "REPAIRING", "execution evidence changed; rebuild and rerun")
+            job.revision += 1
+            self.store.save(job)
+            task, _ = self.generate(spec, job)
+            image_set = self.build(spec, task, self.store.load())
+            matrix, outcome = self.validate(spec, evidence, task, image_set, self.store.load())
+            if not outcome.admitted:
+                return self._report(self.store.load(), task, image_set, outcome, None, matrix)
+            self.solver_review(spec, self.store.load())
+            release = self.release(spec, evidence, task, image_set, matrix, outcome, self.store.load())
+            return self._report(self.store.load(), task, image_set, outcome, release, matrix)
+        # A source manifest is not evidence of installed dependencies. Keep the
+        # runtime identity measured during the matching build; do not replace it
+        # with values parsed from Dockerfiles when merely rescoring.
         matrix = _reload_matrix(trials)
         outcome = evaluate(
             spec=spec,
@@ -1978,7 +2043,7 @@ class CvePipeline:
             profile_name=self.profile.name,
             package_issues=inspect_task(task.files, spec),
             network_isolation=self.network_mode,
-            extra_seed_errors=[],
+            extra_seed_errors=list(trials.get("seed_errors") or []),
             skipped_experiments=(
                 {"T08": "synthesized targets have no framework-owned controlled variant"}
                 if self.auto else {}
@@ -2514,7 +2579,10 @@ class CvePipeline:
                 "\n\nThe full solver review is at inputs/solver-review.json. "
                 "Read it before changing the presentation."
             )
-            prompt = authoring.solver_review_prompt(report)
+            if (review.get("review") or {}).get("fidelity") in {"uncertain", "rejected"}:
+                prompt = authoring.resume_prompt(report + "\nRepair the CVE mechanism/evidence mismatch; presentation hints alone cannot fix fidelity.")
+            else:
+                prompt = authoring.solver_review_prompt(report)
         else:
             prompt = authoring.resume_prompt(report)
         outcome = self._run_author_session(
@@ -2824,17 +2892,6 @@ class CvePipeline:
         )
 
 
-class _ReloadedMatrix:
-    """Minimal MatrixResult stand-in when validation is resumed from disk."""
-
-    def __init__(self, data: dict):
-        self.payload = data
-        self.records = data.get("records", [])
-
-    def to_json(self) -> dict:
-        return dict(self.payload)
-
-
 def _reload_evaluation(data: dict) -> EvaluationOutcome:
     return EvaluationOutcome(evaluation=data, dimensions={}, hard_conditions=data.get("hard_conditions", []))
 
@@ -2864,6 +2921,8 @@ def _reload_matrix(data: dict) -> MatrixResult:
         aborted_detail=str(data.get("aborted_detail") or ""),
         matrix_repeats=data.get("matrix_repeats"),
         framework_checks=dict(data.get("framework_checks") or {}),
+        validation_signature=data.get("validation_signature"),
+        seed_errors=list(data.get("seed_errors") or []),
     )
 
 

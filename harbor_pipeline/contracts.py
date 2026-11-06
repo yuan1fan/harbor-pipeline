@@ -34,6 +34,7 @@ def _search_dir(env_var: str, name: str) -> Path:
         candidates.append(Path(override))
     candidates.append(_REPO_ROOT / name)
     candidates.append(Path(__file__).resolve().parent / name)
+    candidates.append(Path(__file__).resolve().parent / "resources" / name)
     for candidate in candidates:
         if candidate.is_dir():
             return candidate

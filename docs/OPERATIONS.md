@@ -1,7 +1,18 @@
 # Harbor CVE 产线运维手册
 
-更新时间：2026-11-02  
-适用版本：`harbor-pipeline 0.1.0`、Harbor `0.23.0`、策略 `2026-11-03.1`
+> 0.2 变更（2026-11-06）：运行时执行证据和独立复核取代“自动 RELEASED 即正确”的假设。新增或修改内容见 README 与 `policies/`；旧 run-id 的 RELEASED 结果不能直接混入 0.2 数据集，需要按新协议重新验收。
+
+- author 仍只能使用 Read/Write/Edit/Grep/Glob，Bash 只允许 helper；新增 `shell` 持久沙箱和 `debug --variant fixed exec -- ...`，可以在构建前做实验，也可以分别调试 vulnerable/fixed 现场。
+- `author_sandbox_network` 默认 `none`；确有下载依赖需求时可显式改成 `bridge`，但 scratch 容器不挂载 Docker socket、宿主凭据或评分文件；`author_sandbox_image` 可配置基础工具链。
+- `target.business_probes` 必填：除 `/health`、`/business` 外至少一条正常业务探针，并在 vulnerable 和 fixed 两边都通过，避免“只有漏洞路径能跑”的假应用。
+- `recheck` 只在执行签名（spec、task 文件、镜像 digest、verifier/生成器代码）一致时复用旧 matrix；spec、镜像 ID 或 verifier 改动会作废旧证据，重新构建并重跑 trial。
+- Qualification 还要求候选级 T03/T04 成对样本、T09 干净重建、T11/T12 结果，最小 blocking 集合为 18 个 trial；solver/reviewer 的评分只用于出题反馈，不参与准入。
+- `quality --run-dir ... --output ...` 输出分层抽样和独立复核统计；没有独立复核时准确率写 `null`，不能用发布率代替真实正确率。
+
+0.2 的 trial 预算、抽样方法和分片策略见 [CAPACITY_10K.md](CAPACITY_10K.md)；框架层面的历史背景见 [FRAMEWORK_PLAN.md](FRAMEWORK_PLAN.md)。
+
+更新时间：2026-11-06  
+适用版本：`harbor-pipeline 0.2.0`、Harbor `0.23.0`、策略 `2026-11-06.2`
 
 本手册描述已实现的 CLI 契约、运行产物、状态与错误分类、预算控制和已知主机限制。搭建背景与验收公式见 [FRAMEWORK_PLAN.md](FRAMEWORK_PLAN.md)。
 
@@ -139,7 +150,7 @@ issues = verify_release(Path("work/runs/qual-01/CVE-2024-23334/release"))
 
 ## 4 状态机与错误分类
 
-`DISCOVERED → EVIDENCE_READY → SPEC_FROZEN → GENERATED → BUILT → VALIDATING → VALIDATED → RELEASED`。`REPAIRING` 只从失败态进入，`QUARANTINED` 只能经 `REPAIRING` 离开；`UNSUPPORTED` 与 `RELEASED` 是终态。
+`DISCOVERED → EVIDENCE_READY → SPEC_FROZEN → GENERATED → BUILT → VALIDATING → VALIDATED → RELEASED`。`REPAIRING` 只从失败态进入；`QUARANTINED` 可经 `REPAIRING` 重新出题，也可用 `recheck` 在执行签名一致时直接回到 `VALIDATED`。`UNSUPPORTED` 与 `RELEASED` 是终态。
 
 | 类别 | 可重试 | 允许自动修复 | 终态 | 含义 |
 | --- | --- | --- | --- | --- |
@@ -179,7 +190,7 @@ token 记账把 `input_tokens`、`cache_creation_input_tokens` 与 `cache_read_i
 
 每个候选同时占用三类资源：候选级 `workers` 控制并行 CVE 数；`[pipeline].trial_workers` 控制单个候选内部同时运行的 Harbor trial 数。两者相乘决定 Docker 容器与网络峰值。10k 批量运行时先用 `--plan-only` 检查 `batch-plan.json` 的候选数与上限，再按 shard 分主机执行；`--shard-index/--shard-count` 使用稳定取模，同一 CVE 在重试时仍落在同一 shard。
 
-矩阵执行采用阶梯式 fail-fast：T03 首次、T04 首次、确认重复和 T09 seeds 各自是一个独立 Harbor job，任一 blocking 步骤的期望未满足就停止后续步骤；T11/T12 是 advisory，只在全部 blocking 步骤通过后运行，失败只降低 quality。T01/T02 的 health/business 检查发生在 T03/T04 的 verifier 内部并写入 trial 记录，因此由 `_derive_health_verdicts` 从 T03/T04 记录推导 verdict，并生成 `_audit.mode = "derived"` 的审计记录，不再起独立容器。T05/T06/T07/T10 的 payload 是框架常量、verifier 是共享模板，因此由 `verifier_check.py` 在宿主机上用 stub target 运行一次（无 Docker，约 2 秒），结果以 `_audit.mode = "framework-verifier"` 的合成 trial 记录并入矩阵；如果 verifier 本身坏了，会在任何容器启动前抛 `grader_failure`。
+矩阵执行采用阶梯式 fail-fast：T03 首次、T04 首次、确认重复和 T09 seeds 各自是一个独立 Harbor job，任一 blocking 步骤的期望未满足就停止后续步骤；T11/T12 是 advisory，只在全部 blocking 步骤通过后运行，失败只降低 quality。T01/T02 的 health/business 检查发生在 T03/T04 的 verifier 内部并写入 trial 记录，因此由 `_derive_health_verdicts` 从 T03/T04 记录推导 verdict，并生成 `_audit.mode = "derived"` 的审计记录，不再起独立容器。T05/T06/T07/T10 的 payload 是框架常量、verifier 是共享模板，因此由 `verifier_check.py` 在宿主机上用 stub target 运行一次（无 Docker，约 2 秒），结果以 `_audit.mode = "framework-verifier"` 的合成 trial 记录并入矩阵；如果 verifier 本身坏了，会在任何容器启动前抛 `grader_failure`。0.2 的 qualification 还要求 T05/T06/T07/T10 存在候选级 trial（不能只用框架 stub 结果），T09 用 `--no-cache` 重建 vulnerable 与 fixed 并记录实际 image ID；`trials.json` 保存执行签名，verifier 或合成代码变化后旧结果不能被 `recheck` 复用。
 
 矩阵探针使用预构建镜像：`pipeline.build` 为 vulnerable/fixed 两个 variant 各构建 agent/target/verifier 三个镜像（每个 revision 共 6 个），探针的 `task.toml` 写入 `[environment] docker_image` 与 `[verifier.environment] docker_image`，compose 的 target 服务写入 `image:`，因此 Harbor 走 `_use_prebuilt` 路径并跳过 `docker compose build`，不再为每个 trial 生成项目级镜像和 build history。主任务（发布源）保持不带 image 锁定，release 包仍然可移植。
 
@@ -200,6 +211,8 @@ token 记账把 `input_tokens`、`cache_creation_input_tokens` 与 `cache_read_i
 来源采集仍受 HTTPS、主机白名单、公网 IP 校验与 DNS pinning 保护，网络回退只影响 Harbor 任务运行网络。
 
 ## 7 已验证结果
+
+> 以下数字来自 0.1 协议的早期运行，用于记录当时的行为，不是 0.2 的验收结论。0.2 发布需要重新跑 execution signature 匹配的 qualification，并用 `quality` 做独立抽样复核。
 
 以下结果来自本机真实 Docker/Harbor 运行，不是 fixture 模拟：
 

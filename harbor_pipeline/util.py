@@ -166,7 +166,7 @@ def write_files(root: Path, files: list[dict], prefixes: tuple[str, ...]) -> Non
         if not any(name == p or name.startswith(p.rstrip("/") + "/") for p in prefixes):
             raise PipelineError(f"Role cannot write {name}")
         total += len(content.encode("utf-8"))
-        if total > 4_000_000 or len(files) > 80:
+        if total > 8_000_000 or len(files) > 160:
             raise PipelineError("Generated bundle exceeds file/size budget")
         path = child_path(root, name)
         path.parent.mkdir(parents=True, exist_ok=True)

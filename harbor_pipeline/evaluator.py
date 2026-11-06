@@ -596,10 +596,45 @@ def _task_gates(
     t03 = [r for r in matrix.records if r["experiment_id"] == "T03"]
     t04 = [r for r in matrix.records if r["experiment_id"] == "T04"]
     if conditions.get("require_paired_samples", True):
-        add("paired_samples", bool(t03 and t04), f"T03={len(t03)} T04={len(t04)}")
+        floor = max(profile.min_valid_trials, profile.trials, matrix.matrix_repeats or 0)
+        add("paired_samples", len(t03) == len(t04) and len(t03) >= floor,
+            f"T03={len(t03)} T04={len(t04)} minimum pairs={floor}")
 
     add("seed_stability", not extra_seed_errors,
         "; ".join(extra_seed_errors) if extra_seed_errors else "consistent across seeds")
+    if profile.name == "qualification":
+        by_id = {source["id"]: source for source in evidence.get("sources", [])}
+        backed = all(a.get("evidence_quote") and a.get("evidence_sha256") == by_id.get(a.get("source_id"), {}).get("content_sha256") for a in spec.get("assertions", []))
+        from .cves import get_optional
+        from . import GENERATOR_VERSION
+        curated = get_optional(spec["cve_id"])
+        curated_ok = bool(curated and spec.get("curation_revision") == GENERATOR_VERSION
+                          and spec["versions"]["fix_commit"] == curated.fix_commit
+                          and spec["root_cause"]["summary"] == curated.root_cause)
+        add("assertion_provenance", bool(spec.get("assertions")) and (backed or curated_ok),
+            "requires source excerpts/checksums or the current repository-curated specification")
+        add("business_probe_coverage", curated_ok or bool(spec.get("business_probes")),
+            "requires normal application-feature probes on both variants")
+        seeds = [r for r in matrix.records if r["experiment_id"] == "T09"]
+        for variant, status in (("vulnerable", "goal_passed"), ("fixed", "fixed_variant_holds")):
+            verified = [r for r in seeds if r.get("variant") == variant
+                        and (r.get("_audit") or {}).get("mode") == "clean-rebuild"
+                        and (r.get("_audit") or {}).get("no_cache") is True
+                        and (r.get("_audit") or {}).get("actual_image_digest")
+                        and (r.get("health") or {}).get("ok")
+                        and (r.get("trigger_evidence") or {}).get("detail") == status]
+            samples = {r.get("seed") for r in verified}
+            add(f"clean_rebuild_{variant}", len(samples) >= 3, f"{len(samples)}/3 clean rebuilds")
+        for variant, expected in (("vulnerable", spec["versions"]["vulnerable_ref"]), ("fixed", spec["versions"]["fixed_ref"])):
+            built = (image_set.get("variants") or {}).get(variant, {})
+            identity = built.get("runtime_identity") or {}
+            _, installed = _locked_dependency(identity.get("dependencies") or {}, spec["product"]["name"])
+            add(f"runtime_identity_{variant}", bool(identity.get("verified")) and identity.get("image") == built.get("target_digest") and _version_key(installed) == _version_key(expected),
+                f"installed={installed!r} expected={expected!r}; inspected image={identity.get('image')}")
+        for experiment_id in ("T05", "T06", "T07", "T10"):
+            actual = [r for r in matrix.records if r["experiment_id"] == experiment_id
+                      and (r.get("_audit") or {}).get("mode") != "framework-verifier"]
+            add(f"candidate_{experiment_id}", bool(actual), "requires a candidate-specific negative trial")
 
     artifact_digest = image_set.get("target_digest") or digest(image_set)
     add("artifact_digest", artifacts_match(matrix.records, artifact_digest),

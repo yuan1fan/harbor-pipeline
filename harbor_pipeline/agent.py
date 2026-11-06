@@ -424,6 +424,8 @@ class ClaudeCodeAgent:
             _kill_process(proc)
         finally:
             timer.cancel()
+            from .author_debug import cleanup
+            cleanup(workspace)
 
         err_thread.join(timeout=5)
         stderr = "".join(stderr_chunks)

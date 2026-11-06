@@ -58,7 +58,9 @@ def test_white_box_renders_source_mount_and_context():
         synthesis=_white_box(),
     )
     compose = task.files["environment/docker-compose.yaml"]
-    assert "./target:/workspace/source:ro" in compose
+    assert "./source:/workspace/source:ro" in compose
+    assert "environment/source/app.py" in task.files
+    assert "environment/source/entrypoint.sh" not in task.files
     instruction = task.files["instruction.md"]
     assert "white box" in instruction.lower()
     assert "/workspace/source" in instruction
@@ -108,6 +110,8 @@ def test_review_prompt_includes_solution_and_solver_result(monkeypatch):
         "verdict": "revise",
         "recommendations": ["switch to white_box", "name app.py in hints"],
         "reason": "The solver had no way to discover the internal config.",
+        "fidelity": "supported",
+        "fidelity_reason": "The supplied patch and source support the original mechanism.",
     }
     provider = _FakeProvider(review)
     monkeypatch.setattr(solver_review, "build_provider", lambda config, role: provider)
@@ -171,17 +175,28 @@ def test_solver_review_reuses_a_matching_instruction(tmp_path, monkeypatch):
         output_root=tmp_path / "runs",
     )
     pipeline.store.create()
-    existing = {
-        "instruction_sha256": digest(task.files["instruction.md"]),
-        "review": {"verdict": "release", "score": 5},
-    }
-    pipeline.store.write_artifact("solver-review.json", existing)
+    pipeline.store.write_artifact("image-set.json", {})
+    pipeline.store.write_artifact("evidence-index.json", {"sources": []})
     pipeline._solver_task = lambda spec, job: (task, tmp_path / "solver-task")
+    review = {
+        "solved": True, "fair": True, "guess_work": 1,
+        "recommended_mode": "white_box", "missing_context": [], "score": 5,
+        "verdict": "release", "recommendations": [],
+        "reason": "The instruction provides the necessary application context.",
+        "fidelity": "supported", "fidelity_reason": "The source and patch support the intended mechanism.",
+    }
+    monkeypatch.setattr(solver_review, "build_provider", lambda *args: _FakeProvider(review))
+    monkeypatch.setattr(solver_review, "run_solver", lambda *args, **kw: {"trials": [], "successes": 1})
+    existing = pipeline.solver_review(_spec())
     def boom(*_args, **_kwargs):
-        raise AssertionError("a matching review should not run the solver again")
-
+        raise AssertionError("solver called")
     monkeypatch.setattr(solver_review, "run_solver", boom)
     assert pipeline.solver_review(_spec()) == existing
+    # Identical instructions are insufficient after a source-only change.
+    import pytest
+    task.files["environment/target/app.py"] += "\n# changed code\n"
+    with pytest.raises(AssertionError, match="solver called"):
+        pipeline.solver_review(_spec())
 
 
 def test_solver_review_attaches_provenance(monkeypatch):
@@ -195,6 +210,8 @@ def test_solver_review_attaches_provenance(monkeypatch):
         "verdict": "release",
         "recommendations": [],
         "reason": "The instruction and the running service were sufficient.",
+        "fidelity": "supported",
+        "fidelity_reason": "The supplied patch and source support the original mechanism.",
     }
     provider = _FakeProvider(review)
     monkeypatch.setattr(solver_review, "build_provider", lambda config, role: provider)

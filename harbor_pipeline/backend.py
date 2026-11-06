@@ -46,6 +46,7 @@ class ImageBuild:
     log_path: Path
     cached: bool = False
     dependencies: dict[str, str] = field(default_factory=dict)
+    runtime_identity: dict = field(default_factory=dict)
 
     def to_json(self) -> dict:
         return {
@@ -57,6 +58,7 @@ class ImageBuild:
             "log": str(self.log_path),
             "cached": self.cached,
             "dependencies": dict(self.dependencies),
+            "runtime_identity": dict(self.runtime_identity),
         }
 
 
@@ -136,6 +138,7 @@ def run_in_image(
     *,
     timeout: int = 60,
     log_path: Path | None = None,
+    max_output: int = 8000,
 ) -> dict:
     """Run a bounded shell command in a throwaway container of a built image.
 
@@ -145,8 +148,11 @@ def run_in_image(
     cannot modify the image or the host.
     """
     docker = docker_binary()
+    container_name = "harbor-inspect-" + uuid.uuid4().hex[:16]
     argv = [
         docker, "run", "--rm", "--network", "none",
+        "--name", container_name, "--pids-limit", "256",
+        "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--memory", "512m", "--cpus", "1",
         "--entrypoint", "sh", image_ref, "-c", command,
     ]
@@ -161,6 +167,7 @@ def run_in_image(
         stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         _kill_tree(proc)
+        subprocess.run([docker, "rm", "-f", container_name], capture_output=True, timeout=30, **no_window_kwargs())
         try:
             stdout, stderr = proc.communicate(timeout=10)
         except subprocess.TimeoutExpired:
@@ -174,7 +181,7 @@ def run_in_image(
     if log_path is not None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_path.write_text(combined[-20000:], encoding="utf-8")
-    return {"exit": proc.returncode, "output": combined[-8000:]}
+    return {"exit": proc.returncode, "output": combined[-max_output:]}
 
 
 def inspect_image(image_ref: str, *, dockerfile: Path) -> tuple[str, str]:
@@ -241,17 +248,6 @@ def dependency_lock(
     pom = context / "pom.xml"
     if pom.is_file():
         lock.update(_pom_dependencies(pom))
-    if product and ref and product not in lock:
-        dockerfile = context / "Dockerfile"
-        try:
-            text = dockerfile.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-        lowered = product.lower()
-        for line in text.splitlines():
-            if ref in line and lowered in line.lower():
-                lock[product] = ref
-                break
     return lock
 
 
@@ -330,9 +326,13 @@ def build_image(
     if not dockerfile.is_file():
         raise TaskError("build_error", f"Missing Dockerfile {dockerfile}")
     docker = docker_binary()
+    iid_file = log_path.with_name(log_path.name + ".iid")
+    iid_file.parent.mkdir(parents=True, exist_ok=True)
     command = [
         docker,
         "build",
+        "--iidfile",
+        str(iid_file),
         "-t",
         image_ref,
         "-f",
@@ -360,7 +360,17 @@ def build_image(
             detail={"log": str(log_path)},
         )
     duration = time.monotonic() - started
-    digest, architecture = inspect_image(image_ref, dockerfile=dockerfile)
+    built_id = iid_file.read_text(encoding="ascii").strip()
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", built_id):
+        raise TaskError("build_error", "Docker did not write a valid immutable image ID")
+    digest, architecture = inspect_image(built_id, dockerfile=dockerfile)
+    identity = {}
+    if name == "target" and product:
+        from .runtime_identity import inspect_runtime
+        identity = inspect_runtime(
+            digest, runner=run_in_image, product=product,
+            log_path=log_path.with_suffix(".identity.json"),
+        )
     return ImageBuild(
         name=name,
         context=context,
@@ -371,7 +381,8 @@ def build_image(
         duration_sec=duration,
         log_path=log_path,
         cached=bool(_CACHE_RE.search(completed.stdout or "")),
-        dependencies=dependency_lock(context, product=product, ref=product_ref),
+        dependencies=identity.get("dependencies", {}) if product else dependency_lock(context),
+        runtime_identity=identity,
     )
 
 
@@ -476,6 +487,7 @@ def build_task_images(
         "target_digest": builds["target"].image_digest,
         "architecture": builds["target"].architecture,
         "dependencies": builds["target"].dependencies,
+        "runtime_identity": builds["target"].runtime_identity,
     }
 
 

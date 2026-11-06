@@ -372,7 +372,7 @@ def test_probe_compose_listing_mounts_main(tmp_path: Path):
         variant="vulnerable",
     )
     assert "listing-data:/listing" in text
-    assert "LISTING_NAME" in text
+    assert "LISTING_NAME" not in text
     assert "internal: true" in text
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
 
@@ -32,7 +33,7 @@ def freeze(raw: dict, policy_version: str) -> dict:
     return spec
 
 
-def check_evidence_links(spec: dict, evidence: dict) -> list[str]:
+def check_evidence_links(spec: dict, evidence: dict, *, run_dir: Path | None = None) -> list[str]:
     """Every citation must point at a fetched source; confirmed facts need ok sources."""
     issues: list[str] = []
     by_id = {source["id"]: source for source in evidence.get("sources", [])}
@@ -50,6 +51,14 @@ def check_evidence_links(spec: dict, evidence: dict) -> list[str]:
             issues.append(
                 f"{assertion['id']} is confirmed but source {source_id} failed to fetch"
             )
+        if assertion.get("evidence_quote"):
+            if assertion.get("evidence_sha256") != source.get("content_sha256"):
+                issues.append(f"{assertion['id']} source checksum changed")
+            if run_dir is not None:
+                from .provenance import cited_excerpt
+                _, _, error = cited_excerpt(assertion, source, run_dir)
+                if error:
+                    issues.append(f"{assertion['id']}: {error}")
     fix_source = spec.get("fix_basis", {}).get("source_id")
     if fix_source:
         referenced.add(fix_source)

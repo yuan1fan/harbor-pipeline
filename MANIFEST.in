@@ -1,0 +1,5 @@
+recursive-include schemas *.json
+recursive-include policies *.toml
+recursive-include docs/reference *.json
+recursive-include harbor_pipeline/assets *
+global-exclude __pycache__ *.py[cod]

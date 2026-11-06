@@ -28,7 +28,6 @@ from .goals import (
     auth_material,
     auth_scheme,
     goal_family,
-    listing_name,
 )
 from .util import digest, no_window_kwargs, read_json, write_json
 
@@ -120,8 +119,6 @@ def target_environment(spec: dict) -> dict[str, str]:
     family = goal_family(spec)
     if family == "file_write":
         env["MARKER_PATH"] = MARKER_PATH
-    if family == "directory_listing":
-        env["LISTING_NAME"] = listing_name(spec)
     return {key: value for key, value in env.items() if value}
 
 
@@ -173,6 +170,10 @@ def compose_text(
         target_mounts.append(f"listing-data:{LISTING_MOUNT}")
         main_mounts.append(f"listing-data:{LISTING_MOUNT}")
         volume_names.append("listing-data")
+    if not marker and not listing:
+        target_mounts.append("oracle-data:/oracle")
+        main_mounts.append("oracle-data:/oracle")
+        volume_names.append("oracle-data")
     target_volumes = ""
     if target_mounts:
         lines = "\n".join(f"      - {mount}" for mount in target_mounts)

@@ -82,6 +82,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-c", "--config", type=Path, help="pipeline TOML (default: ./pipeline.toml)")
     parser.add_argument("--version", action="version", version=f"harbor-pipeline {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
+    quality_cmd = sub.add_parser("quality", help="audit released packages and independently reviewed correctness without model calls")
+    quality_cmd.add_argument("--run-dir", type=Path, required=True)
+    quality_cmd.add_argument("--output", type=Path, required=True)
+    quality_cmd.add_argument("--sample-size", type=int, default=30)
+    quality_cmd.add_argument("--seed", type=int, default=0)
+    quality_cmd.add_argument("--review-file", type=Path)
+    merge_cmd = sub.add_parser("dataset-merge", help="merge shards and recompute leakage-safe global splits")
+    merge_cmd.add_argument("--input", type=Path, nargs="+", required=True)
+    merge_cmd.add_argument("--output", type=Path, required=True)
+    archive_cmd = sub.add_parser("archive-release", help="export measured images and a pinned executable task for offline replay")
+    archive_cmd.add_argument("--release-dir", type=Path, required=True)
+    archive_cmd.add_argument("--output-dir", type=Path, required=True)
 
     doctor_cmd = sub.add_parser("doctor", help="check host, Harbor, Docker and policy")
     doctor_cmd.add_argument("--json", action="store_true")
@@ -242,6 +254,32 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "archive-release":
+        from .image_archive import archive_release_images
+        try:
+            print(json.dumps(archive_release_images(args.release_dir, args.output_dir), indent=2))
+            return 0
+        except (OSError, ValueError, PipelineError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    if args.command == "dataset-merge":
+        from .dataset import merge_manifests
+        try:
+            print(json.dumps(merge_manifests(args.input, args.output), indent=2))
+            return 0
+        except (OSError, ValueError, PipelineError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    if args.command == "quality":
+        from .quality_report import write_quality_report
+        try:
+            report = write_quality_report(args.run_dir, args.output, sample_size=args.sample_size,
+                                          seed=args.seed, review_file=args.review_file)
+        except (OSError, ValueError, PipelineError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps({key: value for key, value in report.items() if key not in {"tasks", "sampling"}}, indent=2))
+        return 0
     try:
         config = load_config(args.config or _default_config())
     except FileNotFoundError as exc:

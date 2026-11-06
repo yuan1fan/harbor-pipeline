@@ -23,6 +23,8 @@
     "harbor_version": {"type": "string", "minLength": 1},
     "generator_version": {"type": "string", "minLength": 1},
     "prompt_version": {"type": "string", "minLength": 1},
+    "validation_protocol": {"type": "integer"},
+    "image_set": {"type": "object"},
     "file_digests": {
       "type": "object",
       "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}

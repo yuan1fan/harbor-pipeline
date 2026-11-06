@@ -12,11 +12,12 @@ from pathlib import Path
 from . import GENERATOR_VERSION, PROMPT_VERSION, SCHEMA_VERSION
 from .contracts import freeze_digest, validate
 from .errors import TaskError
+from .dataset import canonical_project, split_for_key
 from .generator import GeneratedTask, inspect_task
 from .harbor_adapter import HarborAdapter
 from .util import PipelineError, digest, read_json, tree_hashes, write_json
 
-DATASET_VERSION = "2026.11.1"
+DATASET_VERSION = "2026.11.2"
 
 
 def utc_now() -> str:
@@ -68,6 +69,8 @@ def build_manifest(
         "harbor_version": harbor_version,
         "generator_version": GENERATOR_VERSION,
         "prompt_version": PROMPT_VERSION,
+        "validation_protocol": 2,
+        "image_set": image_set,
         "file_digests": tree_hashes(task_dir),
         "control_plan": control_plan,
         "seed": seed,
@@ -144,14 +147,27 @@ def build_release(
 
     entry = {
         "cve_id": spec["cve_id"],
-        "task_version": "1.0.0",
+        "task_version": "2.0.0",
+        "validation_protocol": 2,
         "artifact_digest": target_digest,
         "project": spec["product"]["name"],
         "root_cause_group": root_cause_group(spec),
-        "patch_group": spec["versions"]["fix_commit"][:12],
+        "patch_group": spec["versions"]["fix_commit"],
+        "aliases": list(spec.get("aliases", [])),
+        "ecosystem": spec["product"]["ecosystem"],
+        "task_digest": task.task_digest,
         "split": dataset_split(spec["cve_id"], spec["product"]["name"], root_cause_group(spec)),
         "location": released_task.as_posix(),
     }
+    from urllib.parse import urlsplit
+    fix_id = spec.get("fix_basis", {}).get("source_id")
+    fix_url = next((source.get("url", "") for source in evidence.get("sources", []) if source.get("id") == fix_id), "")
+    parsed = urlsplit(fix_url)
+    segments = parsed.path.strip("/").split("/")
+    if parsed.hostname in {"github.com", "raw.githubusercontent.com"} and len(segments) >= 2:
+        entry["repository"] = "github.com/" + "/".join(segments[:2])
+    elif parsed.hostname == "api.github.com" and len(segments) >= 3 and segments[0] == "repos":
+        entry["repository"] = "github.com/" + "/".join(segments[1:3])
     validate("dataset-manifest", {
         "schema_version": SCHEMA_VERSION,
         "dataset_version": DATASET_VERSION,
@@ -195,13 +211,8 @@ def root_cause_group(spec: dict) -> str:
 
 
 def dataset_split(cve_id: str, project: str, group: str) -> str:
-    """Stable project/alias grouping: near-duplicates never span splits."""
-    bucket = int(digest({"project": project, "group": group})[:8], 16) % 100
-    if bucket < 80:
-        return "train"
-    if bucket < 90:
-        return "validation"
-    return "test"
+    """Initial project split; the dataset writer joins patch/alias components."""
+    return split_for_key(canonical_project(project))
 
 
 def verify_release(release_dir: Path, *, expected_digest: str | None = None) -> list[str]:
@@ -232,6 +243,8 @@ def verify_release(release_dir: Path, *, expected_digest: str | None = None) -> 
     validate("evaluation", evaluation)
     if evaluation["artifact_digest"] != manifest["image_digest"]:
         issues.append("evaluation artifact digest differs from the build manifest")
+    if manifest.get("validation_protocol") != 2:
+        issues.append("legacy validation protocol: regenerate and revalidate before reuse")
     actual = tree_hashes(release_dir / "task")
     if actual != manifest["file_digests"]:
         changed = sorted(
@@ -249,6 +262,17 @@ def verify_release(release_dir: Path, *, expected_digest: str | None = None) -> 
         for name in ("spec.json", "evidence-index.json", "evaluation.json", "build-manifest.json"):
             if name not in names:
                 issues.append(f"audit bundle is missing {name}")
+            elif json.loads(archive.read(name)) != read_json(release_dir / name):
+                issues.append(f"audit bundle disagrees with {name}")
+        evidence = read_json(release_dir / "evidence-index.json")
+        for source in evidence.get("sources", []):
+            if source.get("status") != "ok":
+                continue
+            name = str(source.get("local_path") or "")
+            if name not in names:
+                issues.append(f"audit bundle is missing evidence {name}")
+            elif digest(archive.read(name)) != source.get("content_sha256"):
+                issues.append(f"evidence checksum mismatch: {name}")
     return issues
 
 

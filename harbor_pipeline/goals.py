@@ -16,6 +16,8 @@ import hashlib
 # token read, so the target contract stays uniform and a PoC cannot satisfy a
 # write/listing goal by reading it.
 SECRET_PATH = "/opt/app/secret/token"
+SECRET_MOUNT = "/oracle"
+SECRET_NAME_FILE = "/oracle/expected-token"
 
 # Shared marker volume for the file-write family. Only the target and the
 # independent observer mount it; the verifier main (where the PoC runs) does

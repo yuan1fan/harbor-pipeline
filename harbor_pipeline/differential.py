@@ -75,6 +75,7 @@ def plan_matrix_steps(*, repeats: int, include_optional: bool = True) -> list[Ma
     ]
     if repeats > 1:
         steps.append(MatrixStep("confirm", ("T03", "T04"), repeats - 1, True))
+    steps.append(MatrixStep("negatives", NEGATIVE_EXPERIMENTS, 1, True))
     if include_optional:
         steps.extend([
             MatrixStep("t11", ("T11",), 1, False),
@@ -99,6 +100,8 @@ class MatrixResult:
     matrix_repeats: int | None = None
     framework_checks: dict[str, dict] = field(default_factory=dict)
     derived_records: list[dict] = field(default_factory=list)
+    validation_signature: str | None = None
+    seed_errors: list[str] = field(default_factory=list)
 
     def record_for(self, experiment_id: str) -> dict | None:
         for record in self.records:
@@ -139,6 +142,8 @@ class MatrixResult:
     def to_json(self) -> dict:
         return {
             "schema_version": SCHEMA_VERSION,
+            "validation_signature": self.validation_signature,
+            "seed_errors": list(self.seed_errors),
             "job_name": self.job.job_name if self.job else None,
             "job_dir": str(self.job.job_dir) if self.job else None,
             "jobs": [
@@ -478,6 +483,7 @@ def run_seed_repeats(
     fail_fast: bool = True,
     environment_image: str | None = None,
     verifier_image: str | None = None,
+    ledger=None,
 ) -> tuple[list[dict], list[str]]:
     """T09: rebuild the same reference task across independent jobs.
 
@@ -485,56 +491,77 @@ def run_seed_repeats(
     loop: the stability condition already fails, and the remaining rebuilds
     cannot change that verdict.
     """
+    from .backend import build_task_images, prune_task_images
+    from dataclasses import replace
+
     records: list[dict] = []
-    statuses: list[str] = []
+    errors: list[str] = []
     for seed in range(repeats):
-        task = render_task(
-            spec,
-            scenario_name=scenario_name,
-            variant="vulnerable",
-            probe="reference",
-            network_mode=network_mode,
-            allowed_hosts=allowed_hosts,
-            overrides=overrides,
-            synthesis=synthesis,
-            revision=candidate_revision,
-            prebuilt=True,
-            environment_image=environment_image,
-            verifier_image=verifier_image,
-        )
-        task_dir = task.write(root / f"seed-{seed + 1}")
-        outcome = adapter.run(
-            [task_dir],
-            agent="oracle",
-            job_name=f"{spec['cve_id'].lower()}-seed-{seed + 1}",
-            n_concurrent=1,
-        )
-        if not outcome.trials:
-            raise TaskError("infra_error", f"Seed trial {seed + 1} produced no result")
-        trial = outcome.trials[0]
-        statuses.append(trial.evidence_status)
-        experiment = _seed_experiment()
-        record = build_trial_record(
-            experiment=experiment,
-            trial=trial,
-            run_id=run_id,
-            cve_id=spec["cve_id"],
-            candidate_revision=candidate_revision,
-            artifact_digest=artifact_digest,
-            seed=seed,
-            poc_path=task_dir / "solution" / "solve.sh",
-            started_at=outcome.result.get("started_at", ""),
-        )
-        record["_audit"] = {
-            "trial_name": trial.trial_name,
-            "trial_dir": str(trial.trial_dir),
-            "task_path": str(task_dir),
-        }
-        records.append(record)
-        if fail_fast and trial.evidence_status != "goal_passed":
-            break
-    consistent = all(s == "goal_passed" for s in statuses)
-    errors = [] if consistent else [f"T09 statuses differ across seeds: {statuses}"]
+        for variant, expected in (("vulnerable", "goal_passed"), ("fixed", "fixed_variant_holds")):
+            tag = f"harbor-pipeline/rebuild-{digest(str(root.resolve()))[:12]}-{seed}-{variant}"
+            task = render_task(
+                spec, scenario_name=scenario_name, variant=variant, probe="reference",
+                network_mode=network_mode, allowed_hosts=allowed_hosts,
+                overrides=overrides, synthesis=synthesis, revision=candidate_revision, paired_verification=False,
+            )
+            seed_root = root / f"seed-{seed + 1}-{variant}"
+            task_dir = task.write(seed_root)
+            reservation = f"{run_id}-{spec['cve_id']}-rebuild-{candidate_revision}-{seed}-{variant}"
+            trial_started = False
+            if ledger is not None:
+                try:
+                    ledger.reserve(reservation, {"builds": 2 if environment_image else 3, "trials": 1}, reuse=True)
+                except PipelineError as exc:
+                    raise TaskError("budget_exhausted", str(exc)) from exc
+            try:
+                images = build_task_images(
+                    task_dir=task_dir, variant=variant, revision=candidate_revision,
+                    tag_base=tag, log_dir=seed_root / "build-logs", no_cache=True,
+                    target_only=bool(environment_image), environment_image=environment_image,
+                    product=spec["product"]["name"],
+                    product_ref=spec["versions"]["vulnerable_ref" if variant == "vulnerable" else "fixed_ref"],
+                )
+                task = render_task(
+                    spec, scenario_name=scenario_name, variant=variant, probe="reference",
+                    network_mode=network_mode, allowed_hosts=allowed_hosts,
+                    overrides=overrides, synthesis=synthesis, revision=candidate_revision,
+                    prebuilt=True, prebuilt_base=tag, paired_verification=False,
+                    environment_image=images["images"]["agent"]["image_ref"],
+                )
+                task_dir = task.write(seed_root)
+                from .generator import pin_task_images
+                pin_task_images(task, images)
+                task_dir = task.write(seed_root)
+                trial_started = True
+                outcome = adapter.run([task_dir], agent="oracle",
+                    job_name=f"{spec['cve_id'].lower()}-rebuild-{seed + 1}-{variant}", n_concurrent=1)
+                if not outcome.trials:
+                    raise TaskError("infra_error", f"Rebuild {seed + 1}/{variant} produced no result")
+                trial = outcome.trials[0]
+                record = build_trial_record(
+                    experiment=replace(_seed_experiment(), variant=variant), trial=trial,
+                    run_id=run_id, cve_id=spec["cve_id"], candidate_revision=candidate_revision,
+                    artifact_digest=artifact_digest, seed=seed,
+                    poc_path=task_dir / "solution" / "solve.sh",
+                    started_at=outcome.result.get("started_at", ""),
+                )
+                record["_audit"] = {
+                    "mode": "clean-rebuild", "no_cache": True,
+                    "actual_image_digest": images["target_digest"],
+                    "build_images": images,
+                    "trial_dir": str(trial.trial_dir), "task_path": str(task_dir),
+                }
+                records.append(record)
+                if trial.evidence_status != expected:
+                    errors.append(f"T09 rebuild {seed + 1}/{variant}: {trial.evidence_status}, expected {expected}")
+                    if fail_fast:
+                        return records, errors
+            finally:
+                if ledger is not None:
+                    attempts = sum((seed_root / "build-logs" / f"build-{name}.log").is_file()
+                                   for name in ("target", "verifier", "agent"))
+                    ledger.commit(reservation, {"builds": attempts, "trials": int(trial_started)})
+                prune_task_images(tag)
     return records, errors
 
 
