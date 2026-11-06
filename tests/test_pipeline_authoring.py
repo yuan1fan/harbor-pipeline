@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 from harbor_pipeline import authoring
 from harbor_pipeline.agent import AgentOutcome
@@ -27,6 +28,10 @@ def _pipeline(tmp_path: Path) -> CvePipeline:
         output_root=tmp_path / "runs",
     )
     pipeline.store.create()
+    # These tests exercise authoring/generation, not a Harbor installation.
+    pipeline._capabilities = SimpleNamespace(
+        harbor_version="0.23.0", network_mode="public"
+    )
     return pipeline
 
 
@@ -123,6 +128,19 @@ def test_draft_runs_the_native_author_and_renders(tmp_path: Path, monkeypatch):
     )
     monkeypatch.setattr(
         "harbor_pipeline.depcheck.check_bundle", lambda bundle, settings: []
+    )
+    # Native author tests must not require a host claude binary or Docker
+    # images; the session runner and base-image builder are stubbed below.
+    monkeypatch.setattr(
+        "harbor_pipeline.agent.shutil.which",
+        lambda name: "/usr/bin/claude" if name == "claude" else None,
+    )
+    monkeypatch.setattr(
+        "harbor_pipeline.pipeline.author_probe.ensure_base_images",
+        lambda **kwargs: {
+            "environment": {"image_ref": "base-environment"},
+            "verifier": {"image_ref": "base-verifier"},
+        },
     )
 
     def fake_run(self, *, prompt, workspace, contract, settings_path, extra_env=None, resume=None):

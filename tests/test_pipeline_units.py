@@ -408,6 +408,20 @@ def test_build_prebuilds_both_variants_for_the_probes(tmp_path: Path, monkeypatc
         }
 
     monkeypatch.setattr(pipeline_mod, "build_task_images", fake_build)
+    monkeypatch.setattr(
+        pipeline_mod.author_probe,
+        "ensure_base_images",
+        lambda **kwargs: {
+            "environment": {
+                "image_ref": "base-environment",
+                "image_digest": "sha256:" + "e" * 64,
+            },
+            "verifier": {
+                "image_ref": "base-verifier",
+                "image_digest": "sha256:" + "f" * 64,
+            },
+        },
+    )
     image_set = pipeline.build(spec, task)
 
     assert [call["variant"] for call in calls] == ["vulnerable", "fixed"]

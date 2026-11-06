@@ -191,7 +191,12 @@ def test_validate_workspace_reports_placeholder_issues(tmp_path: Path, monkeypat
     assert issues
 
 
-def test_agent_command_is_restricted_and_allowlisted(tmp_path: Path):
+def test_agent_command_is_restricted_and_allowlisted(tmp_path: Path, monkeypatch):
+    # The unit test checks argv construction, not a real installation.
+    monkeypatch.setattr(
+        "harbor_pipeline.agent.shutil.which",
+        lambda name: "/usr/bin/claude" if name == "claude" else None,
+    )
     agent = ClaudeCodeAgent(_config(), role="author")
     command = agent.command(
         settings_path=tmp_path / "settings.json", contract="contract"
