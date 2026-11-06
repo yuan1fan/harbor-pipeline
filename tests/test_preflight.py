@@ -1,5 +1,6 @@
 """Host preflight parsing and the user-network safety rule."""
 
+import os
 from types import SimpleNamespace
 
 from harbor_pipeline import preflight
@@ -71,7 +72,12 @@ def test_preflight_warns_about_user_networks_without_removing_them(tmp_path, mon
     assert checks["user-networks-dangling"]["status"] == "warn"
     assert "iris_backend" in checks["user-networks-dangling"]["detail"]
     assert checks["task-leftovers"]["status"] == "warn"
-    assert checks["port-exclusions"]["status"] == "pass"
+    # Port reservation is a Windows/WinNAT concern; Linux hosts have no netsh
+    # check at all.
+    if os.name == "nt":
+        assert checks["port-exclusions"]["status"] == "pass"
+    else:
+        assert "port-exclusions" not in checks
     # A preflight without --clean must not delete anything.
     assert result["cleaned"] == {"containers": [], "networks": [], "images": []}
 
