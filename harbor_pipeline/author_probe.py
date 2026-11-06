@@ -147,14 +147,16 @@ def compose_text(
         lines = "\n".join(f'      {key}: "{value}"' for key, value in environment.items())
         env_block = f"    environment:\n{lines}\n"
     target_mounts: list[str] = []
+    reference_mounts: list[str] = []
     main_mounts: list[str] = []
     volume_names: list[str] = []
-    observer = ""
+    observers = ""
     main_depends = "      target:\n        condition: service_healthy\n"
     if marker:
         target_mounts.append(f"marker-data:{MARKER_DIR}")
-        volume_names.append("marker-data")
-        observer = f"""\
+        reference_mounts.append(f"ref-marker-data:{MARKER_DIR}")
+        volume_names.extend(("marker-data", "ref-marker-data"))
+        observers = f"""\
   observer:
     image: python:3.12-slim-bookworm
     command: ["python", "/observer.py"]
@@ -163,21 +165,39 @@ def compose_text(
       - {_posix(tests_dir / "observer.py")}:/observer.py:ro
     expose:
       - "8081"
+  observer-reference:
+    image: python:3.12-slim-bookworm
+    command: ["python", "/observer.py"]
+    volumes:
+      - ref-marker-data:{MARKER_DIR}
+      - {_posix(tests_dir / "observer.py")}:/observer.py:ro
+    expose:
+      - "8081"
 
 """
         main_depends += "      observer:\n        condition: service_started\n"
+        main_depends += (
+            "      observer-reference:\n        condition: service_started\n"
+        )
     if listing:
         target_mounts.append(f"listing-data:{LISTING_MOUNT}")
-        main_mounts.append(f"listing-data:{LISTING_MOUNT}")
-        volume_names.append("listing-data")
+        reference_mounts.append(f"ref-listing-data:{LISTING_MOUNT}")
+        main_mounts.extend(("listing-data:/listing", "ref-listing-data:/listing-ref"))
+        volume_names.extend(("listing-data", "ref-listing-data"))
     if not marker and not listing:
         target_mounts.append("oracle-data:/oracle")
-        main_mounts.append("oracle-data:/oracle")
-        volume_names.append("oracle-data")
+        reference_mounts.append("ref-oracle-data:/oracle")
+        main_mounts.extend(("oracle-data:/oracle", "ref-oracle-data:/oracle-ref"))
+        volume_names.extend(("oracle-data", "ref-oracle-data"))
     target_volumes = ""
     if target_mounts:
         lines = "\n".join(f"      - {mount}" for mount in target_mounts)
         target_volumes = f"    volumes:\n{lines}\n"
+    reference_volumes = ""
+    if reference_mounts:
+        lines = "\n".join(f"      - {mount}" for mount in reference_mounts)
+        reference_volumes = f"    volumes:\n{lines}\n"
+    limits = "    mem_limit: 1g\n    pids_limit: 512\n" if family == "service_unavailable" else ""
     main_volumes = [
         f"{_posix(tests_dir)}:/tests:ro",
         f"{_posix(logs_dir)}:/logs",
@@ -198,18 +218,34 @@ services:
 {main_depends}{main_volume_block}    environment:
       TARGET_HOST: "target"
       TARGET_PORT: "8080"
+      VERIFY_REFERENCE_HOST: "target-reference"
+      VERIFY_REFERENCE_LISTING_FILE: "/listing-ref/expected"
+      VERIFY_REFERENCE_SECRET_FILE: "/oracle-ref/expected-token"
+      VERIFY_REFERENCE_OBSERVER_URL: "http://observer-reference:8081"
+    expose:
+      - "8099"
     command: ["/tests/test.sh"]
   target:
     image: {target_image}
     expose:
       - "8080"
-{target_volumes}{env_block}    healthcheck:
+{limits}{target_volumes}{env_block}    healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
       interval: 2s
       timeout: 5s
       retries: 30
       start_period: 5s
-{observer}{volumes_block}
+  target-reference:
+    image: {target_image}
+    expose:
+      - "8080"
+{limits}{reference_volumes}{env_block}    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+{observers}{volumes_block}
 networks:
   default:
     internal: true

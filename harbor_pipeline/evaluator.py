@@ -230,6 +230,17 @@ def _locked_dependency(
     for name, version in deps.items():
         if _normalize_package_name(name) == wanted:
             return name, version
+    # Go/Maven identities are full module or group:artifact paths. Match the
+    # product when it is a path segment (github.com/getfider/fider -> fider)
+    # rather than requiring the registry spelling to be the whole name.
+    for name, version in deps.items():
+        segments = {
+            _normalize_package_name(part)
+            for part in name.lstrip("@").replace(":", "/").split("/")
+            if part
+        }
+        if wanted in segments:
+            return name, version
     return None, None
 
 
@@ -288,6 +299,31 @@ def _affected_subpackage(
     return None
 
 
+def _source_runtime_identity(image_set: dict, spec: dict) -> bool:
+    """Both variants resolve the product to the exact pinned release at runtime.
+
+    A generic/GitHub source build has no registry digest, but the built image
+    can still prove which release it contains. This is weaker than a registry
+    digest and is accepted only when both variants report the expected version.
+    """
+    product = spec.get("product", {}).get("name")
+    variants = image_set.get("variants") or {}
+    for variant, expected in (
+        ("vulnerable", spec.get("versions", {}).get("vulnerable_ref")),
+        ("fixed", spec.get("versions", {}).get("fixed_ref")),
+    ):
+        data = variants.get(variant) or {}
+        identity = data.get("runtime_identity") or {}
+        if not identity.get("verified"):
+            return False
+        _, installed = _locked_dependency(
+            identity.get("dependencies") or {}, product
+        )
+        if installed is None or _version_key(installed) != _version_key(expected):
+            return False
+    return True
+
+
 def _dimension_v(spec: dict, evidence: dict, image_set: dict, policy: Policy) -> Dimension:
     identities = spec.get("artifact_identity", [])
     pinned = [
@@ -295,6 +331,10 @@ def _dimension_v(spec: dict, evidence: dict, image_set: dict, policy: Policy) ->
         if str(item.get("digest", "")).startswith(("sha256:", "sha384:", "sha512:"))
         and "unverified" not in str(item.get("digest", ""))
     ]
+    source_build = bool(identities) and all(
+        item.get("kind") in {"source", "git"} for item in identities
+    )
+    source_verified = source_build and _source_runtime_identity(image_set, spec)
     sources = evidence.get("sources", [])
     ok_sources = [s for s in sources if s.get("status") == "ok" and s.get("local_path")]
     versions = spec.get("versions", {})
@@ -308,6 +348,17 @@ def _dimension_v(spec: dict, evidence: dict, image_set: dict, policy: Policy) ->
             locked_name, locked = match
             subpackage = True
     expected = versions.get("vulnerable_ref")
+    if (
+        locked is not None
+        and _version_key(locked) != _version_key(expected)
+    ):
+        # A monorepo product may be pinned through a separately versioned
+        # subpackage (pnpm -> @pnpm/store.cafs); accept it only when the
+        # advisory names that package and the pinned version is in range.
+        match = _affected_subpackage(deps, product, versions.get("affected"))
+        if match:
+            locked_name, locked = match
+            subpackage = True
     if locked is None:
         lock_item = Item("V4-build-lock", "unknown", f"{product} is not in the built dependency lock")
     elif subpackage:
@@ -323,8 +374,15 @@ def _dimension_v(spec: dict, evidence: dict, image_set: dict, policy: Policy) ->
             f"built {locked_name}=={locked}, spec says vulnerable_ref={expected}",
         )
     items = [
-        Item("V1-artifact-identity", "pass" if pinned else "fail",
-             f"{len(pinned)} pinned artifact identities"),
+        Item(
+            "V1-artifact-identity",
+            "pass" if pinned or source_verified else "fail",
+            f"{len(pinned)} pinned artifact identities"
+            if pinned
+            else "source build: both variants verified at runtime"
+            if source_verified
+            else "no pinned artifact identity and no verified source build",
+        ),
         Item("V2-version-pair", "pass" if versions.get("vulnerable_ref") != versions.get("fixed_ref")
              and versions.get("fix_commit") else "fail",
              f"{versions.get('vulnerable_ref')} -> {versions.get('fixed_ref')}"),

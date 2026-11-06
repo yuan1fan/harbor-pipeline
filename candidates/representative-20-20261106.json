@@ -1,0 +1,623 @@
+[
+  {
+    "advisory_refs": [
+      "https://github.com/clidey/whodb/security/advisories/GHSA-x3h5-pr45-fx4r",
+      "https://github.com/clidey/whodb/security/advisories/GHSA-x3h5-pr45-fx4r"
+    ],
+    "commit_refs": [
+      "https://github.com/clidey/whodb/commit/80111c9ebc2eec382222629ba9fd26236f1a40e6"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-112005",
+    "description": "WhoDB 0.104.0 before 0.135.0 contains a path traversal vulnerability that allows remote attackers to read and write arbitrary host files by running DuckDB filesystem functions through the query editor. Attackers can log in to a DuckDB file without credentials and use read_text, read_blob, COPY ... TO or ATTACH to steal session.key and stored database credentials or overwrite files.",
+    "ecosystem": "npm",
+    "ecosystem_hint": "",
+    "fix_commit": "80111c9ebc2eec382222629ba9fd26236f1a40e6",
+    "fixed_ref": "0.135.0",
+    "osv_refs": [],
+    "package": "whodb",
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitive": "path_traversal",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 3,
+    "product": "whodb",
+    "published": "2026-10-18T12:17:12.790",
+    "references": [
+      "https://github.com/clidey/whodb/blob/0.134.0/core/src/plugins/duckdb/db.go#L73-L95",
+      "https://github.com/clidey/whodb/blob/0.134.0/core/src/plugins/duckdb/duckdb.go#L375-L387",
+      "https://github.com/clidey/whodb/commit/80111c9ebc2eec382222629ba9fd26236f1a40e6",
+      "https://github.com/clidey/whodb/releases/tag/0.135.0",
+      "https://github.com/clidey/whodb/security/advisories/GHSA-x3h5-pr45-fx4r",
+      "https://www.vulncheck.com/advisories/whodb-0.104.0-before-0.135.0-arbitrary-file-read-write-via-duckdb-query-editor"
+    ],
+    "triage_status": "eligible",
+    "vendor": "clidey",
+    "vulnerable_ref": "0.134.0"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/Flexget/Flexget/security/advisories/GHSA-6v57-v478-59v9"
+    ],
+    "commit_refs": [
+      "https://github.com/Flexget/Flexget/commit/38fa748461e20befee942f5c79d8a098edea5c1f"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-113613",
+    "description": "FlexGet before 3.20.7 contains a path traversal vulnerability in the decompress plugin that allows remote attackers to write arbitrary files by supplying malicious archive member paths. Attackers can deliver zip or rar archives with ../ sequences or absolute paths through a feed, writing Python files into the plugins directory for code execution.",
+    "ecosystem": "pypi",
+    "ecosystem_hint": "",
+    "fix_commit": "38fa748461e20befee942f5c79d8a098edea5c1f",
+    "fixed_ref": "3.20.7",
+    "osv_refs": [],
+    "package": "FlexGet",
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitive": "path_traversal",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "priority": 3,
+    "product": "FlexGet",
+    "published": "2026-10-20T16:17:11.933",
+    "references": [
+      "https://github.com/Flexget/Flexget/blob/v3.20.6/flexget/components/archives/decompress.py#L74-L77",
+      "https://github.com/Flexget/Flexget/commit/38fa748461e20befee942f5c79d8a098edea5c1f",
+      "https://github.com/Flexget/Flexget/releases/tag/v3.20.7",
+      "https://github.com/Flexget/Flexget/security/advisories/GHSA-6v57-v478-59v9",
+      "https://www.vulncheck.com/advisories/flexget-before-3.20.7-path-traversal-zip-slip-via-decompress-plugin"
+    ],
+    "triage_status": "eligible",
+    "vendor": "FlexGet",
+    "vulnerable_ref": "3.20.6"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/pnpm/pnpm/security/advisories/GHSA-6x96-7vc8-cm3p"
+    ],
+    "commit_refs": [
+      "https://github.com/pnpm/pnpm/commit/6ca07ffbe6fc0e8b8cdc968f228903ba0886f7c0"
+    ],
+    "cpes": [
+      "cpe:2.3:a:pnpm:pnpm:*:*:*:*:*:node.js:*:*",
+      "cpe:2.3:o:microsoft:windows:-:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-23889",
+    "description": "pnpm is a package manager. Prior to version 10.28.1, a path traversal vulnerability in pnpm's tarball extraction allows malicious packages to write files outside the package directory on Windows. The path normalization only checks for `./` but not `.\\`. On Windows, backslashes are directory separators, enabling path traversal. This vulnerability is Windows-only. This issue impacts Windows pnpm users and Windows CI/CD pipelines (GitHub Actions Windows runners, Azure DevOps). It can lead to overwriting `.npmrc`, build configs, or other files. Version 10.28.1 contains a patch.",
+    "ecosystem": "npm",
+    "ecosystem_hint": "",
+    "fix_commit": "6ca07ffbe6fc0e8b8cdc968f228903ba0886f7c0",
+    "fixed_ref": "10.28.1",
+    "osv_refs": [],
+    "package": "pnpm",
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitive": "path_traversal",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 3,
+    "product": "pnpm",
+    "published": "2026-01-26T22:15:56.213",
+    "references": [
+      "https://github.com/pnpm/pnpm/commit/6ca07ffbe6fc0e8b8cdc968f228903ba0886f7c0",
+      "https://github.com/pnpm/pnpm/releases/tag/v10.28.1",
+      "https://github.com/pnpm/pnpm/security/advisories/GHSA-6x96-7vc8-cm3p"
+    ],
+    "triage_status": "eligible",
+    "vendor": "pnpm",
+    "vulnerable_ref": "10.28.0"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/danielgatis/rembg/security/advisories/GHSA-qr6x-7v33-6qmg",
+      "https://github.com/danielgatis/rembg/security/advisories/GHSA-qr6x-7v33-6qmg"
+    ],
+    "commit_refs": [
+      "https://github.com/danielgatis/rembg/commit/b2758c6b39bb2b02df90a03128110339476984d3"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-115924",
+    "description": "Rembg is a tool to remove images background. Prior to 2.0.82, the public /api/remove endpoint passes attacker-controlled extras.sam_model through rembg/commands/s_command.py to rembg/sessions/sam.py, where it is interpolated into SAM filenames and GitHub download URLs passed to pooch.retrieve() without a pinned hash. An unauthenticated attacker can supply a sam_model value combining path traversal with URL fragment syntax to exploit the HTTP request discarding the fragment while the local POSIX path retains it. The first request primes the attacker-selected path tree, and an identical repeated request downloads malicious ONNX encoder and decoder files beside a readable target file. The graphs can load the target through ONNX external data and encode its bytes into the returned PNG mask, disclosing complete files accessible to the rembg process and allowing arbitrary ONNX computation. This issue is fixed in version 2.0.82.",
+    "ecosystem": "pypi",
+    "ecosystem_hint": "",
+    "fix_commit": "b2758c6b39bb2b02df90a03128110339476984d3",
+    "fixed_ref": "2.0.82",
+    "osv_refs": [],
+    "package": "rembg",
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitive": "path_traversal",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 3,
+    "product": "rembg",
+    "published": "2026-10-26T20:17:52.250",
+    "references": [
+      "https://github.com/danielgatis/rembg/commit/b2758c6b39bb2b02df90a03128110339476984d3",
+      "https://github.com/danielgatis/rembg/releases/tag/v2.0.82",
+      "https://github.com/danielgatis/rembg/security/advisories/GHSA-qr6x-7v33-6qmg"
+    ],
+    "triage_status": "eligible",
+    "vendor": "danielgatis",
+    "vulnerable_ref": "2.0.81"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/swingmx/swingmusic/security/advisories/GHSA-pj88-9xww-gxmh"
+    ],
+    "commit_refs": [
+      "https://github.com/swingmx/swingmusic/commit/9a915ca62af1502b9550722df82f5d432cb73de3"
+    ],
+    "cpes": [
+      "cpe:2.3:a:swingmx:swing_music:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-23877",
+    "description": "Swing Music is a self-hosted music player for local audio files. Prior to version 2.1.4, Swing Music's `list_folders()` function in the `/folder/dir-browser` endpoint is vulnerable to directory traversal attacks. Any authenticated user (including non-admin) can browse arbitrary directories on the server filesystem. Version 2.1.4 fixes the issue.",
+    "ecosystem": "pypi",
+    "ecosystem_hint": "",
+    "fix_commit": "9a915ca62af1502b9550722df82f5d432cb73de3",
+    "fixed_ref": "2.1.4",
+    "osv_refs": [],
+    "package": "swingmusic",
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitive": "path_traversal",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 3,
+    "product": "swingmusic",
+    "published": "2026-01-19T21:15:52.147",
+    "references": [
+      "https://github.com/swingmx/swingmusic/commit/9a915ca62af1502b9550722df82f5d432cb73de3",
+      "https://github.com/swingmx/swingmusic/security/advisories/GHSA-pj88-9xww-gxmh"
+    ],
+    "triage_status": "eligible",
+    "vendor": "swingmx",
+    "vulnerable_ref": "2.1.3"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/apostrophecms/apostrophe/security/advisories/GHSA-97wv-p4xx-c7mg",
+      "https://github.com/apostrophecms/apostrophe/security/advisories/GHSA-97wv-p4xx-c7mg"
+    ],
+    "commit_refs": [
+      "https://github.com/apostrophecms/apostrophe/commit/9500b8b0e1d630d5e07fbb5fd2c25ed0943845ce",
+      "https://github.com/apostrophecms/apostrophe/commit/f84fd41cbf6c22eb8d0008fc9c25df1f7130b350"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-113664",
+    "description": "ApostropheCMS is an open-source Node.js content management system. Prior to 3.7.0 of the import-export module, an authenticated importer can submit a tar entry whose normalized destination targets a directory while bypassing the literal parent-path substring guard. Opening that directory as a write stream emits an unhandled filesystem error that can terminate the Node.js process; the source establishes this static primitive but not an end-to-end exploit or controlled arbitrary file read or write. This issue is fixed in version 3.7.0.",
+    "ecosystem": "npm",
+    "ecosystem_hint": "",
+    "fix_commit": "f84fd41cbf6c22eb8d0008fc9c25df1f7130b350",
+    "fixed_ref": "4.33.0",
+    "osv_refs": [],
+    "package": "apostrophe",
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitive": "path_traversal",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "priority": 3,
+    "product": "apostrophe",
+    "published": "2026-10-20T18:17:19.860",
+    "references": [
+      "https://github.com/apostrophecms/apostrophe/commit/9500b8b0e1d630d5e07fbb5fd2c25ed0943845ce",
+      "https://github.com/apostrophecms/apostrophe/commit/f84fd41cbf6c22eb8d0008fc9c25df1f7130b350",
+      "https://github.com/apostrophecms/apostrophe/releases/tag/@apostrophecms/import-export@3.7.0",
+      "https://github.com/apostrophecms/apostrophe/security/advisories/GHSA-97wv-p4xx-c7mg"
+    ],
+    "triage_status": "eligible",
+    "vendor": "apostrophecms",
+    "vulnerable_ref": "apostrophe@4.32.1"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/quasarframework/quasar/security/advisories/GHSA-wmpw-j6qv-mw88"
+    ],
+    "commit_refs": [
+      "https://github.com/quasarframework/quasar/commit/87c89a80ec84f1eb7dbe258e5367161b0598ceb3"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-106103",
+    "description": "Quasar Framework is a framework for building high-performance Vue.js user interfaces. Prior to @quasar/icongenie 6.1.1, the icongenie generate --profile command accepted folder and name values from a user-supplied profile without constraining the resolved destination to the Quasar project directory. icongenie/lib/utils/get-assets-files.js joined those values with appDir, while icongenie/lib/utils/validate-profile-object.js required only non-empty strings, allowing parent-directory traversal. A developer who runs a crafted profile can cause generated image content to be written or overwritten at any path writable by that user, potentially modifying shell startup files, build scripts, or other executable configuration. This issue is fixed in version 6.1.1.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 3,
+    "product": "quasar",
+    "published": "2026-10-06T18:16:51.523",
+    "references": [
+      "https://github.com/quasarframework/quasar/commit/87c89a80ec84f1eb7dbe258e5367161b0598ceb3",
+      "https://github.com/quasarframework/quasar/releases/tag/@quasar/icongenie-v6.1.1",
+      "https://github.com/quasarframework/quasar/security/advisories/GHSA-wmpw-j6qv-mw88"
+    ],
+    "vendor": "quasarframework"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/jupyterlab/jupyterlab/security/advisories/GHSA-3325-v43h-43rv"
+    ],
+    "commit_refs": [
+      "https://github.com/jupyterlab/jupyterlab/commit/a274a8276b9185d03efd4c3c20713d3137ac49e6",
+      "https://github.com/jupyterlab/jupyterlab/commit/e277bc958e737130ac47b6c5078d08b29298828f"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-102904",
+    "description": "JupyterLab is an extensible environment for interactive and reproducible computing, based on the Jupyter Notebook Architecture. From JupyterLab 4.0.0 until 4.5.11 and 4.6.4, the PyPI Extension Manager uninstall request reaches ExtensionHandler.post, which validates extension names for installation but passes uninstall names to PyPIExtensionManager.uninstall and python -m pip uninstall without rejecting option-like values. The security impact requires that the PyPI Extension Manager is enabled, the account can call the extension API, and kernels and terminals are disabled or delegated to remote hosts; otherwise the user can already read files and make outbound requests directly. An authenticated user with extension API access can supply a pip requirements option to make the server read a local file or fetch an internal URL, and reflected parse errors can return the first unparsable line or response content. A pip log option can also create or corrupt a chosen path with pip-generated log text, but the requester cannot select an arbitrary disclosed line or arbitrary file content, and the injection does not add code execution or availability impact beyond ordinary package removal. This issue is fixed in JupyterLab 4.5.11 and 4.6.4.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 3,
+    "product": "jupyterlab",
+    "published": "2026-09-29T21:17:18.423",
+    "references": [
+      "https://github.com/jupyterlab/jupyterlab/commit/a274a8276b9185d03efd4c3c20713d3137ac49e6",
+      "https://github.com/jupyterlab/jupyterlab/commit/e277bc958e737130ac47b6c5078d08b29298828f",
+      "https://github.com/jupyterlab/jupyterlab/releases/tag/v4.5.11",
+      "https://github.com/jupyterlab/jupyterlab/releases/tag/v4.6.4",
+      "https://github.com/jupyterlab/jupyterlab/security/advisories/GHSA-3325-v43h-43rv"
+    ],
+    "vendor": "jupyterlab"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/patrickjuchli/basic-ftp/security/advisories/GHSA-c475-qrg2-pj4r",
+      "https://github.com/patrickjuchli/basic-ftp/security/advisories/GHSA-c475-qrg2-pj4r"
+    ],
+    "commit_refs": [
+      "https://github.com/patrickjuchli/basic-ftp/commit/d0d9e07c56e519587bb50532ac6eadbb0cb0cfe9"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-102990",
+    "description": "basic-ftp is an FTP client for Node.js. Prior to 6.2.1, Client.list() can be forced by a malicious or compromised FTP server to spend quadratic CPU time parsing a directory listing because the RE_LINE expression in src/parseListUnix.ts backtracks across adjacent variable-length owner and group fields when a long Unix-style line has a valid prefix but cannot satisfy the later size and date fields. parseList() selects a parser from the last nonblank line and then applies it to every line, so a normal final line can select the Unix parser while an earlier crafted line blocks the Node.js event loop and freezes the process. This issue is fixed in version 6.2.1.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 3,
+    "product": "basic-ftp",
+    "published": "2026-09-30T20:17:26.140",
+    "references": [
+      "https://github.com/patrickjuchli/basic-ftp/commit/d0d9e07c56e519587bb50532ac6eadbb0cb0cfe9",
+      "https://github.com/patrickjuchli/basic-ftp/releases/tag/v6.2.1",
+      "https://github.com/patrickjuchli/basic-ftp/security/advisories/GHSA-c475-qrg2-pj4r"
+    ],
+    "vendor": "patrickjuchli"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/dataease/SQLBot/security/advisories/GHSA-wqj3-xcxf-j9m9"
+    ],
+    "commit_refs": [
+      "https://github.com/dataease/SQLBot/commit/ff98514827bad99b8fa4b39385adecc6e3d44355"
+    ],
+    "cpes": [
+      "cpe:2.3:a:fit2cloud:sqlbot:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-32949",
+    "description": "SQLBot is an intelligent data query system based on a large language model and RAG. Versions prior to 1.7.0 contain a Server-Side Request Forgery (SSRF) vulnerability that allows an attacker to retrieve arbitrary system and application files from the server. An attacker can exploit the /api/v1/datasource/check endpoint by configuring a forged MySQL data source with a malicious parameter extraJdbc=\"local_infile=1\". When the SQLBot backend attempts to verify the connectivity of this data source, an attacker-controlled Rogue MySQL server issues a malicious LOAD DATA LOCAL INFILE command during the MySQL handshake. This forces the target server to read arbitrary files from its local filesystem (such as /etc/passwd or configuration files) and transmit the contents back to the attacker. This issue was fixed in version 1.7.0.",
+    "ecosystem": "generic",
+    "ecosystem_hint": "",
+    "fix_commit": "ff98514827bad99b8fa4b39385adecc6e3d44355",
+    "fixed_ref": "1.7.0",
+    "osv_refs": [],
+    "package": "SQLBot",
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitive": "file_read",
+    "primitives": [
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 1,
+    "product": "SQLBot",
+    "published": "2026-03-20T05:16:14.387",
+    "references": [
+      "https://github.com/dataease/SQLBot/commit/ff98514827bad99b8fa4b39385adecc6e3d44355",
+      "https://github.com/dataease/SQLBot/releases/tag/v1.7.0",
+      "https://github.com/dataease/SQLBot/security/advisories/GHSA-wqj3-xcxf-j9m9"
+    ],
+    "triage_status": "eligible",
+    "vendor": "dataease",
+    "vulnerable_ref": "1.6.0"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/openclaw/clawhub/security/advisories/GHSA-48gp-hx8w-wjvm"
+    ],
+    "commit_refs": [
+      "https://github.com/openclaw/clawhub/commit/8c2de6c506bb4efabe3f0c2ffb8370b9e23d4650"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-100601",
+    "description": "ClawHub (openclaw/clawhub) application/backend contains a server-side request forgery vulnerability in the public profile preview's image fetching. The preview accepts a user-supplied image URL and checks the textual hostname against private-address patterns, but does not validate or pin the resolved network destination, so a public-looking hostname can resolve to an internal address or change resolution between validation and connection (DNS rebinding). A maintainer-run local harness demonstrated an outbound connection to an owner-controlled loopback listener; access to production internal services, credential disclosure, and code execution were not demonstrated. The issue was confirmed at revision cbfee7343ddc867316dd9b3de6fa8856730f9f41; the complete historical affected range was not established. Fixed by PR #3683, included in revision 8c2de6c506bb4efabe3f0c2ffb8370b9e23d4650, which was deployed to clawhub.ai on 2026-09-11; self-hosted deployments should update to that revision or a later descendant. The npm CLI and OpenClaw runtime are separate products and are not affected.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 2,
+    "product": "clawhub",
+    "published": "2026-09-26T14:16:40.040",
+    "references": [
+      "https://github.com/openclaw/clawhub/commit/8c2de6c506bb4efabe3f0c2ffb8370b9e23d4650",
+      "https://github.com/openclaw/clawhub/security/advisories/GHSA-48gp-hx8w-wjvm",
+      "https://www.vulncheck.com/advisories/clawhub-ssrf-via-unchecked-dns-resolution-in-profile-image"
+    ],
+    "vendor": "openclaw"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/getfider/fider/security/advisories/GHSA-whx4-hxwq-qgjh"
+    ],
+    "commit_refs": [
+      "https://github.com/getfider/fider/commit/45f5627b9fd15b912fb9092635c863fb4c91dd69"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-102877",
+    "description": "Fider before 0.38.0 contains a server-side request forgery vulnerability due to a time-of-check time-of-use gap in URL validation for webhooks and custom OAuth provider endpoints. Administrators controlling DNS can perform DNS rebinding attacks to make the Fider server send requests to internal services or cloud metadata endpoints.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 2,
+    "product": "fider",
+    "published": "2026-09-29T20:17:18.433",
+    "references": [
+      "https://github.com/getfider/fider",
+      "https://github.com/getfider/fider/blob/v0.37.0/app/pkg/validate/general.go",
+      "https://github.com/getfider/fider/blob/v0.37.0/app/services/httpclient/httpclient.go",
+      "https://github.com/getfider/fider/commit/45f5627b9fd15b912fb9092635c863fb4c91dd69",
+      "https://github.com/getfider/fider/releases/tag/v0.38.0",
+      "https://github.com/getfider/fider/security/advisories/GHSA-whx4-hxwq-qgjh",
+      "https://www.vulncheck.com/advisories/fider-before-0.38.0-ssrf-via-dns-rebinding-in-webhook-validation"
+    ],
+    "vendor": "getfider"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/YesWiki/yeswiki/security/advisories/GHSA-6rvf-7pwm-6j44",
+      "https://github.com/YesWiki/yeswiki/security/advisories/GHSA-6rvf-7pwm-6j44"
+    ],
+    "commit_refs": [
+      "https://github.com/YesWiki/yeswiki/commit/22a5260b0381824e01d340ce9457c4adb9e18b23"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-104470",
+    "description": "YesWiki before 4.6.7 contains a server-side request forgery vulnerability that allows page editors to make the server fetch arbitrary URLs via the url parameter of the Bazar valeur action. Attackers can embed the action with a champ parameter in wiki markup to reach loopback or internal services and partially read responses rendered into the page.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 2,
+    "product": "yeswiki",
+    "published": "2026-10-02T12:17:19.870",
+    "references": [
+      "https://github.com/YesWiki/yeswiki/commit/22a5260b0381824e01d340ce9457c4adb9e18b23",
+      "https://github.com/YesWiki/yeswiki/security/advisories/GHSA-6rvf-7pwm-6j44",
+      "https://www.vulncheck.com/advisories/yeswiki-before-4.6.7-ssrf-via-bazar-valeur-action-url-parameter"
+    ],
+    "vendor": "YesWiki"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/kanbn/kan/security/advisories/GHSA-qrx8-9hc6-jvqg"
+    ],
+    "commit_refs": [
+      "https://github.com/kanbn/kan/commit/53397d8e81dc1494d94132848c1f0416f1152bd7"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-110628",
+    "description": "Kan 0.5.5 through 0.6.0 contains an unauthenticated server-side request forgery vulnerability in the /api/download/attatchment route due to an incomplete fix for CVE-2026-32255. When S3_ENDPOINT is unset, attackers can pass arbitrary url query parameters to fetch() to read internal services, localhost ports, and cloud instance metadata.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 2,
+    "product": "kan",
+    "published": "2026-10-14T15:17:15.540",
+    "references": [
+      "https://github.com/kanbn/kan",
+      "https://github.com/kanbn/kan/blob/v0.6.0/.env.example#L25-L27",
+      "https://github.com/kanbn/kan/blob/v0.6.0/apps/web/src/pages/api/download/attatchment.ts#L21-L52",
+      "https://github.com/kanbn/kan/commit/53397d8e81dc1494d94132848c1f0416f1152bd7",
+      "https://github.com/kanbn/kan/pull/590",
+      "https://github.com/kanbn/kan/security/advisories/GHSA-qrx8-9hc6-jvqg",
+      "https://hackmd.io/@leediay/HyIxU63ofg",
+      "https://www.vulncheck.com/advisories/kan-0.5.5-through-0.6.0-unauthenticated-ssrf-via-api-download-attatchment"
+    ],
+    "vendor": "kanbn"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/Admidio/admidio/security/advisories/GHSA-6j68-gcc3-mq73",
+      "https://github.com/Admidio/admidio/security/advisories/GHSA-6j68-gcc3-mq73"
+    ],
+    "commit_refs": [
+      "https://github.com/Admidio/admidio/commit/f6b7a966abe4d75e9f707d665d7b4b5570e3185a"
+    ],
+    "cpes": [
+      "cpe:2.3:a:admidio:admidio:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-32812",
+    "description": "Admidio is an open-source user management solution. In versions 5.0.0 through 5.0.6, unrestricted URL fetch in the SSO Metadata API can result in SSRF and local file reads. The SSO Metadata fetch endpoint at modules/sso/fetch_metadata.php accepts an arbitrary URL via $_GET['url'], validates it only with PHP's FILTER_VALIDATE_URL, and passes it directly to file_get_contents(). FILTER_VALIDATE_URL accepts file://, http://, ftp://, data://, and php:// scheme URIs. An authenticated administrator can use this endpoint to read arbitrary local files via the file:// wrapper (Local File Read), reach internal services via http:// (SSRF), or fetch cloud instance metadata. The full response body is returned verbatim to the caller. This issue has been fixed in version 5.0.7.",
+    "ecosystem": "generic",
+    "ecosystem_hint": "",
+    "fix_commit": "f6b7a966abe4d75e9f707d665d7b4b5570e3185a",
+    "fixed_ref": "5.0.7",
+    "osv_refs": [],
+    "package": "admidio/admidio",
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitive": "file_read",
+    "primitives": [
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 2,
+    "product": "admidio",
+    "published": "2026-03-20T02:16:35.043",
+    "references": [
+      "https://github.com/Admidio/admidio/commit/f6b7a966abe4d75e9f707d665d7b4b5570e3185a",
+      "https://github.com/Admidio/admidio/releases/tag/v5.0.7",
+      "https://github.com/Admidio/admidio/security/advisories/GHSA-6j68-gcc3-mq73"
+    ],
+    "triage_status": "eligible",
+    "vendor": "Admidio",
+    "vulnerable_ref": "5.0.6"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/gofiber/fiber/security/advisories/GHSA-2mr3-m5q5-wgp6"
+    ],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:gofiber:fiber:*:*:*:*:*:go:*:*"
+    ],
+    "cve_id": "CVE-2026-25899",
+    "description": "Fiber is an Express inspired web framework written in Go. In versions on the v3 branch prior to 3.1.0, the use of the `fiber_flash` cookie can force an unbounded allocation on any server. A crafted 10-character cookie value triggers an attempt to allocate up to 85GB of memory via unvalidated msgpack deserialization. No authentication is required. Every GoFiber v3 endpoint is affected regardless of whether the application uses flash messages. Version 3.1.0 fixes the issue.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "deserialization"
+    ],
+    "priority": 1,
+    "product": "fiber",
+    "published": "2026-02-24T22:16:31.613",
+    "references": [
+      "https://github.com/gofiber/fiber/releases/tag/v3.1.0",
+      "https://github.com/gofiber/fiber/security/advisories/GHSA-2mr3-m5q5-wgp6"
+    ],
+    "vendor": "gofiber"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/sveltejs/kit/security/advisories/GHSA-88qp-p4qg-rqm6"
+    ],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:svelte:sveltekit:*:*:*:*:*:node.js:*:*"
+    ],
+    "cve_id": "CVE-2026-82261",
+    "description": "SvelteKit (@sveltejs/kit) versions >=2.49.0 and <=2.52.1 with experimental remote functions and form enabled contain a CPU exhaustion vulnerability in form deserialization. An attacker can send malformed form data to cause the server to become unresponsive while processing the request, resulting in denial of service. Fixed in 2.52.2.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "deserialization"
+    ],
+    "priority": 2,
+    "product": "kit",
+    "published": "2026-08-28T12:16:39.250",
+    "references": [
+      "https://github.com/sveltejs/kit/security/advisories/GHSA-88qp-p4qg-rqm6",
+      "https://www.vulncheck.com/advisories/sveltekit-before-2.52.2-cpu-exhaustion-via-remote-form-deserialization"
+    ],
+    "vendor": "sveltejs"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/fleetdm/fleet/security/advisories/GHSA-x67p-9m2r-fxqv"
+    ],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:fleetdm:fleet:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-26062",
+    "description": "Fleet is open source device management software. Prior to version 4.81.0, Fleet contained a denial-of-service (DoS) issue in the gRPC Launcher `PublishLogs` endpoint. In affected versions, certain unexpected input values were not handled gracefully, which could cause the Fleet server process to terminate while processing an authenticated request from an enrolled Launcher host. An authenticated attacker with access to any enrolled Launcher node key could cause an immediate and complete denial of service by sending a single gRPC request to the `PublishLogs` endpoint. This vulnerability impacts availability only. There is no exposure of sensitive data, no authentication bypass, no privilege escalation, and no integrity impact. Version 4.81.0 contains a patch. If upgrading immediately is not possible, the following mitigations can reduce exposure. Restrict network access to the Fleet gRPC endpoint where feasible (for example, limiting inbound access to known host IP ranges); deploy Fleet behind infrastructure that terminates or filters gRPC traffic if Launcher log ingestion is not required; and/or monitor for repeated Fleet process crashes or unexpected restarts indicating potential exploitation.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "auth_bypass"
+    ],
+    "priority": 2,
+    "product": "fleet",
+    "published": "2026-05-14T20:17:02.020",
+    "references": [
+      "https://github.com/fleetdm/fleet/releases/tag/fleet-v4.81.0",
+      "https://github.com/fleetdm/fleet/security/advisories/GHSA-x67p-9m2r-fxqv"
+    ],
+    "vendor": "fleetdm"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/free5gc/free5gc/security/advisories/GHSA-7g27-v5wj-jr75"
+    ],
+    "commit_refs": [
+      "https://github.com/free5gc/udm/commit/65d7070f4bfd016864cbbaefbd506bbc85d2fa92"
+    ],
+    "cpes": [
+      "cpe:2.3:a:free5gc:udm:*:*:*:*:*:go:*:*"
+    ],
+    "cve_id": "CVE-2026-33064",
+    "description": "Free5GC is an open-source Linux Foundation project for 5th generation (5G) mobile core networks. Versions prior to 1.4.2 are vulnerable to procedure panic caused by Nil Pointer Dereference in the /sdm-subscriptions endpoint. A remote attacker can cause the UDM service to panic and crash by sending a crafted POST request to the /sdm-subscriptions endpoint with a malformed URL path containing path traversal sequences (../) and a large JSON payload. The DataChangeNotificationProcedure function in notifier.go attempts to access a nil pointer without proper validation, causing a complete service crash with \"runtime error: invalid memory address or nil pointer dereference\". Exploitation would result in UDM functionality disruption until recovery by restart. This issue has been fixed in version 1.4.2.",
+    "ecosystem": "go",
+    "ecosystem_hint": "",
+    "fix_commit": "2f64769b1822de94093a4b53ce25fc13d967a226",
+    "fixed_ref": "1.4.2",
+    "osv_refs": [],
+    "package": "github.com/free5gc/udm",
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitive": "path_traversal",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 2,
+    "product": "free5gc",
+    "published": "2026-03-20T08:16:12.257",
+    "references": [
+      "https://github.com/free5gc/free5gc/issues/781",
+      "https://github.com/free5gc/free5gc/security/advisories/GHSA-7g27-v5wj-jr75",
+      "https://github.com/free5gc/udm/commit/65d7070f4bfd016864cbbaefbd506bbc85d2fa92",
+      "https://github.com/free5gc/udm/pull/78"
+    ],
+    "triage_status": "eligible",
+    "vendor": "free5gc",
+    "vulnerable_ref": "1.4.1"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94",
+      "https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94"
+    ],
+    "commit_refs": [
+      "https://github.com/google/guava/commit/b931fe9d6d5cf00bc55714ad3308d086f71850fe"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-102554",
+    "description": "Allocation of resources without limits or throttling (CWE-770) during Java object deserialization in Google Guava versions 4.0 through 33.7.1 allows an attacker to cause a Denial of Service via OutOfMemoryError. When deserializing CompactHashMap, CompactHashSet, or MapMakerInternalMap instances, Guava eagerly allocates an array based on a caller-specified size parameter without throttling, permitting memory exhaustion from crafted serialization streams.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "deserialization"
+    ],
+    "priority": 2,
+    "product": "Guava",
+    "published": "2026-10-09T16:17:20.410",
+    "references": [
+      "https://github.com/google/guava/commit/b931fe9d6d5cf00bc55714ad3308d086f71850fe",
+      "https://github.com/google/guava/releases/tag/v33.7.2",
+      "https://github.com/google/guava/security/advisories/GHSA-xxph-c9ww-hj94"
+    ],
+    "vendor": "Google"
+  }
+]

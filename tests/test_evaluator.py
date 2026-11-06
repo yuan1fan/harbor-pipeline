@@ -232,5 +232,37 @@ def test_v4_build_lock_accepts_affected_monorepo_subpackage():
     # The advisory names pnpm, but the target pins the separately versioned
     # subpackage that contains the vulnerable code.
     assert _v4_subpackage_status("1000.1.1") == "pass"
-    # A version outside the advisory's affected range is not evidence.
-    assert _v4_subpackage_status("1000.1.3") == "unknown"
+    # A version outside the advisory's affected range is not the vulnerable
+    # build, so the lock fails rather than silently passing.
+    assert _v4_subpackage_status("1000.1.3") == "fail"
+
+
+def test_v4_build_lock_matches_go_module_path_segment():
+    # Go modules are keyed by their full path; the product is the last
+    # segment, not the whole registry name.
+    assert _v4_status(
+        "fider", {"github.com/getfider/fider": "0.37.0"}, expected="0.37.0"
+    ) == "pass"
+    assert _v4_status(
+        "fider", {"github.com/getfider/fider": "0.36.0"}, expected="0.37.0"
+    ) == "fail"
+
+
+def test_v1_accepts_source_build_verified_at_runtime():
+    from harbor_pipeline.evaluator import _dimension_v
+    spec = {
+        "artifact_identity": [
+            {"kind": "source", "digest": "unverified:0.37.0", "name": "fider"}
+        ],
+        "versions": {"vulnerable_ref": "0.37.0", "fixed_ref": "0.38.0"},
+        "product": {"name": "fider"},
+    }
+    image_set = {
+        "dependencies": {},
+        "variants": {
+            "vulnerable": {"runtime_identity": {"verified": True, "dependencies": {"github.com/getfider/fider": "0.37.0"}}},
+            "fixed": {"runtime_identity": {"verified": True, "dependencies": {"github.com/getfider/fider": "0.38.0"}}},
+        },
+    }
+    dimension = _dimension_v(spec, {"sources": []}, image_set, load_policy())
+    assert next(i for i in dimension.items if i.id == "V1-artifact-identity").status == "pass"

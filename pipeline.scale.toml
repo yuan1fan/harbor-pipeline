@@ -11,9 +11,9 @@ max_repairs = 6
 # the old draft + JSON repair path for a fallback during the transition.
 authoring = "agent"
 author_max_resumes = 2
-author_build_runs = 16
-author_probe_runs = 30
-author_exec_runs = 30
+author_build_runs = 24
+author_probe_runs = 40
+author_exec_runs = 50
 solver_review = true
 solver_attempts = 1
 solver_max_turns = 40

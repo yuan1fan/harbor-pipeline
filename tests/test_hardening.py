@@ -500,3 +500,47 @@ def test_service_unavailable_compose_caps_target_resources():
     compose = _verifier_compose({"A": "1"}, limited=True)
     assert "    mem_limit: 1g" in compose
     assert "    pids_limit: 512" in compose
+
+
+def test_author_probe_has_a_separate_reference_target(tmp_path):
+    from harbor_pipeline.author_probe import compose_text
+    spec = fixtures.cve_spec()
+    spec["task_goal"].update(
+        family="server_request", type="server_request", primitive="ssrf",
+        target_asset="/callback",
+        observable="The target requests the verifier callback URL.",
+    )
+    text = compose_text(
+        spec=spec,
+        target_image="target-image",
+        verifier_image="verifier-image",
+        tests_dir=tmp_path / "tests",
+        logs_dir=tmp_path / "logs",
+        submitted_poc=tmp_path / "poc",
+        variant="vulnerable",
+    )
+    assert "\n  target-reference:\n" in text
+    assert 'VERIFY_REFERENCE_HOST: "target-reference"' in text
+    assert "ref-oracle-data:/oracle-ref" in text
+    assert '      - "8099"' in text
+
+
+def test_author_probe_caps_dos_targets(tmp_path):
+    from harbor_pipeline.author_probe import compose_text
+    spec = fixtures.cve_spec()
+    spec["task_goal"].update(
+        family="service_unavailable", type="service_unavailable",
+        primitive="resource_exhaustion", target_asset="/health",
+        observable="The target health endpoint becomes unavailable during the attack.",
+    )
+    text = compose_text(
+        spec=spec,
+        target_image="target-image",
+        verifier_image="verifier-image",
+        tests_dir=tmp_path / "tests",
+        logs_dir=tmp_path / "logs",
+        submitted_poc=tmp_path / "poc",
+        variant="vulnerable",
+    )
+    assert text.count("    mem_limit: 1g") == 2
+    assert text.count("    pids_limit: 512") == 2
