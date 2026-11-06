@@ -9,7 +9,7 @@ from harbor_pipeline.generator import render_task
 from harbor_pipeline.provenance import version_pair_issues
 from harbor_pipeline.quality_report import build_quality_report
 from harbor_pipeline.runtime_identity import jar_metadata, parse_go_metadata
-from harbor_pipeline.scenario import ScenarioContext, _verify_script
+from harbor_pipeline.scenario import ScenarioContext, _verifier_compose, _verify_script
 from harbor_pipeline.synthesis import normalize_bundle
 from harbor_pipeline.validation_evidence import validation_signature
 
@@ -27,13 +27,18 @@ def verifier(tmp_path, *, family="secret_read", paired=False):
     artifact = tmp_path / "poc"
     artifact.write_text("submitted")
     namespace.update(
-        TARGET_HOST="target", ARTIFACT_PATH=str(artifact),
+        TARGET_HOST="target", REFERENCE_TARGET_HOST="target-reference",
+        ARTIFACT_PATH=str(artifact),
         REWARD_PATH=str(tmp_path / "reward.txt"), EVIDENCE_PATH=str(tmp_path / "evidence.json"),
-        wait_healthy=lambda: True, business_ok=lambda: True,
+        wait_healthy=lambda *args, **kwargs: True, business_ok=lambda: True,
     )
-    namespace["expected_secret"] = lambda: ("a" if namespace["TARGET_HOST"] == "target" else "b") * 48
+    # The reference instance has its own token; never reuse the submitted one.
+    namespace["expected_secret"] = (
+        lambda reference=False: ("c" if reference else "a") * 48
+    )
     def fixed_check():
         namespace["TARGET_HOST"] = "target-fixed"
+        namespace["REFERENCE_TARGET_HOST"] = "target-fixed"
         namespace["EXPECT_VARIANT"] = "fixed"
         namespace["EXPECT_VULNERABLE"] = False
         return namespace["verify_one"]()
@@ -54,10 +59,12 @@ def test_submission_that_also_works_on_fixed_gets_zero(tmp_path):
     calls = []
 
     def replay(path, **kwargs):
-        host = ns["TARGET_HOST"]
+        host = kwargs.get("host") or ns["TARGET_HOST"]
         calls.append((host, path))
-        if path == ns["REFERENCE_PATH"] and host == "target-fixed":
-            return "", "expected rejection", 1
+        # This PoC also works against the fixed build; the fixed replay must
+        # catch it and zero the reward.
+        if path == ns["REFERENCE_PATH"]:
+            return ns["expected_secret"](reference=True), "", 0
         return ns["expected_secret"](), "", 0
 
     ns["run_restricted"] = replay
@@ -70,7 +77,14 @@ def test_submission_that_also_works_on_fixed_gets_zero(tmp_path):
 
 def test_valid_differential_submission_is_accepted(tmp_path):
     ns = verifier(tmp_path, paired=True)
-    ns["run_restricted"] = lambda *a, **k: (ns["expected_secret"](), "", 0) if ns["TARGET_HOST"] == "target" else ("", "rejected", 1)
+    def replay(path, **kwargs):
+        host = kwargs.get("host") or ns["TARGET_HOST"]
+        if host == "target-fixed":
+            return "", "rejected", 1
+        if path == ns["REFERENCE_PATH"]:
+            return ns["expected_secret"](reference=True), "", 0
+        return ns["expected_secret"](), "", 0
+    ns["run_restricted"] = replay
     ns["main"]()
     evidence = json.loads((tmp_path / "evidence.json").read_text())
     assert evidence["reward"] == 1
@@ -79,13 +93,62 @@ def test_valid_differential_submission_is_accepted(tmp_path):
 
 def test_crashing_submission_cannot_win_by_printing_the_token(tmp_path):
     ns = verifier(tmp_path)
-    ns["run_restricted"] = lambda path, **kw: ("a" * 48, "", 0 if path == ns["REFERENCE_PATH"] else 1)
+    ns["run_restricted"] = lambda path, **kw: (
+        ("c" if path == ns["REFERENCE_PATH"] else "a") * 48,
+        "",
+        0 if path == ns["REFERENCE_PATH"] else 1,
+    )
     assert ns["verify_one"]()["reward"] == 0
+
+
+def test_reference_state_cannot_satisfy_the_submission(tmp_path):
+    """A reference that writes state must not make a later submitted PoC pass.
+
+    The fake target keeps state per hostname. The reference runs against
+    target-reference; the submission runs against target and must still fail
+    because it never saw the reference's state.
+    """
+    ns = verifier(tmp_path)
+    state = {"target": False, "target-reference": False}
+
+    def replay(path, **kwargs):
+        host = kwargs.get("host") or ns["TARGET_HOST"]
+        if path == ns["REFERENCE_PATH"]:
+            state[host] = True
+            return ns["expected_secret"](reference=True), "", 0
+        if state.get(host):
+            return ns["expected_secret"](), "", 0
+        return "", "no state left by a reference run", 1
+
+    ns["run_restricted"] = replay
+    evidence = ns["verify_one"]()
+    assert evidence["reward"] == 0
+    assert evidence["status"] == "goal_failed"
+    assert state == {"target": False, "target-reference": True}
+
+
+def test_compose_gives_reference_and_submission_separate_targets():
+    compose = _verifier_compose({"A": "1"})
+    assert "  target-reference:\n" in compose
+    # Each instance owns its answer volume; the main only reads both.
+    assert "ref-oracle-data:/oracle" in compose
+    assert "ref-oracle-data:/oracle-ref" in compose
+    assert 'VERIFY_REFERENCE_HOST: "target-reference"' in compose
+    paired = _verifier_compose(
+        {"A": "1"},
+        image="harbor-pipeline/demo-vulnerable-r1-target",
+        paired=True,
+    )
+    # The fixed side does not need its own reference copy; target-fixed already
+    # runs the submitted PoC on a separate instance.
+    assert paired.count("\n  target-reference:\n") == 1
+    assert "  target-fixed:\n" in paired
 
 
 def test_old_listing_answer_is_rejected_on_a_new_instance(tmp_path):
     ns = verifier(tmp_path, family="directory_listing")
     ns["_EXPECTED_LISTING"] = "new-instance.txt"
+    ns["_EXPECTED_LISTING_REF"] = "new-instance.txt"
     ns["run_restricted"] = lambda path, **kw: ("new-instance.txt" if path == ns["REFERENCE_PATH"] else "previous-instance.txt", "", 0)
     assert ns["verify_one"]()["reward"] == 0
 

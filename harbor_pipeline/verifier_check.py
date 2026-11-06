@@ -205,6 +205,9 @@ def _run_one(
     env = {
         **os.environ,
         "TARGET_HOST": "127.0.0.1",
+        # The host-side stub has one HTTP target; point the reference instance
+        # at it as well and supply the reference-side expected values.
+        "VERIFY_REFERENCE_HOST": "127.0.0.1",
         "TARGET_PORT": str(port),
         "VERIFY_MODE": "goal",
         "VERIFY_REFERENCE_PATH": str(reference),
@@ -212,8 +215,11 @@ def _run_one(
         "VERIFY_REWARD_PATH": str(reward_path),
         "VERIFY_EVIDENCE_PATH": str(evidence_path),
         "VERIFY_OBSERVER_URL": observer_url,
+        "VERIFY_REFERENCE_OBSERVER_URL": observer_url,
         "VERIFY_EXPECTED_LISTING": expected_listing,
+        "VERIFY_EXPECTED_LISTING_REF": expected_listing,
         "VERIFY_EXPECTED_SECRET": STUB_SECRET,
+        "VERIFY_EXPECTED_SECRET_REF": STUB_SECRET,
     }
     if os.name == "posix":
         # Run the replayed payload as the invoking user. The production image

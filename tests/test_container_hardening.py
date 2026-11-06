@@ -59,10 +59,10 @@ import json, os, subprocess, threading
 from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 subprocess.run(['useradd','--create-home','--shell','/bin/sh','replay'],check=True)
-with open('/etc/hosts','a') as f: f.write('\n127.0.0.2 target\n127.0.0.1 fixed-runner\n')
-for folder in ['/tests/fixed','/logs/artifacts','/logs/verifier','/oracle','/oracle-fixed','/control']:
+with open('/etc/hosts','a') as f: f.write('\n127.0.0.2 target\n127.0.0.3 target-reference\n127.0.0.1 fixed-runner\n')
+for folder in ['/tests/fixed','/logs/artifacts','/logs/verifier','/oracle','/oracle-fixed','/oracle-ref','/control']:
     Path(folder).mkdir(parents=True,exist_ok=True)
-for folder in ['/oracle','/oracle-fixed']: os.chmod(folder,0o700)
+for folder in ['/oracle','/oracle-fixed','/oracle-ref']: os.chmod(folder,0o700)
 Path('/tests/verify.py').write_text(PAYLOAD['verify'])
 Path('/tests/test.sh').write_text(PAYLOAD['test'])
 Path('/tests/fixed/verify.py').write_text(PAYLOAD['fixed_verify'])
@@ -78,7 +78,7 @@ def handler(token, fixed):
             self.send_response(200);self.end_headers();self.wfile.write(body)
         def log_message(self,*args): pass
     return Handler
-servers=[ThreadingHTTPServer(('127.0.0.1',8080),handler('a'*48,False)),ThreadingHTTPServer(('127.0.0.2',8080),handler('b'*48,True))]
+servers=[ThreadingHTTPServer(('127.0.0.1',8080),handler('a'*48,False)),ThreadingHTTPServer(('127.0.0.2',8080),handler('b'*48,True)),ThreadingHTTPServer(('127.0.0.3',8080),handler('c'*48,False))]
 for server in servers: threading.Thread(target=server.serve_forever,daemon=True).start()
 def poc(route):
     return '#!/usr/bin/env python3\nimport os,urllib.request\ntry:\n print(urllib.request.urlopen("http://"+os.environ["TARGET_HOST"]+":8080'+route+'").read().decode())\nexcept Exception:\n pass\n'
@@ -94,8 +94,10 @@ results={}
 for label,artifact in [('valid',poc('/secret')),('unrelated_shortcut',poc('/shortcut')),('forged',"#!/usr/bin/env python3\nprint('f'*48)\n")]:
     Path('/oracle/expected-token').write_text('a'*48)
     Path('/oracle-fixed/expected-token').write_text('b'*48)
+    Path('/oracle-ref/expected-token').write_text('c'*48)
     Path('/logs/artifacts/poc').write_text(artifact)
-    result=subprocess.run(['bash','/tests/test.sh'],env=dict(os.environ,TARGET_HOST='127.0.0.1'),capture_output=True,text=True,timeout=25)
+    result=subprocess.run(['bash','/tests/test.sh'],env=dict(os.environ,TARGET_HOST='127.0.0.1',
+        VERIFY_REFERENCE_HOST='127.0.0.3',VERIFY_REFERENCE_SECRET_FILE='/oracle-ref/expected-token'),capture_output=True,text=True,timeout=25)
     evidence=json.loads(Path('/logs/verifier/evidence.json').read_text())
     results[label]={'reward':evidence['reward'],'status':evidence['status'],'fixed':evidence.get('fixed_replay',{}).get('status')}
 print(json.dumps(results))
@@ -161,7 +163,7 @@ HTTPServer(('0.0.0.0',8080),Handler).serve_forever()
     rendered = subprocess.run(['docker','compose','-f',str(root/'tests/docker-compose.yaml'),'-f',str(override),'config','--format','json'], capture_output=True,text=True,timeout=30)
     assert rendered.returncode == 0, rendered.stderr
     config = json.loads(rendered.stdout)
-    for name in ("target", "target-fixed"):
+    for name in ("target", "target-reference", "target-fixed"):
         config["services"][name]["healthcheck"].update(
             test=["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/health')"],
             interval="1s", timeout="3s", retries=30, start_period="1s")

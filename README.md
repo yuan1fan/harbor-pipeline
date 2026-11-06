@@ -150,6 +150,7 @@ agent 只能通过 `harbor-author` 接触外部世界：
 - 不可信 PoC 以非特权 `replay` 用户、独立进程组运行，超时 `killpg`。
 - `/tests` 对 PoC 只读；`/logs/verifier` 与 `/logs/artifacts` 权限隔离。
 - verifier 独立镜像、独立环境，不复用 target 容器。
+- **参考 PoC 与提交 PoC 不共享 target 实例**：参考解运行在 `target-reference`，提交解运行在 `target`；两者各有独立的 oracle/listing/marker 卷。参考解留下的文件、数据库记录或配置变化不会成为提交解的捷径。fixed 侧只重放提交解，已由 `target-fixed` 覆盖。
 
 ---
 

@@ -35,7 +35,9 @@ class Handler(BaseHTTPRequestHandler):
         evidence_path.unlink(missing_ok=True)
         try:
             subprocess.run([sys.executable, "/tests/fixed/verify.py"],
-                env={**os.environ, "TARGET_HOST": "target", "VERIFY_REFERENCE_PATH": "/tests/fixed/reference_poc.py"},
+                env={**os.environ, "TARGET_HOST": "target",
+                     "VERIFY_REFERENCE_PATH": "/tests/fixed/reference_poc.py",
+                     "VERIFY_SKIP_REFERENCE": "1"},
                 timeout=170, check=True)
             evidence = json.loads(evidence_path.read_text())
         except Exception as exc:
