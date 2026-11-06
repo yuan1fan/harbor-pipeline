@@ -97,6 +97,8 @@ def check_spec_consistency(spec: dict) -> list[str]:
         "secret_read": {"file_read", "secret_disclosure"},
         "file_write": {"file_write"},
         "directory_listing": {"directory_listing"},
+        "server_request": {"server_request"},
+        "service_unavailable": {"service_unavailable"},
     }.get(family)
     if expected_type is None:
         issues.append(f"Unknown task_goal.family {family!r}")
@@ -110,6 +112,8 @@ def check_spec_consistency(spec: dict) -> list[str]:
         "secret_read": ("secret", "token", "read"),
         "file_write": ("marker", "write"),
         "directory_listing": ("filename", "listing", "name"),
+        "server_request": ("callback", "request", "url"),
+        "service_unavailable": ("unavailable", "health", "crash", "availability"),
     }.get(family, ("secret", "token", "read"))
     if not any(word in observable for word in keywords):
         issues.append(

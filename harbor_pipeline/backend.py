@@ -369,6 +369,7 @@ def build_image(
         from .runtime_identity import inspect_runtime
         identity = inspect_runtime(
             digest, runner=run_in_image, product=product,
+            product_ref=product_ref,
             log_path=log_path.with_suffix(".identity.json"),
         )
     return ImageBuild(

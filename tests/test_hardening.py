@@ -544,3 +544,36 @@ def test_author_probe_caps_dos_targets(tmp_path):
     )
     assert text.count("    mem_limit: 1g") == 2
     assert text.count("    pids_limit: 512") == 2
+
+
+def test_runtime_identity_reads_php_app_version():
+    from harbor_pipeline.runtime_identity import inspect_runtime
+
+    def runner(image, command, **kwargs):
+        if command.startswith("php "):
+            return {
+                "exit": 0,
+                "output": '{"__app_name":"yeswiki/yeswiki","__app_version":"4.6.6"}',
+            }
+        return {"exit": 1, "output": ""}
+
+    report = inspect_runtime(
+        "image", runner=runner, product="yeswiki", product_ref="4.6.6"
+    )
+    assert report["verified"] is True
+    assert report["dependencies"] == {"yeswiki": "4.6.6"}
+    assert "php-app-version" in report["collectors"]
+
+
+def test_spec_consistency_accepts_new_goal_families():
+    from harbor_pipeline.spec import check_spec_consistency
+    for family, observable in (
+        ("server_request", "The target requests the verifier callback URL."),
+        ("service_unavailable", "The target health endpoint becomes unavailable."),
+    ):
+        spec = fixtures.cve_spec()
+        spec["task_goal"].update(
+            family=family, type=family, target_asset="/x", observable=observable
+        )
+        issues = check_spec_consistency(spec)
+        assert not any("Unknown task_goal.family" in issue for issue in issues)

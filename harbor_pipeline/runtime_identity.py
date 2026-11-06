@@ -35,12 +35,58 @@ for(const root of [process.cwd(),'/app','/opt/app','/usr/local/lib/node_modules'
 console.log(JSON.stringify(out));
 '''
 
+# PHP applications often publish their release in composer.json or a VERSION
+# file rather than a package-manager registry. Read both from the built image;
+# the author-side source is not trusted as identity evidence.
+PHP_METADATA = r'''
+$out = [];
+$roots = ["/app", "/opt/app", "/var/www/html", "/var/www"];
+foreach ($roots as $root) {
+    $composer = $root . "/composer.json";
+    if (is_file($composer)) {
+        $j = json_decode(@file_get_contents($composer), true);
+        if (is_array($j) && !empty($j["name"])) {
+            if (!empty($j["version"])) $out[$j["name"]] = $j["version"];
+            $out["__app_name"] = $j["name"];
+        }
+    }
+    foreach (["VERSION", "version.txt", "version.php"] as $name) {
+        $path = $root . "/" . $name;
+        if (!is_file($path)) continue;
+        $text = trim(@file_get_contents($path, false, null, 0, 4096));
+        if ($text !== "" && strlen($text) < 120) $out["__app_version"] = $text;
+    }
+    foreach (glob($root . "/vendor/composer/installed.json") ?: [] as $path) {
+        $j = json_decode(@file_get_contents($path), true);
+        $packages = $j["packages"] ?? $j;
+        if (!is_array($packages)) continue;
+        foreach ($packages as $pkg) {
+            if (!empty($pkg["name"]) && !empty($pkg["version"])) {
+                $out[$pkg["name"]] = $pkg["version"];
+            }
+        }
+    }
+}
+echo json_encode($out);
+'''
 
-def inspect_runtime(image: str, *, runner, product=None, log_path=None) -> dict:
+
+def _same_version(left: object, right: object) -> bool:
+    def norm(value: object) -> str:
+        text = str(value or "").strip()
+        return text[1:] if text[:1] in {"v", "V"} else text
+
+    return bool(left) and norm(left) == norm(right)
+
+
+def inspect_runtime(
+    image: str, *, runner, product=None, product_ref=None, log_path=None
+) -> dict:
     probes = [
         "python -I -c " + shlex.quote(PYTHON_METADATA),
         "python3 -I -c " + shlex.quote(PYTHON_METADATA),
         "node -e " + shlex.quote(NODE_METADATA),
+        "php -r " + shlex.quote(PHP_METADATA),
     ]
     packages = {}
     methods = []
@@ -58,6 +104,26 @@ def inspect_runtime(image: str, *, runner, product=None, log_path=None) -> dict:
             packages.update({str(k): str(v) for k, v in parsed.items() if isinstance(v, str)})
             methods.append(command.split()[0])
     from .dataset import canonical_project
+    app_name = str(packages.pop("__app_name", "") or "")
+    app_version = str(packages.pop("__app_version", "") or "")
+    if (
+        product
+        and product_ref
+        and not any(canonical_project(name) == canonical_project(product) for name in packages)
+        and app_version
+        and _same_version(app_version, product_ref)
+    ):
+        segments = {
+            canonical_project(part)
+            for part in app_name.lstrip("@").replace(":", "/").split("/")
+            if part
+        }
+        # A root composer project or a VERSION file is runtime source evidence,
+        # not a package registry digest. Require the declared release to match
+        # the ref the image was built from.
+        if not app_name or canonical_project(product) in segments:
+            packages[product] = app_version
+            methods.append("php-app-version")
     if product and not any(canonical_project(name) == canonical_project(product) for name in packages):
         binary_packages, binary_methods = inspect_binaries(image, runner=runner)
         packages.update(binary_packages)
