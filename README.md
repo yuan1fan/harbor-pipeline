@@ -81,6 +81,8 @@ agent 只能通过 `harbor-author` 接触外部世界：
    `solved / fair / guess_work / recommended_mode / missing_context / score / verdict / recommendations`。
 3. `verdict=revise` 或 `score < solver_min_score` 时，把评价发回**同一个 author 会话**，要求加白盒上下文或 hints；`decline` 则判 `UNSUPPORTED`；`release` 才进入 release 阶段。
 
+> 角色边界：**author 和 solver 是原生 Claude Code agent**（多轮、有工具；author 在宿主机受限运行，solver 在 Harbor 容器内运行）。**reviewer 不是 agent**：它是一次无工具的结构化 completion（provider `claude-cli`），只根据给定的 instruction、源码摘录、参考 PoC 和 solver 结果输出 JSON。reviewer 的 `score` 只用于决定是否把评价发回 author 修订，**不参与最终题目评分**；发布仍由固定 verifier 的 T01–T12 和 gates 决定。
+
 #### 黑盒 vs 白盒
 
 - `black_box`（默认）：只给 instruction。
@@ -95,6 +97,16 @@ agent 只能通过 `harbor-author` 接触外部世界：
 | 106103 (@quasar/icongenie profile 穿越) | 路由 fuzz 900s 超时，1.14M input tokens，失败 | `revise` / white_box / score 3 | 14 turns，$3.88；补 `/api/assets/stage`、schema、路径深度、`get-assets-files.js` 摘录 | 首次成功，228k tokens，$0.37 | `release` / score 4 / tier A |
 
 两个任务在 black-box 下都退化成“枚举路由/深度”的猜谜；白盒 + 针对性提示后，solver 都能从源码推理出利用链，reviewer 也认为路径可推导而非猜测。
+
+#### 规模批次（`solver_review = false`）
+
+| 批次 | 候选 | RELEASED (tier A) | UNSUPPORTED | QUARANTINED |
+|---|---|---|---|---|
+| r5 | 10 | 8 | 2（advisory 明确非端到端 / 容器验证后无法提供攻击者字节） | 0 |
+| r6 | 10 | 9 | 1（只暴露目录名、过滤文件，当前 listing 契约无法观察） | 0 |
+| **合计** | **20** | **17（85%）** | **3（15%）** | **0** |
+
+剔除不适合 Web 契约的 3 题后，可支持题目的发布率为 **17/17**；全部 tier A 且有完整 release 包。该批次为控成本关闭了 solver review，白盒/黑盒由 author 自判（17 题中 12 白盒、5 黑盒），后续应抽样开启 review，复核 hints 是否过强。
 
 ---
 
@@ -124,6 +136,7 @@ agent 只能通过 `harbor-author` 接触外部世界：
 - **认证题**：verifier 会额外用**去掉凭据**的同一参考 PoC 再打一次；仍然成功则判失败（说明认证不是必需前置条件）。
 - **质量档**：T11 通过 = A，否则 B；没有 100 分加权总分。
 - 评分输出：`task_gates`（卡点）、`framework_health`（框架自检）、`quality_tier` / `quality_flags`。
+- 评分器或验证器本身修复后，用 `recheck` 复用已存储的 matrix 重新评分：不重建镜像、不重跑试验；只有 admission 变回 `released` 才解除隔离并进入 release 重放。
 
 ### 3.3 权限与隔离
 
