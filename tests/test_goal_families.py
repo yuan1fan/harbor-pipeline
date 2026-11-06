@@ -249,7 +249,13 @@ def test_verifier_negatives_hold_for_write_and_listing_families(tmp_path: Path):
          "observable": "random filename listing"},
         pre,
     )
-    for spec in (write_spec, listing_spec):
+    request_spec = _spec(
+        {"family": "server_request", "type": "server_request",
+         "primitive": "ssrf", "target_asset": "/callback",
+         "observable": "The target requests the verifier callback URL."},
+        pre,
+    )
+    for spec in (write_spec, listing_spec, request_spec):
         results = verifier_regression_checks(spec, synthetic=True)
         assert results["T05"]["status"] == "artifact_missing"
         assert results["T06"]["status"] == "goal_failed"

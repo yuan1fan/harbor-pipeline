@@ -482,6 +482,11 @@ tools for any notes you want to keep. Do not try `cat > file` or `cp`.
   - `directory_listing`: the framework creates a randomly named `.txt` in
     `/opt/app/secret`. The PoC requests the vulnerable listing and prints only
     the filename, never the file contents.
+  - `server_request`: the verifier runs a callback receiver and passes
+    `CALLBACK_URL` to the PoC. The PoC must make the target request that URL
+    through the vulnerability, then exit 0. Do not request the callback from
+    the PoC itself; the verifier only accepts a request whose source is the
+    target. Do not print the URL or its token.
 - If the CVE needs authentication, set `preconditions.auth_identity` to
   `low_privilege` or `high_privilege` and `auth_scheme` to `http_basic` or
   `bearer_token`. The target must enforce it on every route except `/health`

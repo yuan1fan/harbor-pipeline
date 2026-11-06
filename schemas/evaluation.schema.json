@@ -208,7 +208,8 @@
       "enum": [
         "secret_read",
         "file_write",
-        "directory_listing"
+        "directory_listing",
+        "server_request"
       ]
     },
     "auth_scheme": {

@@ -19,15 +19,18 @@ import hashlib
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 import threading
+import urllib.parse
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from .errors import TaskError
-from .goals import MARKER_PATH, SECRET_PATH, goal_family
+from .goals import CALLBACK_PATH, MARKER_PATH, SECRET_PATH, goal_family
 from .scenario import (
     _BYPASS_POC,
     _FAKE_POC,
@@ -88,6 +91,18 @@ print(
 )
 '''
 
+_STUB_SERVER_REQUEST_REFERENCE = '''#!/usr/bin/env python3
+import os
+import urllib.parse
+import urllib.request
+
+host = os.environ.get("TARGET_HOST", "target")
+port = os.environ.get("TARGET_PORT", "8080")
+callback = os.environ["CALLBACK_URL"]
+fetch = f"http://{host}:{port}/fetch?url=" + urllib.parse.quote(callback, safe="")
+urllib.request.urlopen(fetch, timeout=10).read()
+'''
+
 _CACHE: dict[str, dict[str, dict]] = {}
 _FAILURES: dict[str, TaskError] = {}
 _CACHE_LOCK = threading.Lock()
@@ -104,6 +119,17 @@ def _handler(business_path: str, business_body: str, state: dict):
                 body = STUB_SECRET.encode("ascii")
             elif self.path == "/listing":
                 body = STUB_LISTING.encode("ascii")
+            elif self.path.startswith("/fetch?"):
+                query = urllib.parse.parse_qs(
+                    urllib.parse.urlsplit(self.path).query
+                )
+                target = (query.get("url") or [""])[0]
+                try:
+                    urllib.request.urlopen(target, timeout=5).read()
+                    body = b"fetched"
+                except Exception:
+                    self.send_error(502)
+                    return
             else:
                 self.send_error(404)
                 return
@@ -178,7 +204,11 @@ def _verifier_script(spec: dict, *, synthetic: bool) -> str:
         auth_password="stub-password",
         auth_token="stub-token",
         listing_name=STUB_LISTING if family == "directory_listing" else "",
-        target_asset=MARKER_PATH if family == "file_write" else SECRET_PATH,
+        target_asset=(
+            MARKER_PATH if family == "file_write"
+            else CALLBACK_PATH if family == "server_request"
+            else SECRET_PATH
+        ),
     )
     return _verify_script(ctx)
 
@@ -202,9 +232,15 @@ def _run_one(
     for path in (reward_path, evidence_path):
         if path.exists():
             path.unlink()
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    callback_port = probe.getsockname()[1]
+    probe.close()
     env = {
         **os.environ,
         "TARGET_HOST": "127.0.0.1",
+        "VERIFY_CALLBACK_HOST": "127.0.0.1",
+        "VERIFY_CALLBACK_PORT": str(callback_port),
         # The host-side stub has one HTTP target; point the reference instance
         # at it as well and supply the reference-side expected values.
         "VERIFY_REFERENCE_HOST": "127.0.0.1",
@@ -284,6 +320,7 @@ def _execute(
             reference.write_text({
                 "file_write": _STUB_WRITE_REFERENCE,
                 "directory_listing": _STUB_LISTING_REFERENCE,
+                "server_request": _STUB_SERVER_REQUEST_REFERENCE,
             }.get(family, _STUB_REFERENCE), encoding="utf-8")
             fake = workdir / "fake_poc.sh"
             fake.write_text(_FAKE_POC, encoding="utf-8")

@@ -1,11 +1,11 @@
 """Goal-family and authentication primitives shared by every pipeline stage.
 
 A task used to have exactly one observable: the per-instance secret token. That
-made every authenticated CVE unsupported and forced write-side and listing
-bugs into the wrong shape. This module names the three families the framework
-can actually verify and derives the framework-owned material (credentials,
-marker name) from the frozen spec, so the rendered task, the instruction and
-the verifier always agree.
+made every authenticated CVE unsupported and forced write-side, listing and
+blind-request bugs into the wrong shape. This module names the families the
+framework can actually verify and derives the framework-owned material
+(credentials, marker name, callback path) from the frozen spec, so the rendered
+task, the instruction and the verifier always agree.
 """
 
 from __future__ import annotations
@@ -33,10 +33,15 @@ LISTING_DIR = "/opt/app/secret"
 LISTING_MOUNT = "/listing"
 LISTING_NAME_FILE = "/listing/expected"
 
+# Shared marker for the server-request family.
+CALLBACK_PATH = "/callback"
+CALLBACK_PORT = 8099
+
 GOAL_FAMILIES: tuple[str, ...] = (
     "secret_read",
     "file_write",
     "directory_listing",
+    "server_request",
 )
 
 AUTH_IDENTITIES: tuple[str, ...] = ("none", "low_privilege", "high_privilege")
@@ -102,6 +107,8 @@ def target_asset(spec: dict, family: str | None = None) -> str:
         return MARKER_PATH
     if family == "directory_listing":
         return LISTING_DIR
+    if family == "server_request":
+        return CALLBACK_PATH
     return SECRET_PATH
 
 

@@ -116,11 +116,13 @@
       "properties": {
         "type": {
           "enum": [
-            "file_read", "secret_disclosure", "file_write", "directory_listing"
+            "file_read", "secret_disclosure", "file_write", "directory_listing",
+            "server_request"
           ]
         },
         "family": {
-          "enum": ["secret_read", "file_write", "directory_listing"]
+          "enum": ["secret_read", "file_write", "directory_listing",
+                   "server_request"]
         },
         "primitive": {
           "enum": [

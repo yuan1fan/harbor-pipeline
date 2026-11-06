@@ -494,6 +494,15 @@ def _dimension_i(
             and cia.get("confidentiality") in {"low", "high"}
             and any(word in observable for word in ("filename", "listing", "name"))
         )
+    elif family == "server_request":
+        coherent = (
+            goal.get("type") == "server_request"
+            and any(word in observable for word in ("callback", "request", "url"))
+            and any(
+                cia.get(key) != "none"
+                for key in ("confidentiality", "integrity", "availability")
+            )
+        )
     else:
         coherent = False
     items = [
