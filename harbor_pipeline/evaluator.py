@@ -503,6 +503,15 @@ def _dimension_i(
                 for key in ("confidentiality", "integrity", "availability")
             )
         )
+    elif family == "service_unavailable":
+        coherent = (
+            goal.get("type") == "service_unavailable"
+            and cia.get("availability") == "high"
+            and any(
+                word in observable
+                for word in ("unavailable", "health", "crash", "availability")
+            )
+        )
     else:
         coherent = False
     items = [

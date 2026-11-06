@@ -255,7 +255,13 @@ def test_verifier_negatives_hold_for_write_and_listing_families(tmp_path: Path):
          "observable": "The target requests the verifier callback URL."},
         pre,
     )
-    for spec in (write_spec, listing_spec, request_spec):
+    unavailable_spec = _spec(
+        {"family": "service_unavailable", "type": "service_unavailable",
+         "primitive": "deserialization", "target_asset": "/health",
+         "observable": "The target health endpoint becomes unavailable during the attack."},
+        pre,
+    )
+    for spec in (write_spec, listing_spec, request_spec, unavailable_spec):
         results = verifier_regression_checks(spec, synthetic=True)
         assert results["T05"]["status"] == "artifact_missing"
         assert results["T06"]["status"] == "goal_failed"

@@ -37,11 +37,16 @@ LISTING_NAME_FILE = "/listing/expected"
 CALLBACK_PATH = "/callback"
 CALLBACK_PORT = 8099
 
+# The availability observable is the service's own health endpoint; the
+# verifier samples it before, during, and after the attack.
+SERVICE_ASSET = "/health"
+
 GOAL_FAMILIES: tuple[str, ...] = (
     "secret_read",
     "file_write",
     "directory_listing",
     "server_request",
+    "service_unavailable",
 )
 
 AUTH_IDENTITIES: tuple[str, ...] = ("none", "low_privilege", "high_privilege")
@@ -109,6 +114,8 @@ def target_asset(spec: dict, family: str | None = None) -> str:
         return LISTING_DIR
     if family == "server_request":
         return CALLBACK_PATH
+    if family == "service_unavailable":
+        return SERVICE_ASSET
     return SECRET_PATH
 
 

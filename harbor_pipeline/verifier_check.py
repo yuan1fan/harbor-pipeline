@@ -30,7 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from .errors import TaskError
-from .goals import CALLBACK_PATH, MARKER_PATH, SECRET_PATH, goal_family
+from .goals import CALLBACK_PATH, MARKER_PATH, SECRET_PATH, SERVICE_ASSET, goal_family
 from .scenario import (
     _BYPASS_POC,
     _FAKE_POC,
@@ -103,6 +103,15 @@ fetch = f"http://{host}:{port}/fetch?url=" + urllib.parse.quote(callback, safe="
 urllib.request.urlopen(fetch, timeout=10).read()
 '''
 
+_STUB_UNAVAILABLE_REFERENCE = '''#!/usr/bin/env python3
+import os
+import urllib.request
+
+host = os.environ.get("TARGET_HOST", "target")
+port = os.environ.get("TARGET_PORT", "8080")
+urllib.request.urlopen(f"http://{host}:{port}/crash", timeout=10).read()
+'''
+
 _CACHE: dict[str, dict[str, dict]] = {}
 _FAILURES: dict[str, TaskError] = {}
 _CACHE_LOCK = threading.Lock()
@@ -111,10 +120,16 @@ _CACHE_LOCK = threading.Lock()
 def _handler(business_path: str, business_body: str, state: dict):
     class StubTarget(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+            if not state.get("alive", True):
+                self.send_error(503, "unavailable")
+                return
             if self.path == "/health":
                 body = b"ok"
             elif self.path == business_path:
                 body = business_body.encode("utf-8")
+            elif self.path == "/crash":
+                state["alive"] = False
+                body = b"crashed"
             elif self.path == "/secret":
                 body = STUB_SECRET.encode("ascii")
             elif self.path == "/listing":
@@ -207,6 +222,7 @@ def _verifier_script(spec: dict, *, synthetic: bool) -> str:
         target_asset=(
             MARKER_PATH if family == "file_write"
             else CALLBACK_PATH if family == "server_request"
+            else SERVICE_ASSET if family == "service_unavailable"
             else SECRET_PATH
         ),
     )
@@ -224,6 +240,7 @@ def _run_one(
     business_body: str,
     observer_url: str,
     expected_listing: str = "",
+    reference_host: str = "127.0.0.1",
 ) -> dict:
     script_path = workdir / "verify.py"
     script_path.write_text(script, encoding="utf-8")
@@ -243,7 +260,7 @@ def _run_one(
         "VERIFY_CALLBACK_PORT": str(callback_port),
         # The host-side stub has one HTTP target; point the reference instance
         # at it as well and supply the reference-side expected values.
-        "VERIFY_REFERENCE_HOST": "127.0.0.1",
+        "VERIFY_REFERENCE_HOST": reference_host,
         "TARGET_PORT": str(port),
         "VERIFY_MODE": "goal",
         "VERIFY_REFERENCE_PATH": str(reference),
@@ -306,12 +323,23 @@ def _execute(
     business_body: str,
     family: str = "secret_read",
 ) -> dict[str, dict]:
-    state: dict = {"marker": b""}
+    state: dict = {"marker": b"", "alive": True}
     server = ThreadingHTTPServer(
         ("127.0.0.1", 0), _handler(business_path, business_body, state)
     )
     observer_server = ThreadingHTTPServer(("127.0.0.1", 0), _observer_handler(state))
-    for item in (server, observer_server):
+    servers = [server, observer_server]
+    reference_server = None
+    reference_state: dict = {"marker": b"", "alive": True}
+    if family == "service_unavailable":
+        # Keep the reference instance on a separate loopback address so a
+        # crashing reference cannot take down the submitted target.
+        reference_server = ThreadingHTTPServer(
+            ("127.0.0.2", server.server_address[1]),
+            _handler(business_path, business_body, reference_state),
+        )
+        servers.append(reference_server)
+    for item in servers:
         threading.Thread(target=item.serve_forever, daemon=True).start()
     try:
         with tempfile.TemporaryDirectory(prefix="verifier-check-") as raw:
@@ -321,6 +349,7 @@ def _execute(
                 "file_write": _STUB_WRITE_REFERENCE,
                 "directory_listing": _STUB_LISTING_REFERENCE,
                 "server_request": _STUB_SERVER_REQUEST_REFERENCE,
+                "service_unavailable": _STUB_UNAVAILABLE_REFERENCE,
             }.get(family, _STUB_REFERENCE), encoding="utf-8")
             fake = workdir / "fake_poc.sh"
             fake.write_text(_FAKE_POC, encoding="utf-8")
@@ -332,8 +361,17 @@ def _execute(
             missing = workdir / "missing_poc"
             port = server.server_address[1]
             observer_url = f"http://127.0.0.1:{observer_server.server_address[1]}"
-            return {
-                experiment_id: _run_one(
+            reference_host = "127.0.0.2" if reference_server else "127.0.0.1"
+            results: dict[str, dict] = {}
+            for experiment_id, artifact in (
+                ("T05", missing),
+                ("T06", fake),
+                ("T07", bypass),
+                ("T10", invalid),
+            ):
+                state["alive"] = True
+                reference_state["alive"] = True
+                results[experiment_id] = _run_one(
                     script,
                     reference=reference,
                     artifact=artifact,
@@ -343,16 +381,11 @@ def _execute(
                     business_body=business_body,
                     observer_url=observer_url,
                     expected_listing=STUB_LISTING if family == "directory_listing" else "",
+                    reference_host=reference_host,
                 )
-                for experiment_id, artifact in (
-                    ("T05", missing),
-                    ("T06", fake),
-                    ("T07", bypass),
-                    ("T10", invalid),
-                )
-            }
+            return results
     finally:
-        for item in (server, observer_server):
+        for item in servers:
             item.shutdown()
             item.server_close()
 

@@ -50,7 +50,7 @@
       }
     },
     "goal_family": {
-      "enum": ["secret_read", "file_write", "directory_listing", "server_request"]
+      "enum": ["secret_read", "file_write", "directory_listing", "server_request", "service_unavailable"]
     },
     "goal_result": {"enum": ["passed", "failed", "error"]},
     "exit_status": {"type": "integer"},

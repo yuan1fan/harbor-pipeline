@@ -209,7 +209,8 @@
         "secret_read",
         "file_write",
         "directory_listing",
-        "server_request"
+        "server_request",
+        "service_unavailable"
       ]
     },
     "auth_scheme": {

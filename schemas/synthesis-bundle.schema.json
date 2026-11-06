@@ -117,18 +117,21 @@
         "type": {
           "enum": [
             "file_read", "secret_disclosure", "file_write", "directory_listing",
-            "server_request"
+            "server_request",
+            "service_unavailable"
           ]
         },
         "family": {
           "enum": ["secret_read", "file_write", "directory_listing",
-                   "server_request"]
+                   "server_request",
+                   "service_unavailable"]
         },
         "primitive": {
           "enum": [
             "path_traversal", "file_read", "ssrf", "sql_injection",
             "command_injection", "code_execution", "deserialization", "xxe",
-            "template_injection", "auth_bypass", "information_disclosure"
+            "template_injection", "auth_bypass", "information_disclosure",
+            "resource_exhaustion"
           ]
         },
         "target_asset": {"type": "string", "minLength": 1},

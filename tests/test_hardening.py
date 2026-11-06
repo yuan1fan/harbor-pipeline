@@ -436,3 +436,67 @@ def test_server_request_ignores_a_callback_from_the_wrong_source(tmp_path):
 def test_server_request_compose_exposes_callback_port():
     compose = _verifier_compose({"A": "1"})
     assert '      - "8099"' in compose
+
+
+def test_service_unavailable_family_normalizes_availability_goal(tmp_path):
+    from harbor_pipeline.goals import SERVICE_ASSET
+    from harbor_pipeline.synthesis import normalize_bundle
+    evidence = _write_evidence(tmp_path)
+    body = _bundle()
+    body["task_goal"].update(
+        family="service_unavailable",
+        type="service_unavailable",
+        primitive="deserialization",
+        target_asset=SERVICE_ASSET,
+        observable="The target health endpoint becomes unavailable during the attack.",
+    )
+    body["impact"]["cia"] = {
+        "confidentiality": "none", "integrity": "none", "availability": "none"
+    }
+    normalized, _, issues = normalize_bundle(
+        body, evidence=evidence, discovery=_discovery(), run_dir=tmp_path
+    )
+    assert not issues, issues
+    assert normalized["task_goal"]["family"] == "service_unavailable"
+    assert normalized["task_goal"]["type"] == "service_unavailable"
+    assert normalized["task_goal"]["target_asset"] == SERVICE_ASSET
+    assert normalized["impact"]["cia"]["availability"] == "high"
+
+
+def test_service_unavailable_verifier_requires_reference_and_submitted_outage(tmp_path):
+    ns = verifier(tmp_path, family="service_unavailable")
+    ns["run_attack"] = lambda path, host, **kwargs: (True, ("", "", 0))
+    evidence = ns["verify_one"]()
+    assert evidence["reward"] == 1
+    assert evidence["status"] == "goal_passed"
+    assert evidence["reference_observed"] and evidence["submitted_observed"]
+
+    ns = verifier(tmp_path, family="service_unavailable")
+    def only_reference(path, host, **kwargs):
+        return (path == ns["REFERENCE_PATH"], ("", "", 0))
+    ns["run_attack"] = only_reference
+    evidence = ns["verify_one"]()
+    assert evidence["reward"] == 0
+    assert evidence["status"] == "goal_failed"
+
+
+def test_service_unavailable_fixed_variant_must_stay_healthy(tmp_path):
+    ns = verifier(tmp_path, family="service_unavailable")
+    ns["run_attack"] = lambda path, host, **kwargs: (False, ("", "", 0))
+    evidence = ns["check_fixed_submission"]()
+    assert evidence["status"] == "fixed_variant_holds"
+    assert evidence["reward"] == 0
+
+    ns = verifier(tmp_path, family="service_unavailable")
+    ns["run_attack"] = lambda path, host, **kwargs: (
+        path != ns["REFERENCE_PATH"],
+        ("", "", 0),
+    )
+    evidence = ns["check_fixed_submission"]()
+    assert evidence["status"] == "fixed_variant_leaks"
+
+
+def test_service_unavailable_compose_caps_target_resources():
+    compose = _verifier_compose({"A": "1"}, limited=True)
+    assert "    mem_limit: 1g" in compose
+    assert "    pids_limit: 512" in compose
