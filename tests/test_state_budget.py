@@ -17,6 +17,20 @@ def test_state_machine_happy_path(tmp_path):
         store.transition(job, "GENERATED")
 
 
+def test_quarantine_can_be_lifted_after_a_verifier_fix(tmp_path):
+    """A scored quarantine is not terminal: recheck re-scores the stored
+    matrix and, when admission passes, hands the candidate back to release."""
+    store = JobStore(tmp_path, "run-recheck", "CVE-2024-0001")
+    job = store.create()
+    for target in ["EVIDENCE_READY", "SPEC_FROZEN", "GENERATED", "BUILT", "VALIDATING"]:
+        store.transition(job, target)
+    store.fail(store.load(), TaskError("attribution_failure", "V4 build lock"))
+    assert store.load().state == "QUARANTINED"
+    lifted = store.transition(store.load(), "VALIDATED", "recheck after verifier fix")
+    assert lifted.state == "VALIDATED"
+    assert store.transition(lifted, "RELEASED").state == "RELEASED"
+
+
 def test_illegal_transition_is_rejected(tmp_path):
     store = JobStore(tmp_path, "run-2", "CVE-2024-0001")
     job = store.create()

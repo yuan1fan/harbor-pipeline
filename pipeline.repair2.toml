@@ -6,6 +6,20 @@ workers = 4
 # workers * trial_workers * 2, so raise it only with host capacity.
 trial_workers = 2
 max_repairs = 6
+# Authoring is one native Claude Code session per candidate. ``legacy`` keeps
+# the old draft + JSON repair path for a fallback during the transition.
+authoring = "agent"
+author_max_resumes = 2
+author_build_runs = 16
+author_probe_runs = 30
+author_exec_runs = 30
+solver_review = true
+solver_attempts = 1
+solver_max_turns = 40
+solver_max_budget_usd = 3.0
+solver_agent_timeout_sec = 1800
+solver_timeout_sec = 2700
+solver_min_score = 3
 trials = 20
 min_trials = 20
 # Per-candidate model ceilings. The batch ledger multiplies these by the
@@ -31,10 +45,32 @@ max_output_tokens = 18000
 # Per CLI call; this is not a whole-run USD limit.
 max_budget_usd = 30.0
 
-# Every role uses a new request/session. Override any role independently.
-# Repair must return one JSON object containing whole files, so it uses the
-# completion endpoint for the same reason as synthesis: the CLI agentic model
-# emits tool calls (or DSML tool-call text) instead of JSON.
+# Native Claude Code authoring session. The model name is written into the
+# generated settings file; the gateway credentials stay in the child process
+# environment and are never persisted.
+[models.author]
+provider = "claude-code"
+model = "deepseek-flash[1m]"
+timeout_sec = 5400
+max_turns = 120
+autocompact = "400k"
+max_budget_usd = 12.0
+
+
+[models.solver]
+provider = "claude-code"
+model = "deepseek-flash-cyber"
+max_turns = 40
+max_budget_usd = 3.0
+timeout_sec = 1800
+
+[models.reviewer]
+provider = "claude-cli"
+model = "deepseek-flash-cyber"
+max_output_tokens = 12000
+timeout_sec = 600
+
+# Legacy completion roles. They are only used when authoring = "legacy".
 [models.repairer]
 provider = "anthropic"
 model = "deepseek-flash-cyber"

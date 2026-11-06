@@ -19,7 +19,7 @@ harbor-pipeline = "harbor_pipeline.cli:main"
 include = ["harbor_pipeline*"]
 
 [tool.setuptools.package-data]
-harbor_pipeline = ["prompts/*.md", "assets/*.py"]
+harbor_pipeline = ["prompts/*.md", "assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

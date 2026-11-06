@@ -26,7 +26,7 @@ from .state import new_run_id
 from .contracts import load_policy
 from .util import PipelineError, read_json
 
-STAGES = ("collect", "freeze", "generate", "build", "validate", "release")
+STAGES = ("collect", "freeze", "generate", "build", "validate", "solver", "release")
 
 EXIT_CODES = {
     "DISCOVERED": 3,
@@ -85,6 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor_cmd = sub.add_parser("doctor", help="check host, Harbor, Docker and policy")
     doctor_cmd.add_argument("--json", action="store_true")
+    doctor_cmd.add_argument(
+        "--agent",
+        action="store_true",
+        help="also run a tiny native Claude Code session (Read/Write tools)",
+    )
 
     preflight_cmd = sub.add_parser(
         "preflight", help="check Docker, disk, ports and concurrency before a batch"
@@ -112,6 +117,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_cve(run_cmd)
     _add_output_args(run_cmd)
     run_cmd.add_argument("--until", choices=STAGES, default="release")
+
+    recheck_cmd = sub.add_parser(
+        "recheck",
+        help="re-score a QUARANTINED candidate after a verifier/evaluator fix",
+    )
+    _add_cve(recheck_cmd)
+    _add_output_args(recheck_cmd)
 
     for stage in STAGES:
         stage_cmd = sub.add_parser(stage, help=f"advance one CVE up to {stage}")
@@ -256,6 +268,8 @@ def main(argv: list[str] | None = None) -> int:
             return _report_command(config, args)
         if args.command == "benchmark":
             return _benchmark(config, args)
+        if args.command == "recheck":
+            return _recheck(config, args)
         return _single(config, args)
     except PipelineError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -265,6 +279,35 @@ def main(argv: list[str] | None = None) -> int:
 # ---------------------------------------------------------------------------
 # Single candidate
 # ---------------------------------------------------------------------------
+
+
+def _recheck(config, args) -> int:
+    if not args.run_id:
+        print(
+            "error: recheck needs --run-id pointing at the quarantined run",
+            file=sys.stderr,
+        )
+        return 2
+    output_root = Path(args.output_dir) if args.output_dir else None
+    prune_orphan_task_resources()
+    pipeline = CvePipeline(
+        config=config,
+        cve_id=args.cve,
+        run_id=args.run_id,
+        profile=args.profile,
+        scenario=args.scenario,
+        workers=args.workers or config.pipeline.trial_workers,
+        output_root=output_root,
+    )
+    report = pipeline.recheck()
+    payload = report.to_json()
+    payload["report_path"] = str(pipeline.root / "report.json")
+    _write_json(Path(payload["report_path"]), payload)
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        _print_report(payload)
+    return EXIT_CODES.get(report.state, 3)
 
 
 def _single(config, args) -> int:
@@ -312,6 +355,25 @@ def _batch(config, args) -> int:
     # Reclaim networks from killed trials before Docker's address pool runs out.
     prune_orphan_task_resources()
     candidates, rejected = load_candidates(args.input)
+    if config.pipeline.authoring == "agent":
+        author = config.model_for("author")
+        attempts = config.pipeline.author_max_resumes + 2
+        per_calls = author.max_turns * attempts
+        per_tokens = config.pipeline.max_total_tokens * attempts
+        per_usd = (
+            author.max_budget_usd * attempts
+            + config.pipeline.solver_max_budget_usd
+            * config.pipeline.solver_attempts
+            * attempts
+        )
+    else:
+        # A repair reruns synthesis (with up to three JSON retries) and the
+        # matrix, so calls scale with max_repairs + 1 attempts.
+        per_calls = config.pipeline.max_calls * (config.pipeline.max_repairs + 2)
+        per_tokens = config.pipeline.max_total_tokens * (config.pipeline.max_repairs + 1)
+        per_usd = config.models["default"].max_budget_usd * (
+            config.pipeline.max_repairs + 2
+        )
     plan = plan_batch(
         candidates,
         rejected=rejected,
@@ -323,13 +385,9 @@ def _batch(config, args) -> int:
         max_repairs=config.pipeline.max_repairs,
         shard_index=args.shard_index,
         shard_count=args.shard_count,
-        # Convert the per-candidate model ceilings into shared-ledger limits.
-        # A repair reruns synthesis (with up to three JSON retries) and the
-        # matrix, so calls scale with max_repairs + 1 attempts.
-        per_candidate_calls=config.pipeline.max_calls * (config.pipeline.max_repairs + 2),
-        per_candidate_tokens=config.pipeline.max_total_tokens * (config.pipeline.max_repairs + 1),
-        per_candidate_usd=config.models["default"].max_budget_usd
-        * (config.pipeline.max_repairs + 2),
+        per_candidate_calls=per_calls,
+        per_candidate_tokens=per_tokens,
+        per_candidate_usd=per_usd,
     )
     if args.plan_only:
         plan_path = plan.root / "batch-plan.json"
@@ -567,6 +625,10 @@ def _doctor(config, args) -> int:
     report["supported_cves"] = supported_ids()
     report["policy"] = policy_summary
     report["models"] = _model_health(config)
+    if getattr(args, "agent", False):
+        agent_report = _agent_doctor(config)
+        report["agent"] = agent_report
+        report["ok"] = bool(report.get("ok")) and bool(agent_report.get("ok"))
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:
@@ -580,7 +642,68 @@ def _doctor(config, args) -> int:
             state = "ok" if health.get("ok") else "unavailable"
             detail = health.get("model") or health.get("error", "")
             print(f"  model[{role}]: {state} ({detail})")
+        agent = report.get("agent")
+        if agent:
+            mark = "ok" if agent.get("ok") else "FAIL"
+            print(
+                f"  [{mark}] native agent: status={agent.get('status')} "
+                f"turns={agent.get('turns')} {agent.get('error', '')[:200]}"
+            )
     return 0 if report["ok"] else 1
+
+
+def _agent_doctor(config) -> dict:
+    """Run one tiny native session to prove auth, tools and permissions work."""
+    import dataclasses
+    import tempfile
+
+    from .agent import ClaudeCodeAgent, build_agent_settings
+    from .util import write_json
+
+    settings = dataclasses.replace(
+        config.model_for("author"), max_turns=8, max_budget_usd=0.5, timeout_sec=120
+    )
+    config = dataclasses.replace(
+        config,
+        models={**config.models, "author": settings},
+    )
+    root = Path(tempfile.mkdtemp(prefix="harbor-agent-doctor-"))
+    workspace = root / "ws"
+    workspace.mkdir()
+    (workspace / "hello.txt").write_text("AUTHOR-OK\n", encoding="utf-8")
+    permissions = build_agent_settings(settings.model)
+    permissions["permissions"]["allow"] = ["Read", "Write", "Edit", "Grep", "Glob"]
+    settings_path = root / "settings.json"
+    write_json(settings_path, permissions)
+    try:
+        agent = ClaudeCodeAgent(config, role="author")
+        outcome = agent.run(
+            prompt=(
+                "Read hello.txt and write its exact contents to answer.txt. "
+                "If the Write tool is unavailable, use Edit to create answer.txt. "
+                "Then stop."
+            ),
+            workspace=workspace,
+            contract=(
+                "You are a native-tool smoke test. Use Read and Write/Edit only."
+            ),
+            settings_path=settings_path,
+        )
+    except Exception as exc:  # noqa: BLE001 - doctor must report, not raise
+        return {"ok": False, "status": "unavailable", "error": str(exc)}
+    answer = workspace / "answer.txt"
+    ok = answer.is_file() and answer.read_text(
+        encoding="utf-8", errors="replace"
+    ).strip() == "AUTHOR-OK"
+    return {
+        "ok": ok,
+        "status": outcome.status,
+        "session_id": outcome.session_id,
+        "turns": outcome.turns,
+        "usd": outcome.usd,
+        "error": outcome.error[:1000],
+        "workspace": str(workspace),
+    }
 
 
 def _report_command(config, args) -> int:
@@ -638,6 +761,13 @@ def _model_health(config) -> dict:
             health[role] = dict(build_provider(config, role).health())
         except Exception as exc:  # noqa: BLE001 - absence is reported, not fatal
             health[role] = {"ok": False, "error": str(exc)}
+    if config.pipeline.authoring == "agent":
+        try:
+            from .agent import ClaudeCodeAgent
+
+            health["author"] = ClaudeCodeAgent(config, role="author").health()
+        except Exception as exc:  # noqa: BLE001 - absence is reported
+            health["author"] = {"ok": False, "error": str(exc)}
     return health
 
 

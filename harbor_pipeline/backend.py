@@ -23,6 +23,15 @@ from .errors import TaskError
 from .util import PipelineError, no_window_kwargs, read_json, write_json
 
 _CACHE_RE = re.compile(r"(?im)^\s*(?:=>\s*)?CACHED\s*$")
+# Package registries and mirrors fail transiently under load. Retrying these
+# once inside the build is cheaper than handing the author a network blip and
+# making it change a correct Dockerfile.
+_TRANSIENT_BUILD = re.compile(
+    r"(?i)ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket disconnected|"
+    r"Temporary failure|502 Bad Gateway|503 Service Unavailable|"
+    r"Could not resolve host|Connection reset by peer|"
+    r"failed to fetch|network is unreachable"
+)
 
 
 @dataclass
@@ -185,20 +194,39 @@ def inspect_image(image_ref: str, *, dockerfile: Path) -> tuple[str, str]:
     return parts[0], (parts[1] if len(parts) > 1 else "unknown")
 
 
-def dependency_lock(context: Path) -> dict[str, str]:
-    """Best-effort pinned dependency list for the target image."""
+def dependency_lock(
+    context: Path,
+    *,
+    product: str | None = None,
+    ref: str | None = None,
+) -> dict[str, str]:
+    """Best-effort pinned dependency list for the target image.
+
+    A synthesized target may vendor the component's upstream source instead of
+    installing it from a package registry (for example a Go service built from
+    a pinned tarball). In that case there is no package lock entry to read, but
+    the target Dockerfile names the pinned ref directly. Recording it keeps the
+    V4 build-lock gate meaning "the built target is the vulnerable version"
+    rather than "the component must be a registry dependency".
+    """
     lock: dict[str, str] = {}
     requirements = context / "requirements.txt"
     if requirements.is_file():
         for line in requirements.read_text(encoding="utf-8").splitlines():
             line = line.split("#", 1)[0].strip()
+            # Drop environment markers and extras so the lock key is the
+            # distribution name, not `name[extra]` or `version; python_...`.
+            line = line.split(";", 1)[0].strip()
             if not line or line.startswith("-"):
                 continue
+            match = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*)", line)
+            if not match:
+                continue
+            name = match.group(1)
             if "==" in line:
-                name, version = line.split("==", 1)
-                lock[name.strip()] = version.strip()
+                lock[name] = line.split("==", 1)[1].strip()
             else:
-                lock[line] = "unpinned"
+                lock[name] = "unpinned"
     package_json = context / "package.json"
     if package_json.is_file():
         try:
@@ -213,6 +241,17 @@ def dependency_lock(context: Path) -> dict[str, str]:
     pom = context / "pom.xml"
     if pom.is_file():
         lock.update(_pom_dependencies(pom))
+    if product and ref and product not in lock:
+        dockerfile = context / "Dockerfile"
+        try:
+            text = dockerfile.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        lowered = product.lower()
+        for line in text.splitlines():
+            if ref in line and lowered in line.lower():
+                lock[product] = ref
+                break
     return lock
 
 
@@ -282,6 +321,8 @@ def build_image(
     dockerfile: Path | None = None,
     no_cache: bool = False,
     build_args: dict[str, str] | None = None,
+    product: str | None = None,
+    product_ref: str | None = None,
 ) -> ImageBuild:
     if not context.is_dir():
         raise TaskError("build_error", f"Missing build context {context}")
@@ -303,9 +344,16 @@ def build_image(
         command.extend(["--build-arg", f"{key}={value}"])
     command.append(str(context))
     started = time.monotonic()
-    completed = _run(command, timeout=timeout_sec, log_path=log_path)
-    if completed.returncode != 0:
-        tail = (completed.stderr or completed.stdout or "").strip().splitlines()[-8:]
+    completed = None
+    for attempt in range(2):
+        completed = _run(command, timeout=timeout_sec, log_path=log_path)
+        if completed.returncode == 0:
+            break
+        output = (completed.stderr or "") + (completed.stdout or "")
+        if attempt == 0 and _TRANSIENT_BUILD.search(output):
+            time.sleep(5)
+            continue
+        tail = output.strip().splitlines()[-8:]
         raise TaskError(
             "build_error",
             f"docker build failed for {name}: " + " | ".join(tail),
@@ -323,7 +371,7 @@ def build_image(
         duration_sec=duration,
         log_path=log_path,
         cached=bool(_CACHE_RE.search(completed.stdout or "")),
-        dependencies=dependency_lock(context),
+        dependencies=dependency_lock(context, product=product, ref=product_ref),
     )
 
 
@@ -337,31 +385,87 @@ def build_task_images(
     no_cache: bool = False,
     harbor_version: str = "0.23.0",
     tag_base: str | None = None,
+    target_only: bool = False,
+    environment_image: str | None = None,
+    product: str | None = None,
+    product_ref: str | None = None,
 ) -> dict:
-    """Build agent, target, and verifier images and return an image set.
+    """Build the target and verifier images and return an image set.
 
     ``tag_base`` defaults to the legacy task-directory-derived name; the
     pipeline passes an explicit CVE-based base so the fixed variant (rendered
     into a scratch directory) still gets the same prefix the probes pin.
+
+    The agent image is byte-identical for every synthesized task, so
+    ``target_only`` takes a globally prebuilt ``environment_image`` and
+    inspects it instead of rebuilding it. The verifier image is *not* generic:
+    Harbor bakes the task's ``tests/`` into it, and a pinned generic verifier
+    would run an empty ``/tests``. It stays a per-variant build, but it is a
+    thin ``COPY tests`` layer.
     """
     tag_base = (
         tag_base
         or f"harbor-pipeline/{task_dir.parent.name}-{variant}-r{revision}"
     ).lower()
-    builds = {}
-    plans = {
-        "agent": (task_dir / "environment", f"{tag_base}-agent"),
-        "target": (task_dir / "environment" / "target", f"{tag_base}-target"),
-        "verifier": (task_dir / "tests", f"{tag_base}-verifier"),
-    }
-    for name, (context, ref) in plans.items():
+    builds: dict[str, ImageBuild] = {}
+    target_context = task_dir / "environment" / "target"
+    if not target_context.is_dir():
+        raise TaskError(
+            "build_error", f"Task is missing the target build context {target_context}"
+        )
+    builds["target"] = build_image(
+        name="target",
+        context=target_context,
+        image_ref=f"{tag_base}-target",
+        log_path=log_dir / "build-target.log",
+        timeout_sec=timeout_sec,
+        no_cache=no_cache,
+        product=product,
+        product_ref=product_ref,
+    )
+    tests_context = task_dir / "tests"
+    if not tests_context.is_dir():
+        raise TaskError(
+            "build_error", f"Task is missing the verifier context {tests_context}"
+        )
+    builds["verifier"] = build_image(
+        name="verifier",
+        context=tests_context,
+        image_ref=f"{tag_base}-verifier",
+        log_path=log_dir / "build-verifier.log",
+        timeout_sec=timeout_sec,
+        no_cache=no_cache,
+    )
+    if target_only:
+        if not environment_image:
+            raise TaskError(
+                "build_error",
+                "target_only build needs a prebuilt agent environment image",
+            )
+        dockerfile = task_dir / "environment" / "Dockerfile"
+        image_digest, architecture = inspect_image(environment_image, dockerfile=dockerfile)
+        builds["agent"] = ImageBuild(
+            name="agent",
+            context=task_dir / "environment",
+            dockerfile=dockerfile,
+            image_ref=environment_image,
+            image_digest=image_digest,
+            architecture=architecture,
+            duration_sec=0.0,
+            log_path=log_dir / "build-agent.log",
+            cached=True,
+        )
+    else:
+        context = task_dir / "environment"
         if not context.is_dir():
-            raise TaskError("build_error", f"Task is missing the {name} build context {context}")
-        builds[name] = build_image(
-            name=name,
+            raise TaskError(
+                "build_error", f"Task is missing the agent build context {context}"
+            )
+        builds["agent"] = build_image(
+            name="agent",
             context=context,
-            image_ref=ref,
-            log_path=log_dir / f"build-{name}.log",
+            image_ref=f"{tag_base}-agent",
+            log_path=log_dir / "build-agent.log",
             timeout_sec=timeout_sec,
             no_cache=no_cache,
         )

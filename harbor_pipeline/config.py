@@ -29,6 +29,23 @@ class Settings:
     command_timeout_sec: int = 300
     python_image: str = "python:3.12.10-slim-bookworm"
     require_harbor_lint: bool = True
+    # ``agent`` authors with a native Claude Code session; ``legacy`` keeps
+    # the old one-shot draft plus JSON repair loop available for one release.
+    authoring: str = "agent"
+    author_max_resumes: int = 2
+    author_build_runs: int = 8
+    author_probe_runs: int = 20
+    author_exec_runs: int = 20
+    # Solver feedback: run a real claude-code solver against the task, then
+    # review it with the intended solution. A revise verdict resumes the author.
+    solver_review: bool = True
+    solver_attempts: int = 1
+    solver_max_turns: int = 40
+    solver_max_budget_usd: float = 3.0
+    # The Harbor task's [agent] timeout, and the enclosing job timeout.
+    solver_agent_timeout_sec: int = 1800
+    solver_timeout_sec: int = 2700
+    solver_min_score: int = 3
 
 
 @dataclass
@@ -40,6 +57,9 @@ class ModelSettings:
     max_budget_usd: float = 3.0
     api_base: str = "https://api.anthropic.com"
     api_version: str = "2023-06-01"
+    # Native agent sessions only. Completion providers ignore these.
+    max_turns: int = 80
+    autocompact: str = "400k"
 
 
 @dataclass
@@ -62,6 +82,9 @@ class Config:
     pipeline: Settings = field(default_factory=Settings)
     models: dict[str, ModelSettings] = field(default_factory=lambda: {"default": ModelSettings()})
     sources: SourceSettings = field(default_factory=SourceSettings)
+    # The file this configuration came from, so a helper process can reload
+    # the same source limits and authoring budgets.
+    source_path: Path | None = None
 
     def model_for(self, role: str) -> ModelSettings:
         return self.models.get(role, self.models["default"])
@@ -90,6 +113,7 @@ def load_config(path: Path | None = None) -> Config:
             pipeline=Settings(**raw.get("pipeline", {})),
             models={name: ModelSettings(**(defaults | data)) for name, data in raw.get("models", {"default": {}}).items()},
             sources=SourceSettings(**raw.get("sources", {})),
+            source_path=Path(path).resolve() if path else None,
         )
         config.models.setdefault("default", ModelSettings(**defaults))
     except TypeError as exc:
@@ -104,9 +128,28 @@ def load_config(path: Path | None = None) -> Config:
             raise PipelineError(f"{name} must be a positive integer")
     if settings.max_repairs < 0:
         raise PipelineError("max_repairs must be nonnegative")
+    if settings.authoring not in {"agent", "legacy"}:
+        raise PipelineError("authoring must be 'agent' or 'legacy'")
+    for name in ("author_max_resumes", "author_build_runs", "author_probe_runs", "author_exec_runs"):
+        if not isinstance(getattr(settings, name), int) or getattr(settings, name) < 0:
+            raise PipelineError(f"{name} must be a nonnegative integer")
+    for name in (
+        "solver_attempts",
+        "solver_max_turns",
+        "solver_agent_timeout_sec",
+        "solver_timeout_sec",
+    ):
+        if not isinstance(getattr(settings, name), int) or getattr(settings, name) < 1:
+            raise PipelineError(f"{name} must be a positive integer")
+    if settings.solver_max_budget_usd <= 0:
+        raise PipelineError("solver_max_budget_usd must be positive")
+    if not 1 <= settings.solver_min_score <= 5:
+        raise PipelineError("solver_min_score must be between 1 and 5")
     for model in config.models.values():
-        if model.provider not in {"claude-cli", "anthropic", "fixture"}:
+        if model.provider not in {"claude-cli", "anthropic", "fixture", "claude-code"}:
             raise PipelineError(f"Unknown provider: {model.provider}")
         if model.timeout_sec <= 0 or model.max_output_tokens < 1 or model.max_budget_usd <= 0:
             raise PipelineError("Model budgets and timeouts must be positive")
+        if model.provider == "claude-code" and model.max_turns < 1:
+            raise PipelineError("max_turns must be positive for claude-code")
     return config

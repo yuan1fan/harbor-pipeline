@@ -288,7 +288,6 @@ def test_normalize_moves_a_target_file_emitted_beside_files(tmp_path: Path):
 
 
 def test_focused_poc_asks_only_for_the_missing_object(tmp_path: Path):
-    from types import SimpleNamespace
 
     from harbor_pipeline.budget import DEFAULT_LIMITS, Ledger
     from harbor_pipeline.config import Config

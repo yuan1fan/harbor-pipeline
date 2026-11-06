@@ -30,7 +30,7 @@ STATES: tuple[str, ...] = (
 
 TRANSITIONS: dict[str, frozenset[str]] = {
     "DISCOVERED": frozenset({"EVIDENCE_READY", "QUARANTINED", "UNSUPPORTED"}),
-    "EVIDENCE_READY": frozenset({"SPEC_FROZEN", "QUARANTINED", "UNSUPPORTED"}),
+    "EVIDENCE_READY": frozenset({"SPEC_FROZEN", "QUARANTINED", "UNSUPPORTED", "REPAIRING"}),
     "SPEC_FROZEN": frozenset({"GENERATED", "QUARANTINED", "UNSUPPORTED"}),
     "GENERATED": frozenset({"BUILT", "QUARANTINED", "REPAIRING"}),
     "BUILT": frozenset({"VALIDATING", "QUARANTINED", "REPAIRING"}),
@@ -38,7 +38,7 @@ TRANSITIONS: dict[str, frozenset[str]] = {
     "VALIDATED": frozenset({"RELEASED", "QUARANTINED", "REPAIRING"}),
     "RELEASED": frozenset(),
     "REPAIRING": frozenset({"GENERATED", "QUARANTINED"}),
-    "QUARANTINED": frozenset({"REPAIRING"}),
+    "QUARANTINED": frozenset({"REPAIRING", "VALIDATED"}),
     "UNSUPPORTED": frozenset(),
 }
 

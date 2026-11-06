@@ -86,6 +86,29 @@
         }
       }
     },
+    "presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "reason"],
+      "properties": {
+        "mode": {"enum": ["black_box", "white_box"]},
+        "reason": {"type": "string", "minLength": 10, "maxLength": 1000},
+        "hints": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {"type": "string", "minLength": 1, "maxLength": 300}
+        },
+        "source_paths": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "string",
+            "maxLength": 120,
+            "pattern": "^(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+$"
+          }
+        }
+      }
+    },
     "task_goal": {
       "type": "object",
       "additionalProperties": false,

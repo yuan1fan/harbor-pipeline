@@ -10,7 +10,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import SCHEMA_VERSION
-from .backend import build_task_images, preflight_target, prune_task_images, run_in_image
+from .backend import (
+    build_task_images,
+    dependency_lock,
+    preflight_target,
+    prune_task_images,
+    run_in_image,
+)
 from .config import Config
 from .contracts import (
     MAX_MATRIX_REPEATS,
@@ -19,8 +25,12 @@ from .contracts import (
     matrix_repeats,
     validate,
 )
+from . import author_probe
+from . import authoring
 from . import discovery as discovery_mod
+from . import solver_review as solver_review_mod
 from . import synthesis as synthesis_mod
+from .agent import ClaudeCodeAgent, AgentOutcome
 from .cves import (
     artifact_identity_from_evidence,
     get_optional,
@@ -50,7 +60,6 @@ from .repair import (
     MAX_BUILD_RUNS,
     MAX_VERIFIER_RUNS,
     POC_PATH,
-    AuthoringState,
     RepairEngine,
     RepairTools,
     repair_log_entry,
@@ -58,7 +67,14 @@ from .repair import (
 from .sources import EvidenceCollector
 from .spec import check_evidence_links, check_spec_consistency, freeze
 from .state import JobStore, new_run_id
-from .util import PipelineError, digest, image_base as image_tag_base
+from .util import (
+    PipelineError,
+    digest,
+    image_base as image_tag_base,
+    read_json,
+    utc_now_text,
+    write_json,
+)
 
 # Categories the bounded repair loop may edit environment/ for. The same set
 # gates a resume: re-running identical inputs reproduces the same verdict, so
@@ -109,6 +125,7 @@ class PipelineReport:
     trials: list[dict]
     error: dict | None
     budget: dict
+    solver_review: dict | None = None
 
     def to_json(self) -> dict:
         return {
@@ -126,6 +143,7 @@ class PipelineReport:
             "trials": self.trials,
             "error": self.error,
             "budget": self.budget,
+            "solver_review": self.solver_review,
         }
 
 
@@ -177,6 +195,8 @@ class CvePipeline:
         # attempt ends so the exec tool can inspect the real installed package.
         self._repair_images: dict[str, str] = {}
         self._repair_prune_bases: list[str] = []
+        self._base_images: dict | None = None
+        self._author_outcome: AgentOutcome | None = None
 
     # -- facility ----------------------------------------------------------
 
@@ -534,6 +554,10 @@ class CvePipeline:
                         log_dir=self.store.path("build-logs") / f"debug-{variant}",
                         timeout_sec=self.config.pipeline.command_timeout_sec,
                         harbor_version=self.capabilities.harbor_version,
+                        product=spec["product"]["name"],
+                        product_ref=spec["versions"][
+                            "vulnerable_ref" if variant == "vulnerable" else "fixed_ref"
+                        ],
                     )
                 except TaskError as exc:
                     ledger.refund(reservation)
@@ -741,6 +765,10 @@ class CvePipeline:
                         log_dir=self.store.path("build-logs") / f"debug-{variant}",
                         timeout_sec=self.config.pipeline.command_timeout_sec,
                         harbor_version=self.capabilities.harbor_version,
+                        product=spec["product"]["name"],
+                        product_ref=spec["versions"][
+                            "vulnerable_ref" if variant == "vulnerable" else "fixed_ref"
+                        ],
                     )
                 except TaskError as exc:
                     ledger.refund(reservation)
@@ -846,10 +874,34 @@ class CvePipeline:
         repeats = max(self.profile.trials, MAX_MATRIX_REPEATS)
         per_matrix = mandatory + 2 * repeats + 3
         repairs = max(0, self.config.pipeline.max_repairs)
-        # ``max_calls`` and ``max_total_tokens`` are per-candidate ceilings, but
-        # the ledger is per run: a repair launches another synthesis plus up to
-        # three JSON retries, so the model budget must scale with the repair
-        # loop instead of being spent once by the first candidate.
+        agent_authoring = self.config.pipeline.authoring == "agent"
+        author_model = self.config.model_for("author")
+        resumes = max(0, self.config.pipeline.author_max_resumes) if agent_authoring else 0
+        if agent_authoring:
+            # One native session can use many turns, and every resume is a new
+            # session. The ledger is per run, so the ceiling covers both.
+            calls = float(author_model.max_turns * (resumes + 2))
+            tokens = float(self.config.pipeline.max_total_tokens * (resumes + 2))
+            usd = float(
+                author_model.max_budget_usd * (resumes + 2)
+                + self.config.pipeline.solver_max_budget_usd
+                * self.config.pipeline.solver_attempts
+                * (resumes + 2)
+            )
+            builds = float(
+                2 * (self.config.pipeline.author_build_runs + repairs + 1) + 4
+            )
+            wall_sec = 4.0 * max(3600.0, float(author_model.timeout_sec)) * (resumes + 2)
+        else:
+            calls = float(self.config.pipeline.max_calls * (repairs + 2))
+            tokens = float(self.config.pipeline.max_total_tokens * (repairs + 1))
+            usd = float(self.config.models["default"].max_budget_usd * (repairs + 2))
+            builds = float(
+                6 * (repairs + 1)
+                + 6 * (MAX_VERIFIER_RUNS + MAX_BUILD_RUNS) * repairs
+                + 4
+            )
+            wall_sec = 7200.0
         limits = {
             # A repair agent may run the paired verifier up to
             # MAX_VERIFIER_RUNS times.
@@ -860,18 +912,11 @@ class CvePipeline:
                     + 2 * MAX_VERIFIER_RUNS * repairs + 10,
                 )
             ),
-            # Both variants are built per revision (agent/target/verifier each).
-            # Each build or verifier tool call builds six more images for the
-            # pair; the ceiling covers both tool budgets.
-            "builds": float(
-                6 * (repairs + 1)
-                + 6 * (MAX_VERIFIER_RUNS + MAX_BUILD_RUNS) * repairs
-                + 4
-            ),
-            "wall_sec": 7200.0,
-            "calls": float(self.config.pipeline.max_calls * (repairs + 2)),
-            "tokens": float(self.config.pipeline.max_total_tokens * (repairs + 1)),
-            "usd": float(self.config.models["default"].max_budget_usd * (repairs + 2)),
+            "builds": builds,
+            "wall_sec": wall_sec,
+            "calls": calls,
+            "tokens": tokens,
+            "usd": usd,
         }
         return Ledger.load_or_create(self.root / "budget.json", limits=limits)
 
@@ -960,14 +1005,227 @@ class CvePipeline:
         return evidence
 
     def draft(self, evidence: dict):
-        """Generate the initial task-bundle draft; resume from disk when possible.
+        """Author the initial task and return its validated synthesis bundle.
 
-        This is deliberately a completion-only draft generator, not the
-        verified author. The fixed pipeline tests the draft immediately:
-        ``build`` starts the target and the first T03/T04 pair is the draft
-        gate. A failure there goes to the tool-using repair agent; only a
-        passing pair proceeds to the rest of the matrix.
+        ``authoring = "agent"`` runs one native Claude Code session that reads
+        the evidence, writes the application and the exploit, builds, probes
+        and submits. ``legacy`` keeps the old one-shot draft for a fallback.
         """
+        if not self.auto:
+            return None
+        if self.config.pipeline.authoring == "agent":
+            return self.author(evidence)
+        return self._legacy_draft(evidence)
+
+    def author(self, evidence: dict):
+        """Run the native authoring session; resume from disk when possible."""
+        if self.synthesis is not None:
+            return self.synthesis
+        try:
+            self.synthesis = synthesis_mod.load(self.store.root, self.cve_id)
+            return self.synthesis
+        except TaskError:
+            raise
+        except (PipelineError, OSError):
+            pass
+        if self.discovery is None:
+            self.discovery = discovery_mod.load(self.store.root, self.cve_id)
+        negation = synthesis_mod._negated_exploit(
+            synthesis_mod._corpus(evidence, self.store.root)
+        )
+        if negation:
+            raise TaskError(
+                "unsupported", negation, detail={"unsupported_reason": negation}
+            )
+        workspace = authoring.prepare_workspace(
+            run_dir=self.store.root,
+            cve_id=self.cve_id,
+            discovery=self.discovery,
+            evidence=evidence,
+            revision=self.store.load().revision,
+            model=self.config.model_for("author").model,
+        )
+        recorded: dict = {}
+        try:
+            recorded = self.store.read_artifact("author-session.json").get("outcome") or {}
+        except PipelineError:
+            recorded = {}
+        previous_session = str(recorded.get("session_id") or "")
+        if workspace.submission_path.is_file():
+            # A submission may already be on disk after a crash or a budget
+            # stop. Consume it without spending another session; only a stale
+            # or invalid tree sends the agent back to work.
+            replay = AgentOutcome(
+                status=str(recorded.get("status") or "completed"),
+                session_id=previous_session,
+                turns=int(recorded.get("turns") or 0),
+                usage=dict(recorded.get("usage") or {}),
+                usd=recorded.get("usd"),
+            )
+            try:
+                return self._consume_author_workspace(workspace, replay)
+            except TaskError as exc:
+                if exc.category.code == "unsupported":
+                    raise
+                try:
+                    workspace.submission_path.unlink()
+                except OSError:
+                    pass
+        # The verifier/environment images are task-independent. Build them
+        # before the agent starts so its first `harbor-author build` only pays
+        # for the two target images instead of two extra Python base builds.
+        if self._base_images is None:
+            try:
+                self._base_images = author_probe.ensure_base_images(
+                    probe_root=self.store.path("author-probe", "base-images"),
+                    log_dir=self.store.path("build-logs"),
+                    timeout_sec=self.config.pipeline.command_timeout_sec,
+                )
+            except TaskError as exc:
+                raise TaskError(
+                    "build_error", f"Base images could not be built: {exc}"
+                ) from exc
+        if previous_session:
+            # An interrupted or provider-failed session still has its context;
+            # continue it instead of starting over from the evidence.
+            prompt = authoring.resume_prompt(
+                "The previous authoring session ended before a submission. "
+                "Continue from the current workspace and submit or decline."
+            )
+        else:
+            prompt = authoring.first_prompt(self.cve_id)
+        outcome = self._run_author_session(
+            workspace, prompt=prompt, resume=previous_session or None
+        )
+        return self._consume_author_workspace(workspace, outcome)
+
+    def _run_author_session(
+        self,
+        workspace: authoring.AuthorWorkspace,
+        *,
+        prompt: str,
+        resume: str | None,
+    ) -> AgentOutcome:
+        agent = ClaudeCodeAgent(self.config, role="author")
+        extra_env = {
+            "HARBOR_AUTHOR_REVISION": str(self.store.load().revision),
+            "HARBOR_AUTHOR_CVE": self.cve_id,
+        }
+        if self.config.source_path:
+            extra_env["HARBOR_AUTHOR_CONFIG"] = str(self.config.source_path)
+        outcome = agent.run(
+            prompt=prompt,
+            workspace=workspace.root,
+            contract=workspace.contract,
+            settings_path=workspace.settings_path,
+            extra_env=extra_env,
+            resume=resume,
+        )
+        # The completion providers reserved per call; a native session reports
+        # its totals once. Charge what the CLI reported without turning a
+        # completed submission into a budget failure.
+        try:
+            ledger = self._ledger()
+            usage = outcome.usage or {}
+            tokens = sum(
+                int(usage.get(key, 0) or 0)
+                for key in (
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_creation_input_tokens",
+                    "cache_read_input_tokens",
+                )
+            )
+            if tokens:
+                ledger.charge("tokens", tokens)
+            ledger.charge("calls", max(1, int(outcome.turns or 1)))
+            if outcome.usd:
+                ledger.charge("usd", float(outcome.usd))
+        except (PipelineError, ValueError):
+            pass
+        self._author_outcome = outcome
+        self.store.write_artifact(
+            "author-session.json",
+            {
+                "cve_id": self.cve_id,
+                "revision": self.store.load().revision,
+                "workspace": str(workspace.root),
+                "outcome": outcome.to_json(),
+                "recorded_at": utc_now_text(),
+            },
+        )
+        return outcome
+
+    def _consume_author_workspace(
+        self,
+        workspace: authoring.AuthorWorkspace,
+        outcome: AgentOutcome,
+    ) -> "synthesis_mod.Synthesis":
+        """Turn the submitted tree into the synthesis bundle the pipeline uses."""
+        if workspace.declined_path.is_file():
+            declined = read_json(workspace.declined_path)
+            reason = str(declined.get("reason") or "the author declined")[:1000]
+            raise TaskError(
+                "unsupported", reason, detail={"unsupported_reason": reason}
+            )
+        if not workspace.submission_path.is_file():
+            category = (
+                "infra_error"
+                if outcome.status in {"auth_error", "provider_error", "timeout"}
+                else "generation_error"
+            )
+            detail = outcome.error or outcome.result_text or outcome.status
+            raise TaskError(
+                category,
+                f"Authoring session produced no submission: {detail[:1200]}",
+                detail={"author_status": outcome.status},
+            )
+        submission = read_json(workspace.submission_path)
+        try:
+            raw = authoring.assemble_bundle(workspace.root)
+        except PipelineError as exc:
+            raise TaskError("generation_error", f"Submitted tree is unreadable: {exc}") from exc
+        if digest(raw) != submission.get("bundle_digest"):
+            raise TaskError(
+                "generation_error",
+                "Submitted bundle digest does not match the workspace; the agent "
+                "must call harbor-author submit again",
+            )
+        bundle, notes, issues = authoring.validate_workspace(
+            workspace=workspace.root,
+            run_dir=self.store.root,
+            evidence=self._evidence(),
+            discovery=self.discovery,
+            config=self.config,
+        )
+        if issues:
+            raise TaskError(
+                "generation_error",
+                "Authoring submission failed validation: " + "; ".join(issues[:8]),
+                detail={"issues": issues},
+            )
+        synthesis = synthesis_mod.Synthesis(
+            cve_id=self.cve_id,
+            bundle=bundle,
+            model_identity=f"claude-code:{outcome.session_id}",
+            usage=dict(outcome.usage or {}),
+            prompt_sha256=digest(workspace.contract),
+            generated_at=utc_now_text(),
+            digest=digest(bundle),
+            session_id=outcome.session_id,
+            turns=outcome.turns,
+            author_status="submitted",
+        )
+        self.synthesis = synthesis
+        self.store.write_artifact("synthesis.json", synthesis.to_json())
+        if notes:
+            self.store.write_artifact(
+                "synthesis-notes.json", {"notes": list(notes)}
+            )
+        return synthesis
+
+    def _legacy_draft(self, evidence: dict):
+        """The old one-shot draft. Kept for ``authoring = "legacy"`` only."""
         if not self.auto:
             return None
         if self.synthesis is not None:
@@ -998,21 +1256,17 @@ class CvePipeline:
     # renamed to "draft generation".
     synthesize = draft
 
-    def freeze(self, evidence: dict, job=None) -> dict:
-        job = job or self.store.load()
+    def _evidence(self) -> dict:
         try:
-            existing = self.store.read_artifact("cve-spec.json")
+            return self.store.read_artifact("evidence-index.json")
         except PipelineError:
-            existing = None
-        if existing and existing.get("frozen_digest"):
-            job = self.store.load()
-            if job.state == "EVIDENCE_READY":
-                self.store.transition(job, "SPEC_FROZEN", "frozen spec resumed")
-            return existing
+            return read_json(self.store.path("evidence-index.json"))
+
+    def _raw_spec(self, evidence: dict) -> dict:
         if self.auto:
             if self.synthesis is None:
                 self.draft(evidence)
-            raw = synthesis_mod.build_spec(
+            return synthesis_mod.build_spec(
                 self.synthesis,
                 evidence=evidence,
                 discovery=self.discovery,
@@ -1024,9 +1278,65 @@ class CvePipeline:
                 ),
                 policy_version=self.policy.policy_version,
             )
-        else:
-            identity = artifact_identity_from_evidence(self.builtin, evidence, self.store.root)
-            raw = raw_spec(self.builtin, evidence, identity)
+        identity = artifact_identity_from_evidence(
+            self.builtin, evidence, self.store.root
+        )
+        return raw_spec(self.builtin, evidence, identity)
+
+    @staticmethod
+    def _business_spec(spec: dict) -> str:
+        """The part of a spec that changes a task, ignoring freeze metadata."""
+        body = {
+            key: value
+            for key, value in spec.items()
+            if key not in {"frozen_at", "frozen_digest", "policy_version", "schema_version"}
+        }
+        return json.dumps(body, sort_keys=True, ensure_ascii=False, default=str)
+
+    def _clear_derived(self) -> None:
+        """Drop artifacts that a changed spec invalidates."""
+        for name in (
+            "task-manifest.json",
+            "image-set.json",
+            "trials.json",
+            "evaluation.json",
+            "solver-review.json",
+            "release.json",
+        ):
+            try:
+                self.store.path(name).unlink()
+            except FileNotFoundError:
+                pass
+            job = self.store.load()
+            if job.artifacts.pop(name, None) is not None:
+                self.store.save(job)
+        for name in ("task", "fixed-build", "matrix", "solver-task"):
+            shutil.rmtree(self.store.path(name), ignore_errors=True)
+
+    def freeze(self, evidence: dict, job=None) -> dict:
+        job = job or self.store.load()
+        try:
+            existing = self.store.read_artifact("cve-spec.json")
+        except PipelineError:
+            existing = None
+        if existing and existing.get("frozen_digest"):
+            # A resume after an author repair may have a new bundle. Recompute
+            # the spec and compare the business fields; returning the old spec
+            # unconditionally pinned the app to the rejected draft forever.
+            if not self.auto:
+                if job.state == "EVIDENCE_READY":
+                    self.store.transition(job, "SPEC_FROZEN", "frozen spec resumed")
+                return existing
+            try:
+                raw = self._raw_spec(evidence)
+            except (PipelineError, TaskError):
+                raw = None
+            if raw is not None and self._business_spec(raw) == self._business_spec(existing):
+                if job.state == "EVIDENCE_READY":
+                    self.store.transition(job, "SPEC_FROZEN", "frozen spec resumed")
+                return existing
+            self._clear_derived()
+        raw = self._raw_spec(evidence)
         spec = freeze(raw, self.policy.policy_version)
         issues = check_evidence_links(spec, evidence) + check_spec_consistency(spec)
         if issues:
@@ -1041,8 +1351,17 @@ class CvePipeline:
         job = job or self.store.load()
         task_dir = self.store.path("task")
         if job.state == "GENERATED" or (job.state in {"BUILT", "VALIDATING", "VALIDATED", "RELEASED"}):
-            manifest = self.store.read_artifact("task-manifest.json")
-            if task_dir.is_dir() and _tree_digest(task_dir) == manifest.get("tree_digest"):
+            try:
+                manifest = self.store.read_artifact("task-manifest.json")
+            except PipelineError:
+                # A cache invalidation can leave a late state without its
+                # manifest; render a fresh task instead of failing the job.
+                manifest = None
+            if (
+                manifest is not None
+                and task_dir.is_dir()
+                and _tree_digest(task_dir) == manifest.get("tree_digest")
+            ):
                 task = render_task(
                     spec,
                     scenario_name=self.scenario,
@@ -1096,7 +1415,14 @@ class CvePipeline:
                 pass
         ledger = self._ledger()
         # Both variants are prebuilt: the matrix probes pin these tags, so
-        # Harbor never runs `docker compose build` per trial.
+        # Harbor never runs `docker compose build` per trial. The agent and
+        # verifier images are task-independent and are built once per run.
+        if self._base_images is None:
+            self._base_images = author_probe.ensure_base_images(
+                probe_root=self.store.path("author-probe", "base-images"),
+                log_dir=self.store.path("build-logs"),
+                timeout_sec=self.config.pipeline.command_timeout_sec,
+            )
         vulnerable_base = image_tag_base(self.cve_id, "vulnerable", job.revision)
         fixed_base = image_tag_base(self.cve_id, "fixed", job.revision)
         try:
@@ -1114,6 +1440,10 @@ class CvePipeline:
                 log_dir=self.store.path("build-logs"),
                 timeout_sec=self.config.pipeline.command_timeout_sec,
                 harbor_version=self.capabilities.harbor_version,
+                target_only=True,
+                environment_image=self._base_images["environment"]["image_ref"],
+                product=spec["product"]["name"],
+                product_ref=spec["versions"]["vulnerable_ref"],
             )
             try:
                 fixed_task = render_task(
@@ -1144,6 +1474,10 @@ class CvePipeline:
                 log_dir=self.store.path("build-logs") / "fixed",
                 timeout_sec=self.config.pipeline.command_timeout_sec,
                 harbor_version=self.capabilities.harbor_version,
+                target_only=True,
+                environment_image=self._base_images["environment"]["image_ref"],
+                product=spec["product"]["name"],
+                product_ref=spec["versions"]["fixed_ref"],
             )
         except Exception:
             ledger.refund(f"{self.cve_id}-build-{job.revision}")
@@ -1245,6 +1579,7 @@ class CvePipeline:
                 overrides=self._task_overlay(),
                 synthesis=self.synthesis,
                 revision=job.revision,
+                environment_image=image_set["images"]["agent"]["image_ref"],
             )
             rendered.extend(cases)
             reservation = f"{self.cve_id}-trials-{job.revision}-{step.key}"
@@ -1298,6 +1633,7 @@ class CvePipeline:
                 overrides=self._task_overlay(),
                 synthesis=self.synthesis,
                 fail_fast=True,
+                environment_image=image_set["images"]["agent"]["image_ref"],
             )
             matrix.records.extend(seed_records)
             if seed_errors:
@@ -1410,6 +1746,104 @@ class CvePipeline:
             )
         return matrix, outcome
 
+    def _solver_task(self, spec: dict, job) -> tuple[GeneratedTask, Path]:
+        """Render a pinned solver copy of the task.
+
+        The solver runs the real Harbor environment, so it needs the target and
+        verifier images the matrix already built. The release copy is rendered
+        separately without these local pins.
+        """
+        if self._base_images is None or "solver" not in self._base_images:
+            try:
+                self._base_images = author_probe.ensure_base_images(
+                    probe_root=self.store.path("author-probe", "base-images"),
+                    log_dir=self.store.path("build-logs"),
+                    timeout_sec=self.config.pipeline.command_timeout_sec,
+                    include_solver=True,
+                )
+            except TaskError as exc:
+                raise TaskError(
+                    "infra_error", f"Solver base image is unavailable: {exc}"
+                ) from exc
+        base = image_tag_base(self.cve_id, "vulnerable", job.revision)
+        task = render_task(
+            spec,
+            scenario_name=self.scenario,
+            variant="vulnerable",
+            probe="reference",
+            network_mode=self.network_mode,
+            allowed_hosts=("target",),
+            overrides=self._task_overlay(),
+            synthesis=self.synthesis,
+            revision=job.revision,
+            prebuilt=True,
+            prebuilt_base=base,
+            environment_image=self._base_images["solver"]["image_ref"],
+            agent_timeout_sec=self.config.pipeline.solver_agent_timeout_sec,
+        )
+        return task, task.write(self.store.path("solver-task"))
+
+    def solver_review(self, spec: dict, job=None) -> dict | None:
+        """Run a solver attempt, then a fairness review with the intended solution."""
+        if not self.config.pipeline.solver_review:
+            return None
+        job = job or self.store.load()
+        solver_task, solver_dir = self._solver_task(spec, job)
+        # A release run follows a solver run on the same rendered instruction;
+        # do not spend another solver attempt just to reach release.
+        try:
+            existing = self.store.read_artifact("solver-review.json")
+        except PipelineError:
+            existing = None
+        if (
+            isinstance(existing, dict)
+            and existing.get("instruction_sha256")
+            == digest(solver_task.files.get("instruction.md", ""))
+        ):
+            return existing
+        solver = solver_review_mod.run_solver(
+            self.adapter,
+            solver_dir,
+            self.config,
+            cve_id=self.cve_id,
+        )
+        solver_cost = sum(
+            float((trial.get("usage") or {}).get("cost_usd") or 0.0)
+            for trial in (solver.get("trials") or [])
+        )
+        if solver_cost:
+            try:
+                self._ledger().charge("usd", solver_cost)
+            except PipelineError:
+                pass
+        presentation = (
+            dict((self.synthesis.bundle.get("presentation") or {}))
+            if self.synthesis
+            else {}
+        )
+        review = solver_review_mod.solver_review(
+            solver_task,
+            solver,
+            self.config,
+            presentation=presentation,
+        )
+        self.store.write_artifact("solver-review.json", review)
+        verdict = review["review"].get("verdict")
+        score = int(review["review"].get("score") or 0)
+        if verdict == "decline":
+            reason = str(review["review"].get("reason") or "solver review declined")
+            raise TaskError(
+                "unsupported", reason, detail={"solver_review": review}
+            )
+        if verdict == "revise" or score < self.config.pipeline.solver_min_score:
+            raise TaskError(
+                "validation_error",
+                f"Solver review: verdict={verdict!r} score={score}; "
+                + str(review["review"].get("reason") or "")[:1000],
+                detail={"solver_review": review},
+            )
+        return review
+
     def release(
         self,
         spec: dict,
@@ -1432,6 +1866,22 @@ class CvePipeline:
                 "Release refused: " + "; ".join(outcome.evaluation["failure_reasons"][:5]),
                 detail={"evaluation": outcome.evaluation},
             )
+        if self.config.pipeline.solver_review:
+            try:
+                review = self.store.read_artifact("solver-review.json")
+            except PipelineError as exc:
+                raise TaskError(
+                    "validation_error",
+                    "Solver review is missing; run the solver stage before release",
+                    detail={"solver_review": {}},
+                ) from exc
+            verdict = str((review.get("review") or {}).get("verdict") or "")
+            if verdict != "release":
+                raise TaskError(
+                    "validation_error",
+                    f"Solver review verdict is {verdict!r}, not 'release'",
+                    detail={"solver_review": review},
+                )
         result = build_release(
             spec=spec,
             evidence=evidence,
@@ -1461,11 +1911,107 @@ class CvePipeline:
             self.store.transition(job, "RELEASED", "release package verified")
         return record
 
+    def recheck(self) -> PipelineReport:
+        """Re-score a quarantine after a verifier or evaluator defect is fixed.
+
+        The stored matrix is the evidence the candidate was quarantined on, so
+        a defect in the scoring code does not justify rebuilding images or
+        rerunning the trials: both are unchanged. The build lock is recomputed
+        from the rendered target (a fixed ``dependency_lock`` now records
+        vendored upstream refs), the matrix is re-evaluated with current code,
+        and only a passing admission lifts the quarantine. The normal release
+        stage then publishes and rechecks the package.
+        """
+        self.store.create()
+        with self.store.lease:
+            return self._recheck()
+
+    def _recheck(self) -> PipelineReport:
+        job = self.store.load()
+        if job.state != "QUARANTINED":
+            raise TaskError(
+                "validation_error",
+                f"recheck expects a QUARANTINED candidate, got {job.state}",
+            )
+        spec = self.store.read_artifact("cve-spec.json")
+        evidence = self.store.read_artifact("evidence-index.json")
+        image_set = dict(self.store.read_artifact("image-set.json"))
+        trials = self.store.read_artifact("trials.json")
+        try:
+            self.synthesis = synthesis_mod.load(self.store.root, self.cve_id)
+        except (PipelineError, OSError):
+            self.synthesis = None
+        task, _ = self.generate(spec, job)
+        product = spec["product"]["name"]
+        image_set["dependencies"] = dependency_lock(
+            self.store.path("task", "environment", "target"),
+            product=product,
+            ref=spec["versions"]["vulnerable_ref"],
+        )
+        variants = image_set.get("variants") or {}
+        for variant, ref in (
+            ("vulnerable", spec["versions"]["vulnerable_ref"]),
+            ("fixed", spec["versions"]["fixed_ref"]),
+        ):
+            entry = variants.get(variant)
+            if not isinstance(entry, dict):
+                continue
+            context = self.store.path(
+                "task" if variant == "vulnerable" else "fixed-build/task",
+                "environment",
+                "target",
+            )
+            if not context.is_dir():
+                continue
+            deps = dependency_lock(context, product=product, ref=ref)
+            entry["dependencies"] = deps
+            target_image = (entry.get("images") or {}).get("target")
+            if isinstance(target_image, dict):
+                target_image["dependencies"] = deps
+        matrix = _reload_matrix(trials)
+        outcome = evaluate(
+            spec=spec,
+            evidence=evidence,
+            matrix=matrix,
+            image_set=image_set,
+            policy=self.policy,
+            profile_name=self.profile.name,
+            package_issues=inspect_task(task.files, spec),
+            network_isolation=self.network_mode,
+            extra_seed_errors=[],
+            skipped_experiments=(
+                {"T08": "synthesized targets have no framework-owned controlled variant"}
+                if self.auto else {}
+            ),
+        )
+        self.store.write_artifact("image-set.json", image_set)
+        self.store.write_artifact("evaluation.json", outcome.evaluation)
+        if outcome.evaluation["admission_status"] != "released":
+            raise TaskError(
+                "attribution_failure",
+                "Recheck did not release the candidate: "
+                + "; ".join(outcome.evaluation["failure_reasons"][:5]),
+                detail={"evaluation": outcome.evaluation},
+            )
+        job = self.store.transition(job, "VALIDATED", "recheck after verifier fix")
+        # Do not re-enter the normal stage driver: it would call freeze again,
+        # and any perceived spec change would delete the very matrix this
+        # recheck is scoring. The stored trials and the freshly recomputed
+        # admission are exactly what release needs.
+        try:
+            release = self.release(spec, evidence, task, image_set, matrix, outcome, job)
+        except TaskError as exc:
+            self.store.fail(self.store.load(), exc)
+            return self._stored_report(self.store.load())
+        return self._report(self.store.load(), task, image_set, outcome, release, matrix)
+
     # -- driver ------------------------------------------------------------
 
     def run(self, until: str = "release") -> PipelineReport:
         """Advance the candidate up to `until`; safe to call again to resume."""
-        if until not in {"collect", "freeze", "generate", "build", "validate", "release"}:
+        if until not in {
+            "collect", "freeze", "generate", "build", "validate", "solver", "release"
+        }:
             raise PipelineError(f"Unknown stage {until!r}")
         self.store.create()
         with self.store.lease:
@@ -1530,15 +2076,27 @@ class CvePipeline:
                 self.store.load(), task, image_set, outcome, None, matrix
             )
         job = self.store.load()
+        review = None
+        if until in {"solver", "release"}:
+            review = self.solver_review(spec, job)
+            if until == "solver":
+                return self._report(
+                    self.store.load(), task, image_set, outcome, None, matrix,
+                    solver_review=review,
+                )
+        job = self.store.load()
         release = None
         if outcome.evaluation["admission_status"] == "released":
             release = self.release(spec, evidence, task, image_set, matrix, outcome, job)
             if until != "release":
                 return self._report(
-                    self.store.load(), task, image_set, outcome, release, matrix
+                    self.store.load(), task, image_set, outcome, release, matrix,
+                    solver_review=review,
                 )
         job = self.store.load()
-        return self._report(job, task, image_set, outcome, release, matrix)
+        return self._report(
+            job, task, image_set, outcome, release, matrix, solver_review=review
+        )
 
     # -- bounded model repair ---------------------------------------------
 
@@ -1840,10 +2398,181 @@ class CvePipeline:
             return {}
         return data if isinstance(data, dict) else {}
 
+    def _author_failure_report(self, error: TaskError) -> str:
+        """A compact, bounded report for the resumed authoring session."""
+        parts = [
+            f"category={error.category.code}",
+            f"message={error}",
+        ]
+        if error.detail:
+            parts.append(
+                "detail="
+                + json.dumps(error.detail, ensure_ascii=False, default=str)[:3000]
+            )
+        try:
+            evaluation = self.store.read_artifact("evaluation.json")
+        except PipelineError:
+            evaluation = {}
+        reasons = evaluation.get("failure_reasons") or []
+        if reasons:
+            parts.append("failure_reasons:\n- " + "\n- ".join(str(x) for x in reasons[:12]))
+        try:
+            trials = self.store.read_artifact("trials.json")
+        except PipelineError:
+            trials = {}
+        for record in (trials.get("records") or [])[-10:]:
+            if not isinstance(record, dict):
+                continue
+            parts.append(
+                json.dumps(
+                    {
+                        "experiment": record.get("experiment_id"),
+                        "goal": record.get("goal_result"),
+                        "status": (record.get("trigger_evidence") or {}).get("detail"),
+                        "reward": record.get("reward"),
+                        "health": record.get("health"),
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                )[:1200]
+            )
+        logs = self.store.path("build-logs")
+        if logs.is_dir():
+            candidates = sorted(
+                logs.glob("**/*.log"),
+                key=lambda path: path.stat().st_mtime,
+                reverse=True,
+            )
+            for path in candidates[:3]:
+                try:
+                    tail = path.read_text(encoding="utf-8", errors="replace")[-2500:]
+                except OSError:
+                    continue
+                parts.append(f"--- {path.name} (tail) ---\n{tail}")
+        workspace = authoring.workspace_for(self.store.root)
+        probe_path = workspace / authoring.PROBE_STATE_FILE
+        if probe_path.is_file():
+            try:
+                probe = read_json(probe_path)
+                parts.append(
+                    "last author probe="
+                    + json.dumps(probe, ensure_ascii=False, default=str)[:3000]
+                )
+            except (OSError, ValueError):
+                pass
+        return "\n\n".join(parts)
+
+    def _resume_author(self, error: TaskError) -> bool:
+        """Continue the same native Claude Code session after a final verdict.
+
+        The workspace and the session id are the state. A resume sees the whole
+        conversation, the evidence, the application it wrote and the probe
+        history, so it does not have to reconstruct the task from a prose
+        error the way the old JSON repair loop did.
+        """
+        job = self.store.load()
+        used = int(job.attempts.get("author_resume", 0))
+        if used >= self.config.pipeline.author_max_resumes:
+            return False
+        workspace_root = authoring.workspace_for(self.store.root)
+        if not (workspace_root / authoring.BUNDLE_FILE).is_file():
+            return False
+        try:
+            self._ensure_synthesis()
+        except (PipelineError, TaskError, OSError):
+            pass
+        session_id = ""
+        try:
+            session = self.store.read_artifact("author-session.json")
+            session_id = str((session.get("outcome") or {}).get("session_id") or "")
+        except PipelineError:
+            pass
+        if not session_id and self.synthesis is not None:
+            session_id = self.synthesis.session_id
+        if self.discovery is None:
+            try:
+                self.discovery = discovery_mod.load(self.store.root, self.cve_id)
+            except (PipelineError, OSError):
+                return False
+        try:
+            evidence = self._evidence()
+        except (PipelineError, OSError):
+            evidence = {}
+        workspace = authoring.prepare_workspace(
+            run_dir=self.store.root,
+            cve_id=self.cve_id,
+            discovery=self.discovery,
+            evidence=evidence,
+            revision=job.revision,
+            model=self.config.model_for("author").model,
+        )
+        report = self._author_failure_report(error)
+        review = (error.detail or {}).get("solver_review")
+        if review:
+            write_json(workspace.root / "inputs" / "solver-review.json", review)
+            report += (
+                "\n\nThe full solver review is at inputs/solver-review.json. "
+                "Read it before changing the presentation."
+            )
+            prompt = authoring.solver_review_prompt(report)
+        else:
+            prompt = authoring.resume_prompt(report)
+        outcome = self._run_author_session(
+            workspace,
+            prompt=prompt,
+            resume=session_id or None,
+        )
+        if not workspace.submission_path.is_file():
+            if workspace.declined_path.is_file():
+                declined = read_json(workspace.declined_path)
+                reason = str(declined.get("reason") or "the author declined")[:1000]
+                raise TaskError(
+                    "unsupported", reason, detail={"unsupported_reason": reason}
+                )
+            # A resume that did not submit still consumed the session quota;
+            # otherwise a broken session could be retried forever through
+            # _prepare_retry.
+            failed = self.store.load()
+            failed.attempts["author_resume"] = used + 1
+            self.store.save(failed)
+            return False
+        try:
+            raw = authoring.assemble_bundle(workspace.root)
+            recorded_submission = read_json(workspace.submission_path)
+            fresh = digest(raw) == recorded_submission.get("bundle_digest")
+        except (PipelineError, OSError, ValueError):
+            fresh = False
+        if not fresh:
+            # The agent edited after its last submit (or the file was not a
+            # real submission). Do not treat it as a verified state.
+            failed = self.store.load()
+            failed.attempts["author_resume"] = used + 1
+            self.store.save(failed)
+            return False
+        job = self.store.load()
+        if job.state != "REPAIRING":
+            try:
+                job = self.store.transition(
+                    job, "REPAIRING", f"author resume {used + 1}"
+                )
+            except PipelineError:
+                # A state that cannot enter REPAIRING is not the author's to
+                # fix; leave the original verdict in place.
+                return False
+        job.revision += 1
+        job.attempts["author_resume"] = used + 1
+        job.attempts["repair"] = int(job.attempts.get("repair", 0)) + 1
+        self.store.save(job)
+        self._consume_author_workspace(workspace, outcome)
+        self._clear_derived()
+        return True
+
     def _attempt_repair(self, error: TaskError) -> bool:
         """Try one bounded repair; return True when the pipeline may resume."""
         if error.category.code not in REPAIRABLE_CATEGORIES:
             return False
+        if self.auto and self.config.pipeline.authoring == "agent":
+            return self._resume_author(error)
         job = self.store.load()
         used = int(job.attempts.get("repair", 0))
         if used >= self.config.pipeline.max_repairs:
@@ -2005,6 +2734,16 @@ class CvePipeline:
         used = int(job.attempts.get("retry", 0))
         if used >= self.config.pipeline.max_repairs:
             return job
+        # A native authoring session that ended without a submission is not a
+        # generic infrastructure fault; its own session budget is the right
+        # ceiling. Other infra errors (Docker, Harbor) keep the wider retry
+        # allowance.
+        if (
+            self.config.pipeline.authoring == "agent"
+            and (error.get("detail") or {}).get("author_status")
+            and used >= self.config.pipeline.author_max_resumes + 1
+        ):
+            return job
         category = str(error.get("category") or "")
         if not error.get("retryable") and category in REPAIRABLE_CATEGORIES:
             if int(job.attempts.get("repair", 0)) >= self.config.pipeline.max_repairs:
@@ -2026,8 +2765,15 @@ class CvePipeline:
             job, "REPAIRING", f"retry {used + 1} after {error.get('category')}"
         )
 
-    def _report(self, job, task, image_set, outcome, release, matrix) -> PipelineReport:
+    def _report(
+        self, job, task, image_set, outcome, release, matrix, *, solver_review=None
+    ) -> PipelineReport:
         evaluation = outcome.evaluation if outcome else None
+        if solver_review is None:
+            try:
+                solver_review = self.store.read_artifact("solver-review.json")
+            except PipelineError:
+                solver_review = None
         return PipelineReport(
             cve_id=self.cve_id,
             run_id=self.run_id,
@@ -2042,6 +2788,7 @@ class CvePipeline:
             trials=(matrix.records if matrix is not None and hasattr(matrix, "records") else []),
             error=job.error,
             budget=self._ledger().snapshot(),
+            solver_review=solver_review,
         )
 
     def _stored_report(self, job) -> PipelineReport:
@@ -2058,6 +2805,7 @@ class CvePipeline:
         manifest = artifact("task-manifest.json") or {}
         image_set = artifact("image-set.json") or {}
         release = artifact("release.json")
+        review = artifact("solver-review.json")
         return PipelineReport(
             cve_id=self.cve_id,
             run_id=self.run_id,
@@ -2072,6 +2820,7 @@ class CvePipeline:
             trials=trials.get("records", []),
             error=None if job.state in {"VALIDATED", "RELEASED"} else job.error,
             budget=self._ledger().snapshot(),
+            solver_review=review,
         )
 
 
@@ -2088,6 +2837,34 @@ class _ReloadedMatrix:
 
 def _reload_evaluation(data: dict) -> EvaluationOutcome:
     return EvaluationOutcome(evaluation=data, dimensions={}, hard_conditions=data.get("hard_conditions", []))
+
+
+def _reload_matrix(data: dict) -> MatrixResult:
+    """Rebuild the scoring view of a matrix stored in ``trials.json``.
+
+    ``derived_records`` holds the T01/T02 health verdicts copied from T03/T04;
+    the evaluator saw them as part of ``records`` during validation, so a
+    re-score must fold them back in.
+    """
+    expectations: dict[str, Expectation] = {}
+    for item in data.get("expectations") or []:
+        expectations[item["experiment_id"]] = Expectation(
+            item["experiment_id"],
+            bool(item.get("met")),
+            str(item.get("detail") or ""),
+            str(item.get("observed_status") or ""),
+            item.get("error_category"),
+        )
+    return MatrixResult(
+        records=list(data.get("records") or []) + list(data.get("derived_records") or []),
+        expectations=expectations,
+        verdicts=list(expectations.values()),
+        errors=list(data.get("errors") or []),
+        aborted_at=data.get("aborted_at"),
+        aborted_detail=str(data.get("aborted_detail") or ""),
+        matrix_repeats=data.get("matrix_repeats"),
+        framework_checks=dict(data.get("framework_checks") or {}),
+    )
 
 
 def _tree_digest(root: Path) -> str:

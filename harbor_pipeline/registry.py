@@ -30,7 +30,7 @@ _SAFE_NAME = re.compile(r"^[A-Za-z0-9._@/+:-]+$")
 
 def _sort_versions(versions: list[str]) -> list[str]:
     try:
-        from packaging.version import InvalidVersion, Version
+        from packaging.version import Version
 
         return sorted(versions, key=Version, reverse=True)
     except Exception:  # noqa: BLE001 - registry versions are not all PEP 440

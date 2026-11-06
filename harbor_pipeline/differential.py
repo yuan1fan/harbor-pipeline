@@ -213,6 +213,8 @@ def _render_case(
     synthesis=None,
     revision: int = 1,
     prebuilt: bool = False,
+    environment_image: str | None = None,
+    verifier_image: str | None = None,
 ) -> MatrixCase:
     variant = experiment.variant if experiment.variant in {"vulnerable", "fixed"} else "vulnerable"
     controlled = experiment.id == "T08"
@@ -233,6 +235,8 @@ def _render_case(
         synthesis=synthesis,
         revision=revision,
         prebuilt=prebuilt,
+        environment_image=environment_image,
+        verifier_image=verifier_image,
     )
     task_dir = task.write(root / name)
     return MatrixCase(experiment=experiment, task=task, task_dir=task_dir)
@@ -275,6 +279,8 @@ def build_step_cases(
     overrides: dict[str, str] | None = None,
     synthesis=None,
     revision: int = 1,
+    environment_image: str | None = None,
+    verifier_image: str | None = None,
 ) -> list[MatrixCase]:
     """Render one ladder step against the candidate's prebuilt images.
 
@@ -300,6 +306,8 @@ def build_step_cases(
                 synthesis=synthesis,
                 revision=revision,
                 prebuilt=True,
+                environment_image=environment_image,
+                verifier_image=verifier_image,
             ))
     return cases
 
@@ -468,6 +476,8 @@ def run_seed_repeats(
     overrides: dict[str, str] | None = None,
     synthesis=None,
     fail_fast: bool = True,
+    environment_image: str | None = None,
+    verifier_image: str | None = None,
 ) -> tuple[list[dict], list[str]]:
     """T09: rebuild the same reference task across independent jobs.
 
@@ -489,6 +499,8 @@ def run_seed_repeats(
             synthesis=synthesis,
             revision=candidate_revision,
             prebuilt=True,
+            environment_image=environment_image,
+            verifier_image=verifier_image,
         )
         task_dir = task.write(root / f"seed-{seed + 1}")
         outcome = adapter.run(

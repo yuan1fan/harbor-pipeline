@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 from harbor_pipeline import evaluator
 from harbor_pipeline import synthesis as synthesis_mod
-from harbor_pipeline.contracts import load_policy
 from harbor_pipeline.differential import MatrixResult
 from harbor_pipeline.generator import render_task
 from harbor_pipeline.goals import LISTING_DIR, MARKER_PATH, auth_material

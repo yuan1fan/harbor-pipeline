@@ -8,6 +8,7 @@ reason and is excluded from the denominator.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable
@@ -206,6 +207,87 @@ def evaluate(
     )
 
 
+def _normalize_package_name(name: str) -> str:
+    """PEP 503-style name normalization, also useful for npm/Maven casing."""
+    return re.sub(r"[-_.]+", "-", str(name)).strip().lower()
+
+
+def _locked_dependency(
+    deps: dict[str, str], product: str | None
+) -> tuple[str | None, str | None]:
+    """Find the product in the build lock without assuming registry casing.
+
+    A requirements file may spell ``FlexGet`` while the advisory calls the
+    product ``flexget``; Python packaging also treats ``-``/``_``/``.`` as
+    equivalent. Missing an entry for that reason is not evidence about the
+    task, so the lookup normalizes names before declaring V4 unknown.
+    """
+    if not product:
+        return None, None
+    if product in deps:
+        return product, deps[product]
+    wanted = _normalize_package_name(product)
+    for name, version in deps.items():
+        if _normalize_package_name(name) == wanted:
+            return name, version
+    return None, None
+
+
+def _version_key(version: object) -> str:
+    text = str(version or "").strip()
+    return text[1:] if text[:1] in {"v", "V"} else text
+
+
+def _version_tuple(version: object) -> tuple[int, ...]:
+    parts = re.findall(r"\d+", _version_key(version))
+    return tuple(int(part) for part in parts[:4]) or (0,)
+
+
+def _affected_subpackage(
+    deps: dict[str, str], product: str | None, affected: object
+) -> tuple[str, str] | None:
+    """Match a pinned subpackage named after the product inside the affected range.
+
+    A monorepo advisory often names the product ("pnpm") while the vulnerable
+    code lives in a separately versioned subpackage ("@pnpm/store.cafs"). The
+    package lock then has no product entry, but it does pin the subpackage.
+    Accept it only when the advisory's affected range names that package and
+    the pinned version satisfies the comparator printed next to it.
+    """
+    if not product:
+        return None
+    wanted = _normalize_package_name(product)
+    text = str(affected or "")
+    for name, version in deps.items():
+        segments = {
+            _normalize_package_name(part)
+            for part in name.lstrip("@").replace(":", "/").split("/")
+            if part
+        }
+        if wanted not in segments:
+            continue
+        index = text.lower().find(name.lower())
+        if index < 0:
+            continue
+        tail = text[index + len(name): index + len(name) + 80]
+        match = re.search(r"(<=|>=|==|=|<|>)\s*([0-9][0-9A-Za-z.\-+_]*)", tail)
+        if not match:
+            continue
+        operator, bound = match.group(1), match.group(2)
+        actual, limit = _version_tuple(version), _version_tuple(bound)
+        satisfied = {
+            "<": actual < limit,
+            "<=": actual <= limit,
+            ">": actual > limit,
+            ">=": actual >= limit,
+            "=": actual == limit,
+            "==": actual == limit,
+        }[operator]
+        if satisfied:
+            return name, version
+    return None
+
+
 def _dimension_v(spec: dict, evidence: dict, image_set: dict, policy: Policy) -> Dimension:
     identities = spec.get("artifact_identity", [])
     pinned = [
@@ -218,15 +300,27 @@ def _dimension_v(spec: dict, evidence: dict, image_set: dict, policy: Policy) ->
     versions = spec.get("versions", {})
     deps = image_set.get("dependencies", {})
     product = spec.get("product", {}).get("name")
-    locked = deps.get(product)
+    locked_name, locked = _locked_dependency(deps, product)
+    subpackage = False
+    if locked is None:
+        match = _affected_subpackage(deps, product, versions.get("affected"))
+        if match:
+            locked_name, locked = match
+            subpackage = True
+    expected = versions.get("vulnerable_ref")
     if locked is None:
         lock_item = Item("V4-build-lock", "unknown", f"{product} is not in the built dependency lock")
-    elif locked == versions.get("vulnerable_ref"):
-        lock_item = Item("V4-build-lock", "pass", f"built {product}=={locked}")
+    elif subpackage:
+        lock_item = Item(
+            "V4-build-lock", "pass",
+            f"built {locked_name}=={locked} within affected range {versions.get('affected')}",
+        )
+    elif _version_key(locked) == _version_key(expected):
+        lock_item = Item("V4-build-lock", "pass", f"built {locked_name}=={locked}")
     else:
         lock_item = Item(
             "V4-build-lock", "fail",
-            f"built {product}=={locked}, spec says vulnerable_ref={versions.get('vulnerable_ref')}",
+            f"built {locked_name}=={locked}, spec says vulnerable_ref={expected}",
         )
     items = [
         Item("V1-artifact-identity", "pass" if pinned else "fail",

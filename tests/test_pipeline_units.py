@@ -1676,3 +1676,25 @@ def test_authoring_override_adds_files_and_keeps_the_variant_ref_placeholder():
     assert patched["environment/target/helper.py"] == "VALUE = 1\n"
 
 
+
+
+def test_reload_matrix_folds_derived_health_records():
+    from harbor_pipeline.pipeline import _reload_matrix
+
+    data = {
+        "records": [{"experiment_id": "T03", "goal_result": "passed"}],
+        "derived_records": [{"experiment_id": "T01", "goal_result": "passed"}],
+        "expectations": [
+            {
+                "experiment_id": "T03",
+                "met": True,
+                "detail": "status=goal_passed reward=1.0",
+                "observed_status": "goal_passed",
+                "error_category": None,
+            }
+        ],
+        "aborted_at": None,
+    }
+    matrix = _reload_matrix(data)
+    assert [r["experiment_id"] for r in matrix.records] == ["T03", "T01"]
+    assert matrix.expectation("T03").met is True

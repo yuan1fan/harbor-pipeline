@@ -185,3 +185,52 @@ def test_v1_accepts_npm_sri_digest_and_rejects_unverified():
     assert v1_status("sha512:abc==") == "pass"
     assert v1_status("sha256:abc") == "pass"
     assert v1_status("unverified:3.0.2") == "fail"
+
+
+def _v4_status(product: str, locked: dict[str, str], expected: str = "3.20.6") -> str:
+    spec = {
+        "artifact_identity": [],
+        "versions": {"vulnerable_ref": expected},
+        "product": {"name": product},
+    }
+    dimension = evaluator._dimension_v(
+        spec, {"sources": []}, {"dependencies": locked}, load_policy()
+    )
+    return next(item for item in dimension.items if item.id == "V4-build-lock").status
+
+
+def test_v4_build_lock_matches_registry_casing():
+    # requirements.txt may preserve PyPI's mixed-case project name while the
+    # advisory names the product in lower case.
+    assert _v4_status("flexget", {"FlexGet": "3.20.6"}) == "pass"
+
+
+def test_v4_build_lock_normalizes_python_distribution_names():
+    assert _v4_status("zope.interface", {"zope-interface": "3.20.6"}) == "pass"
+    assert _v4_status("flexget", {"FlexGet": "3.20.5"}) == "fail"
+
+
+def _v4_subpackage_status(locked: str) -> str:
+    spec = {
+        "artifact_identity": [],
+        "versions": {
+            "vulnerable_ref": "10.28.0",
+            "affected": "@pnpm/store.cafs < 1000.1.2 (pnpm < 10.28.1)",
+        },
+        "product": {"name": "pnpm"},
+    }
+    dimension = evaluator._dimension_v(
+        spec,
+        {"sources": []},
+        {"dependencies": {"@pnpm/store.cafs": locked}},
+        load_policy(),
+    )
+    return next(item for item in dimension.items if item.id == "V4-build-lock").status
+
+
+def test_v4_build_lock_accepts_affected_monorepo_subpackage():
+    # The advisory names pnpm, but the target pins the separately versioned
+    # subpackage that contains the vulnerable code.
+    assert _v4_subpackage_status("1000.1.1") == "pass"
+    # A version outside the advisory's affected range is not evidence.
+    assert _v4_subpackage_status("1000.1.3") == "unknown"

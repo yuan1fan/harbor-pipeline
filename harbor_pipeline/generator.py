@@ -98,6 +98,9 @@ def render_task(
     revision: int = 1,
     prebuilt: bool = False,
     prebuilt_base: str | None = None,
+    environment_image: str | None = None,
+    verifier_image: str | None = None,
+    agent_timeout_sec: float | None = None,
 ) -> GeneratedTask:
     if variant not in {"vulnerable", "fixed"}:
         raise PipelineError(f"Unknown variant {variant!r}")
@@ -111,6 +114,9 @@ def render_task(
     )
     family = goal_family(spec)
     material = auth_material(spec)
+    bundle = getattr(synthesis, "bundle", None) if synthesis is not None else None
+    presentation = (bundle or {}).get("presentation") or {}
+    presentation_mode = str(presentation.get("mode") or "black_box")
     ctx = ScenarioContext(
         cve_id=spec["cve_id"],
         product=spec["product"]["name"],
@@ -131,6 +137,7 @@ def render_task(
         revision=revision,
         image_base=tag_base,
         goal_family=family,
+        goal_primitive=str((spec.get("task_goal") or {}).get("primitive") or ""),
         auth_identity=auth_identity(spec),
         auth_scheme=auth_scheme(spec),
         auth_user=material["user"],
@@ -138,6 +145,9 @@ def render_task(
         auth_token=material["token"],
         listing_name=listing_name(spec) if family == "directory_listing" else "",
         target_asset=target_asset(spec, family),
+        presentation_mode=presentation_mode,
+        presentation_hints=tuple(str(x) for x in (presentation.get("hints") or ())),
+        presentation_sources=tuple(str(x) for x in (presentation.get("source_paths") or ())),
     )
     if synthesis is not None:
         files = render_synthesis(ctx, synthesis)
@@ -190,6 +200,10 @@ def render_task(
         fault=fault,
         synthesis_digest=synthesis_digest,
         image_base=tag_base,
+        environment_image=environment_image,
+        verifier_image=verifier_image,
+        presentation_mode=presentation_mode,
+        agent_timeout_sec=agent_timeout_sec,
     )
     generated = GeneratedTask(
         cve_id=spec["cve_id"],
@@ -283,16 +297,25 @@ def _task_toml(
     fault: bool,
     synthesis_digest: str = "",
     image_base: str | None = None,
+    environment_image: str | None = None,
+    verifier_image: str | None = None,
+    presentation_mode: str = "black_box",
+    agent_timeout_sec: float | None = None,
 ) -> str:
     suffix = "-control" if controlled else ("-fault" if fault else "")
-    verifier_image = (
+    # Task validation probes reuse two task-independent images so every
+    # candidate does not rebuild an agent and a verifier that are byte-identical
+    # for all tasks. The target image stays per-candidate.
+    verifier_ref = verifier_image or (image_base + "-verifier" if image_base else None)
+    environment_ref = environment_image or (image_base + "-agent" if image_base else None)
+    verifier_block = (
         "[verifier.environment]\n"
-        f"docker_image = {_q(image_base + '-verifier')}\n"
-        if image_base else ""
+        f"docker_image = {_q(verifier_ref)}\n"
+        if verifier_ref else ""
     )
-    agent_image = (
-        f"docker_image = {_q(image_base + '-agent')}\n"
-        if image_base else ""
+    environment_line = (
+        f"docker_image = {_q(environment_ref)}\n"
+        if environment_ref else ""
     )
     primitive = str(spec["task_goal"].get("primitive") or "file_read")
     primitive_keyword = primitive.replace("_", "-")
@@ -341,19 +364,20 @@ target_secret_path = {_q(SECRET_PATH)}
 goal_target_asset = {_q(spec['task_goal']['target_asset'])}
 auth_identity = {_q(str(spec.get('preconditions', {}).get('auth_identity') or 'none'))}
 auth_scheme = {_q(str(spec.get('preconditions', {}).get('auth_scheme') or 'none'))}
+presentation_mode = {_q(presentation_mode)}
 
 [verifier]
 environment_mode = "separate"
 timeout_sec = 600.0
 network_mode = {_q(network_mode)}
-{allow}{verifier_image}
+{allow}{verifier_block}
 [agent]
-timeout_sec = 900.0
+timeout_sec = {float(agent_timeout_sec or 900.0)}
 network_mode = {_q(network_mode)}
 {allow}
 [environment]
 network_mode = {_q(network_mode)}
-{allow}{agent_image}build_timeout_sec = 900.0
+{allow}{environment_line}build_timeout_sec = 900.0
 os = "linux"
 cpus = 2
 memory_mb = 2048

@@ -215,6 +215,7 @@ def _trial_record(trial: TrialOutcome) -> dict:
     return {
         "trial_name": trial.trial_name,
         "task_name": trial.task_name,
+        "trial_dir": str(trial.trial_dir),
         "reward": reward,
         "success": success,
         "evidence_status": trial.evidence_status,

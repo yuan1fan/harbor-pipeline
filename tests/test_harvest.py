@@ -431,6 +431,51 @@ def test_dependency_lock_reads_go_mod_and_pom(tmp_path: Path):
     assert lock["org.apache.commons:commons-lang3"] == "3.11.0"
 
 
+def test_dependency_lock_records_vendored_upstream_ref(tmp_path: Path):
+    """A target that builds the component from a pinned tarball has no package
+    lock entry, but the Dockerfile still names the ref it vendors."""
+    from harbor_pipeline.backend import dependency_lock
+
+    (tmp_path / "Dockerfile").write_text(
+        "FROM golang:1.24 AS source\n"
+        "RUN curl -fsSL -o /tmp/whodb.tgz "
+        '"https://codeload.github.com/clidey/whodb/tar.gz/refs/tags/0.134.0"\n'
+        "RUN tar -xzf /tmp/whodb.tgz -C /src\n",
+        encoding="utf-8",
+    )
+
+    lock = dependency_lock(tmp_path, product="whodb", ref="0.134.0")
+
+    assert lock["whodb"] == "0.134.0"
+
+
+def test_dependency_lock_strips_requirement_extras_and_markers(tmp_path: Path):
+    from harbor_pipeline.backend import dependency_lock
+
+    (tmp_path / "requirements.txt").write_text(
+        "FlexGet[webui]==3.20.6; python_version >= '3.9'\n"
+        "zope.interface>=5.0\n",
+        encoding="utf-8",
+    )
+
+    lock = dependency_lock(tmp_path)
+
+    assert lock["FlexGet"] == "3.20.6"
+    assert lock["zope.interface"] == "unpinned"
+
+
+def test_dependency_lock_ignores_nonmatching_vendored_ref(tmp_path: Path):
+    from harbor_pipeline.backend import dependency_lock
+
+    (tmp_path / "Dockerfile").write_text(
+        "RUN curl -fsSL -o /tmp/app.tgz "
+        '"https://codeload.github.com/org/app/tar.gz/refs/tags/1.0.0"\n',
+        encoding="utf-8",
+    )
+
+    assert dependency_lock(tmp_path, product="app", ref="2.0.0") == {}
+
+
 def test_collect_pins_go_module_versions_and_checksums(tmp_path: Path, monkeypatch):
     import base64
     import hashlib
