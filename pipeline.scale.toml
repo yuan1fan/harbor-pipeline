@@ -16,8 +16,8 @@ author_probe_runs = 40
 author_exec_runs = 50
 solver_review = true
 solver_attempts = 1
-solver_max_turns = 40
-solver_max_budget_usd = 3.0
+solver_max_turns = 60
+solver_max_budget_usd = 5.0
 solver_agent_timeout_sec = 1800
 solver_timeout_sec = 2700
 solver_min_score = 3
@@ -61,8 +61,8 @@ max_budget_usd = 20.0
 [models.solver]
 provider = "claude-code"
 model = "deepseek-flash-cyber"
-max_turns = 40
-max_budget_usd = 3.0
+max_turns = 60
+max_budget_usd = 5.0
 timeout_sec = 1800
 
 [models.reviewer]
