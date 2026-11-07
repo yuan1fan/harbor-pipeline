@@ -1,0 +1,86 @@
+[
+ {
+  "advisory_refs": [
+   "https://github.com/quasarframework/quasar/security/advisories/GHSA-wmpw-j6qv-mw88"
+  ],
+  "commit_refs": [
+   "https://github.com/quasarframework/quasar/commit/87c89a80ec84f1eb7dbe258e5367161b0598ceb3"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-106103",
+  "description": "Quasar Framework is a framework for building high-performance Vue.js user interfaces. Prior to @quasar/icongenie 6.1.1, the icongenie generate --profile command accepted folder and name values from a user-supplied profile without constraining the resolved destination to the Quasar project directory. icongenie/lib/utils/get-assets-files.js joined those values with appDir, while icongenie/lib/utils/validate-profile-object.js required only non-empty strings, allowing parent-directory traversal. A developer who runs a crafted profile can cause generated image content to be written or overwritten at any path writable by that user, potentially modifying shell startup files, build scripts, or other executable configuration. This issue is fixed in version 6.1.1.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal"
+  ],
+  "priority": 16,
+  "product": "quasar",
+  "published": "2026-10-06T18:16:51.523",
+  "references": [
+   "https://github.com/quasarframework/quasar/commit/87c89a80ec84f1eb7dbe258e5367161b0598ceb3",
+   "https://github.com/quasarframework/quasar/releases/tag/@quasar/icongenie-v6.1.1",
+   "https://github.com/quasarframework/quasar/security/advisories/GHSA-wmpw-j6qv-mw88"
+  ],
+  "vendor": "quasarframework"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/dataease/SQLBot/security/advisories/GHSA-wqj3-xcxf-j9m9"
+  ],
+  "commit_refs": [
+   "https://github.com/dataease/SQLBot/commit/ff98514827bad99b8fa4b39385adecc6e3d44355"
+  ],
+  "cpes": [
+   "cpe:2.3:a:fit2cloud:sqlbot:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-32949",
+  "description": "SQLBot is an intelligent data query system based on a large language model and RAG. Versions prior to 1.7.0 contain a Server-Side Request Forgery (SSRF) vulnerability that allows an attacker to retrieve arbitrary system and application files from the server. An attacker can exploit the /api/v1/datasource/check endpoint by configuring a forged MySQL data source with a malicious parameter extraJdbc=\"local_infile=1\". When the SQLBot backend attempts to verify the connectivity of this data source, an attacker-controlled Rogue MySQL server issues a malicious LOAD DATA LOCAL INFILE command during the MySQL handshake. This forces the target server to read arbitrary files from its local filesystem (such as /etc/passwd or configuration files) and transmit the contents back to the attacker. This issue was fixed in version 1.7.0.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "file_read",
+   "ssrf"
+  ],
+  "priority": 16,
+  "product": "SQLBot",
+  "published": "2026-03-20T05:16:14.387",
+  "references": [
+   "https://github.com/dataease/SQLBot/commit/ff98514827bad99b8fa4b39385adecc6e3d44355",
+   "https://github.com/dataease/SQLBot/releases/tag/v1.7.0",
+   "https://github.com/dataease/SQLBot/security/advisories/GHSA-wqj3-xcxf-j9m9"
+  ],
+  "vendor": "dataease"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/free5gc/free5gc/security/advisories/GHSA-7g27-v5wj-jr75"
+  ],
+  "commit_refs": [
+   "https://github.com/free5gc/udm/commit/65d7070f4bfd016864cbbaefbd506bbc85d2fa92"
+  ],
+  "cpes": [
+   "cpe:2.3:a:free5gc:udm:*:*:*:*:*:go:*:*"
+  ],
+  "cve_id": "CVE-2026-33064",
+  "description": "Free5GC is an open-source Linux Foundation project for 5th generation (5G) mobile core networks. Versions prior to 1.4.2 are vulnerable to procedure panic caused by Nil Pointer Dereference in the /sdm-subscriptions endpoint. A remote attacker can cause the UDM service to panic and crash by sending a crafted POST request to the /sdm-subscriptions endpoint with a malformed URL path containing path traversal sequences (../) and a large JSON payload. The DataChangeNotificationProcedure function in notifier.go attempts to access a nil pointer without proper validation, causing a complete service crash with \"runtime error: invalid memory address or nil pointer dereference\". Exploitation would result in UDM functionality disruption until recovery by restart. This issue has been fixed in version 1.4.2.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal"
+  ],
+  "priority": 16,
+  "product": "free5gc",
+  "published": "2026-03-20T08:16:12.257",
+  "references": [
+   "https://github.com/free5gc/free5gc/issues/781",
+   "https://github.com/free5gc/free5gc/security/advisories/GHSA-7g27-v5wj-jr75",
+   "https://github.com/free5gc/udm/commit/65d7070f4bfd016864cbbaefbd506bbc85d2fa92",
+   "https://github.com/free5gc/udm/pull/78"
+  ],
+  "vendor": "free5gc"
+ }
+]
