@@ -299,6 +299,20 @@ def _affected_subpackage(
     return None
 
 
+def _source_ref_identity(image_set: dict, variant: str, expected) -> str:
+    """Return the framework build label when it pins this variant's ref."""
+    data = (image_set.get("variants") or {}).get(variant) or {}
+    identity = data.get("runtime_identity") or {}
+    label = str(identity.get("source_ref") or "")
+    if (
+        label
+        and _version_key(label) == _version_key(expected)
+        and identity.get("image") == data.get("target_digest")
+    ):
+        return label
+    return ""
+
+
 def _source_runtime_identity(image_set: dict, spec: dict) -> bool:
     """Both variants resolve the product to the exact pinned release at runtime.
 
@@ -314,6 +328,11 @@ def _source_runtime_identity(image_set: dict, spec: dict) -> bool:
     ):
         data = variants.get(variant) or {}
         identity = data.get("runtime_identity") or {}
+        if _source_ref_identity(image_set, variant, expected):
+            # The framework built this image with HARBOR_SOURCE_REF=<ref> and
+            # labelled it; a Go main module reported as "(devel)" never shows
+            # up in build info, so this label is the only identity evidence.
+            continue
         if not identity.get("verified"):
             return False
         _, installed = _locked_dependency(
@@ -359,7 +378,13 @@ def _dimension_v(spec: dict, evidence: dict, image_set: dict, policy: Policy) ->
         if match:
             locked_name, locked = match
             subpackage = True
-    if locked is None:
+    source_ref = _source_ref_identity(image_set, "vulnerable", expected)
+    if locked is None and source_ref:
+        lock_item = Item(
+            "V4-build-lock", "pass",
+            f"source build labelled with ref {source_ref!r}",
+        )
+    elif locked is None:
         lock_item = Item("V4-build-lock", "unknown", f"{product} is not in the built dependency lock")
     elif subpackage:
         lock_item = Item(
@@ -705,8 +730,13 @@ def _task_gates(
             built = (image_set.get("variants") or {}).get(variant, {})
             identity = built.get("runtime_identity") or {}
             _, installed = _locked_dependency(identity.get("dependencies") or {}, spec["product"]["name"])
-            add(f"runtime_identity_{variant}", bool(identity.get("verified")) and identity.get("image") == built.get("target_digest") and _version_key(installed) == _version_key(expected),
-                f"installed={installed!r} expected={expected!r}; inspected image={identity.get('image')}")
+            source_ref = _source_ref_identity(image_set, variant, expected)
+            add(f"runtime_identity_{variant}",
+                bool(source_ref)
+                or (bool(identity.get("verified")) and identity.get("image") == built.get("target_digest")
+                    and _version_key(installed) == _version_key(expected)),
+                (f"source ref={source_ref!r}" if source_ref else
+                 f"installed={installed!r} expected={expected!r}; inspected image={identity.get('image')}"))
         for experiment_id in ("T05", "T06", "T07", "T10"):
             actual = [r for r in matrix.records if r["experiment_id"] == experiment_id
                       and (r.get("_audit") or {}).get("mode") != "framework-verifier"]

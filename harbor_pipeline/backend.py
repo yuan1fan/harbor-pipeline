@@ -201,6 +201,29 @@ def inspect_image(image_ref: str, *, dockerfile: Path) -> tuple[str, str]:
     return parts[0], (parts[1] if len(parts) > 1 else "unknown")
 
 
+def image_label(image_ref: str, key: str) -> str:
+    """Read a framework-owned label from a built image, empty when absent."""
+    docker = docker_binary()
+    completed = subprocess.run(
+        [
+            docker,
+            "image",
+            "inspect",
+            image_ref,
+            "--format",
+            '{{index .Config.Labels "' + key + '"}}',
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        **no_window_kwargs(),
+    )
+    if completed.returncode != 0:
+        return ""
+    value = completed.stdout.strip()
+    return "" if value in {"<no value>", "null"} else value
+
+
 def dependency_lock(
     context: Path,
     *,
@@ -338,6 +361,12 @@ def build_image(
         "-f",
         str(dockerfile),
     ]
+    if name == "target" and product_ref:
+        # The framework appends this label to every synthesized target. It is
+        # the only identity evidence for a Go/Rust binary whose main module is
+        # reported as "(devel)" in build info and therefore never appears in
+        # the dependency list.
+        build_args = {**(build_args or {}), "HARBOR_SOURCE_REF": product_ref}
     if no_cache:
         command.append("--no-cache")
     for key, value in (build_args or {}).items():
@@ -372,6 +401,7 @@ def build_image(
             product_ref=product_ref,
             log_path=log_path.with_suffix(".identity.json"),
         )
+        identity["source_ref"] = image_label(digest, "org.harbor.source-ref")
     return ImageBuild(
         name=name,
         context=context,

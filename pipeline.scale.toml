@@ -53,9 +53,9 @@ max_budget_usd = 30.0
 provider = "claude-code"
 model = "deepseek-flash[1m]"
 timeout_sec = 5400
-max_turns = 120
+max_turns = 200
 autocompact = "400k"
-max_budget_usd = 12.0
+max_budget_usd = 20.0
 
 
 [models.solver]

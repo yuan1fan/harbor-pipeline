@@ -512,6 +512,8 @@ _SYNTHESIS_LAYER = """\
 # Harbor pipeline: the framework owns the secret, the health probe tooling and
 # the process entrypoint. A synthesized target may be node, PHP, Java or Go,
 # so a Python-based healthcheck would be wrong; curl is installed here instead.
+ARG HARBOR_SOURCE_REF
+LABEL org.harbor.source-ref="${HARBOR_SOURCE_REF}"
 USER root
 COPY entrypoint.sh /opt/harbor/entrypoint.sh
 RUN chmod 0555 /opt/harbor/entrypoint.sh \\

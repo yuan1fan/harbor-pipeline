@@ -266,3 +266,58 @@ def test_v1_accepts_source_build_verified_at_runtime():
     }
     dimension = _dimension_v(spec, {"sources": []}, image_set, load_policy())
     assert next(i for i in dimension.items if i.id == "V1-artifact-identity").status == "pass"
+
+
+def test_source_build_accepts_framework_source_ref_label():
+    # A Go main module reported as "(devel)" never reaches the dependency
+    # lock. The framework-supplied build label is the remaining evidence that
+    # each variant was built from its pinned ref.
+    from harbor_pipeline.evaluator import _dimension_v
+    spec = {
+        "artifact_identity": [
+            {"kind": "source", "digest": "unverified:0.134.0", "name": "whodb"}
+        ],
+        "versions": {"vulnerable_ref": "0.134.0", "fixed_ref": "0.135.0"},
+        "product": {"name": "whodb"},
+    }
+    image_set = {
+        "dependencies": {},
+        "variants": {
+            "vulnerable": {
+                "target_digest": "sha256:" + "a" * 64,
+                "runtime_identity": {
+                    "verified": False,
+                    "source_ref": "0.134.0",
+                    "image": "sha256:" + "a" * 64,
+                },
+            },
+            "fixed": {
+                "target_digest": "sha256:" + "b" * 64,
+                "runtime_identity": {
+                    "verified": False,
+                    "source_ref": "0.135.0",
+                    "image": "sha256:" + "b" * 64,
+                },
+            },
+        },
+    }
+    dimension = _dimension_v(spec, {"sources": []}, image_set, load_policy())
+    statuses = {item.id: item.status for item in dimension.items}
+    assert statuses["V1-artifact-identity"] == "pass"
+    assert statuses["V4-build-lock"] == "pass"
+
+
+def test_source_ref_label_must_match_the_inspected_image():
+    from harbor_pipeline.evaluator import _source_ref_identity
+    image_set = {
+        "variants": {
+            "vulnerable": {
+                "target_digest": "sha256:" + "b" * 64,
+                "runtime_identity": {
+                    "source_ref": "0.134.0",
+                    "image": "sha256:" + "a" * 64,
+                },
+            }
+        }
+    }
+    assert _source_ref_identity(image_set, "vulnerable", "0.134.0") == ""
