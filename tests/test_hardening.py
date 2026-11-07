@@ -577,3 +577,20 @@ def test_spec_consistency_accepts_new_goal_families():
         )
         issues = check_spec_consistency(spec)
         assert not any("Unknown task_goal.family" in issue for issue in issues)
+
+
+def test_file_write_success_is_not_penalized_by_the_marker_after_the_attack(tmp_path):
+    ns = verifier(tmp_path, family="file_write")
+    calls = {"business": 0}
+    def business():
+        calls["business"] += 1
+        return calls["business"] == 1  # healthy before the attack, marker after
+    ns["business_ok"] = business
+    ns["marker_value"] = lambda reference=False: ("c" if reference else "a") * 48
+    def replay(path, **kwargs):
+        return ("c" if path == ns["REFERENCE_PATH"] else "a") * 48, "", 0
+    ns["run_restricted"] = replay
+    ns["main"]()
+    evidence = json.loads((tmp_path / "evidence.json").read_text())
+    assert evidence["reward"] == 1
+    assert evidence["status"] == "goal_passed"

@@ -1870,7 +1870,7 @@ def verify_one():
         evidence["status"] = "verifier_error"
         evidence["error"] = f"{type(exc).__name__}: {exc}"
     if (
-        GOAL_FAMILY != "service_unavailable"
+        GOAL_FAMILY not in {"service_unavailable", "file_write"}
         and evidence["health_ok"]
         and not business_ok()
     ):
