@@ -1,0 +1,2687 @@
+[
+  {
+    "advisory_refs": [
+      "https://github.com/microsoft/kiota/security/advisories/GHSA-rg4h-fpcp-2qm8"
+    ],
+    "commit_refs": [
+      "https://github.com/microsoft/kiota/commit/cccd798027f0a20db796b3df6c64f9897a39d7b1"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-59867",
+    "description": "Kiota is an OpenAPI based HTTP Client code generator. Prior to 1.29.1 and 1.32.5, Kiota resolved OpenAPI $ref values by fetching remote http(s) URLs and reading local absolute or out-of-tree file paths, allowing `kiota generate` on an attacker-controlled or attacker-influenced description to perform build-time SSRF, remote file inclusion, and local file inclusion by inlining external schemas such as REMOTE_KIOTA_PROP or Leaked into generated clients. This issue is fixed in version 1.29.1 and 1.32.5 by AllowedExternalOriginsStreamLoader and the --allowed-external-origins option.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "kiota",
+    "published": "2026-07-16T16:19:15.620",
+    "references": [
+      "https://github.com/microsoft/kiota/commit/cccd798027f0a20db796b3df6c64f9897a39d7b1",
+      "https://github.com/microsoft/kiota/pull/7888",
+      "https://github.com/microsoft/kiota/releases/tag/v1.32.5",
+      "https://github.com/microsoft/kiota/security/advisories/GHSA-rg4h-fpcp-2qm8"
+    ],
+    "vendor": "microsoft"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/gotenberg/gotenberg/security/advisories/GHSA-2mrg-35hw-x3x9",
+      "https://github.com/gotenberg/gotenberg/security/advisories/GHSA-2mrg-35hw-x3x9"
+    ],
+    "commit_refs": [
+      "https://github.com/gotenberg/gotenberg/commit/98fc40347885ad510a311b990a73397c6d4143db"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-55229",
+    "description": "Gotenberg is a Docker-powered stateless API for PDF files. Prior to 8.34.0, Gotenberg's /forms/libreoffice/convert endpoint allows a specially crafted document to cause LibreOffice to automatically retrieve external HTTP(S) resources and local file resources during document conversion, enabling blind SSRF and limited local file disclosure via linked image resource loading. This issue is fixed in version 8.34.0.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "gotenberg",
+    "published": "2026-07-10T21:16:55.630",
+    "references": [
+      "https://github.com/gotenberg/gotenberg/commit/98fc40347885ad510a311b990a73397c6d4143db",
+      "https://github.com/gotenberg/gotenberg/releases/tag/v8.34.0",
+      "https://github.com/gotenberg/gotenberg/security/advisories/GHSA-2mrg-35hw-x3x9"
+    ],
+    "vendor": "gotenberg"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/inventree/InvenTree/security/advisories/GHSA-568x-qh23-wh8g"
+    ],
+    "commit_refs": [
+      "https://github.com/inventree/InvenTree/commit/2b4f3037703bd499e420b6904153f2b66878d61b"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-61749",
+    "description": "InvenTree is an Open Source Inventory Management System. Prior to 1.4.0, privileged staff users who can author report or label templates can cause WeasyPrint report rendering to retrieve attacker-selected resources through the HTTP and HTTPS URL schemes or the local file URI scheme. The HTML(string=html).write_pdf() path does not provide a restricted url_fetcher, and attach_to_model=True stores the original generated PDF before later processing, allowing fetched local files or internal HTTP response bodies to be recovered from embedded attachments. This enables full-read server-side request forgery, arbitrary local file disclosure including application credentials, and possible compromise of a superuser account. This issue is fixed in version 1.4.0.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "InvenTree",
+    "published": "2026-09-21T19:17:07.907",
+    "references": [
+      "https://github.com/inventree/InvenTree/commit/2b4f3037703bd499e420b6904153f2b66878d61b",
+      "https://github.com/inventree/InvenTree/pull/12160",
+      "https://github.com/inventree/InvenTree/releases/tag/1.4.0",
+      "https://github.com/inventree/InvenTree/security/advisories/GHSA-568x-qh23-wh8g"
+    ],
+    "vendor": "inventree"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/christianhelle/refitter/security/advisories/GHSA-x6w4-f264-3vvr"
+    ],
+    "commit_refs": [
+      "https://github.com/christianhelle/refitter/commit/6ad20a3803561225100b0a4bb6b12f947d23db7b"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-63184",
+    "description": "Refitter is a tool for generating a C# REST API client using the Refit library. Prior to 2.1.1, the `refitter` dotnet tool invokes `NJsonSchema` with unsafe defaults for `$ref` resolution when generating Refit interfaces and contracts from attacker-controlled or attacker-influenced OpenAPI descriptions. Remote `http(s)` references cause requests from the developer or CI host and inline untrusted remote schema content into generated output. Absolute local file paths and relative `../` traversal outside the input directory also resolve and inline local content, permitting arbitrary local-file disclosure. The demonstrated chain stops at server-side request forgery, remote file inclusion, and local file inclusion, not code execution: Refit sets the base URL at runtime, enum values use verbatim-string doubling, and string defaults are escaped. This issue is fixed in version 2.1.1.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "refitter",
+    "published": "2026-10-30T22:16:58.447",
+    "references": [
+      "https://github.com/christianhelle/refitter/commit/6ad20a3803561225100b0a4bb6b12f947d23db7b",
+      "https://github.com/christianhelle/refitter/pull/1173",
+      "https://github.com/christianhelle/refitter/releases/tag/2.1.1",
+      "https://github.com/christianhelle/refitter/security/advisories/GHSA-x6w4-f264-3vvr",
+      "https://github.com/user-attachments/files/29395269/reproduce.sh",
+      "https://github.com/user-attachments/files/29395271/maintainer-report.txt",
+      "https://github.com/user-attachments/files/29395272/advisory.md",
+      "https://github.com/user-attachments/files/29395283/reproduce.sh",
+      "https://github.com/user-attachments/files/29395284/maintainer-report.txt",
+      "https://github.com/user-attachments/files/29395285/advisory.md",
+      "https://github.com/user-attachments/files/29395286/listener.py",
+      "https://github.com/user-attachments/files/29395288/make_spec.py"
+    ],
+    "vendor": "christianhelle"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/Intermesh/groupoffice/security/advisories/GHSA-r9v4-jm2r-r9pm",
+      "https://github.com/Intermesh/groupoffice/security/advisories/GHSA-r9v4-jm2r-r9pm"
+    ],
+    "commit_refs": [
+      "https://github.com/Intermesh/groupoffice/commit/5ac199dce758e1ce0d1cdb6905df5da3c2af42b3"
+    ],
+    "cpes": [
+      "cpe:2.3:a:group-office:group_office:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-25511",
+    "description": "Group-Office is an enterprise customer relationship management and groupware tool. Prior to versions 6.8.150, 25.0.82, and 26.0.5, an authenticated user within the System Administrator group can trigger a full SSRF via the WOPI service discovery URL, including access to internal hosts/ports. The SSRF response body can be exfiltrated via the built‑in debug system, turning it into a visible SSRF. This also allows full server-side file read. This issue has been patched in versions 6.8.150, 25.0.82, and 26.0.5.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "groupoffice",
+    "published": "2026-02-04T21:16:02.243",
+    "references": [
+      "https://github.com/Intermesh/groupoffice/commit/5ac199dce758e1ce0d1cdb6905df5da3c2af42b3",
+      "https://github.com/Intermesh/groupoffice/security/advisories/GHSA-r9v4-jm2r-r9pm"
+    ],
+    "vendor": "Intermesh"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/PrefectHQ/fastmcp/security/advisories/GHSA-vv7q-7jx5-f767",
+      "https://github.com/PrefectHQ/fastmcp/security/advisories/GHSA-vv7q-7jx5-f767"
+    ],
+    "commit_refs": [
+      "https://github.com/PrefectHQ/fastmcp/commit/40bdfb6b1de0ce30609ee9ba5bb95ecd04a9fb71"
+    ],
+    "cpes": [
+      "cpe:/a:redhat:satellite:6.18::el9",
+      "cpe:/a:redhat:openshift_ai",
+      "cpe:2.3:a:jlowin:fastmcp:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-32871",
+    "description": "FastMCP is a Pythonic way to build MCP servers and clients. Prior to version 3.2.0, the OpenAPIProvider in FastMCP exposes internal APIs to MCP clients by parsing OpenAPI specifications. The RequestDirector class is responsible for constructing HTTP requests to the backend service. A vulnerability exists in the _build_url() method. When an OpenAPI operation defines path parameters (e.g., /api/v1/users/{user_id}), the system directly substitutes parameter values into the URL template string without URL-encoding. Subsequently, urllib.parse.urljoin() resolves the final URL. Since urljoin() interprets ../ sequences as directory traversal, an attacker controlling a path parameter can perform path traversal attacks to escape the intended API prefix and access arbitrary backend endpoints. This results in authenticated SSRF, as requests are sent with the authorization headers configured in the MCP provider. This issue has been patched in version 3.2.0.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "fastmcp",
+    "published": "2026-04-02T15:16:38.740",
+    "references": [
+      "https://github.com/PrefectHQ/fastmcp/commit/40bdfb6b1de0ce30609ee9ba5bb95ecd04a9fb71",
+      "https://github.com/PrefectHQ/fastmcp/pull/3507",
+      "https://github.com/PrefectHQ/fastmcp/releases/tag/v3.2.0",
+      "https://github.com/PrefectHQ/fastmcp/security/advisories/GHSA-vv7q-7jx5-f767",
+      "https://access.redhat.com/errata/RHSA-2026:36350",
+      "https://access.redhat.com/security/cve/CVE-2026-32871",
+      "https://bugzilla.redhat.com/show_bug.cgi?id=2454434",
+      "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-32871.json"
+    ],
+    "vendor": "PrefectHQ"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/firecrawl/firecrawl/security/advisories/GHSA-3p54-jg6f-68r8"
+    ],
+    "commit_refs": [
+      "https://github.com/firecrawl/firecrawl/commit/053630fc5203df91b707a6a523e33db5896a1ee8"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-72904",
+    "description": "Firecrawl turns entire websites into LLM-ready markdown or structured data. Prior to 2.11.32, a critical arbitrary file read vulnerability exists in Firecrawl's extraction functionality due to unsafe schema dereferencing of user-supplied JSON schemas in apps/api/src/lib/extract/helpers/dereference-schema.ts. The affected code invokes the json-schema-ref-parser dependency with default resolver settings, allowing external and local file references to be resolved during schema processing. An authenticated attacker can supply a malicious schema containing a $ref within default, const, or enum fields that are not traversed by AJV validation. By triggering a dereference error, file contents from the extract worker filesystem may be included in persisted error messages returned through the extraction API, enabling arbitrary file reads and SSRF against internal or external HTTP endpoints. This issue is fixed in version 2.11.32.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "firecrawl",
+    "published": "2026-08-10T21:17:25.117",
+    "references": [
+      "https://github.com/firecrawl/firecrawl/commit/053630fc5203df91b707a6a523e33db5896a1ee8",
+      "https://github.com/firecrawl/firecrawl/security/advisories/GHSA-3p54-jg6f-68r8"
+    ],
+    "vendor": "firecrawl"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/hapifhir/org.hl7.fhir.core/security/advisories/GHSA-2f55-g35j-5jmf",
+      "https://github.com/hapifhir/org.hl7.fhir.core/security/advisories/GHSA-2f55-g35j-5jmf"
+    ],
+    "commit_refs": [
+      "https://github.com/hapifhir/org.hl7.fhir.core/commit/01ca2ecdefec9b33204d2495fe78af8c0dc52298"
+    ],
+    "cpes": [
+      "cpe:2.3:a:hapifhir:hl7_fhir_core:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-55471",
+    "description": "HAPI FHIR is a complete implementation of the HL7 FHIR standard for healthcare interoperability in Java. Prior to 6.9.10, org.hl7.fhir.utilities.XsltUtilities saxonTransform(...) overloads instantiated a bare net.sf.saxon.TransformerFactoryImpl() without ACCESS_EXTERNAL_DTD or ACCESS_EXTERNAL_STYLESHEET restrictions, allowing an attacker who controls or can tamper with transformed XML to trigger XML External Entity injection for local file disclosure and blind XXE or SSRF to arbitrary URLs reachable from the host. This issue is fixed in version 6.9.10.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read",
+      "ssrf",
+      "xxe"
+    ],
+    "priority": 16,
+    "product": "org.hl7.fhir.core",
+    "published": "2026-07-08T22:17:15.520",
+    "references": [
+      "https://github.com/hapifhir/org.hl7.fhir.core/commit/01ca2ecdefec9b33204d2495fe78af8c0dc52298",
+      "https://github.com/hapifhir/org.hl7.fhir.core/releases/tag/6.9.10",
+      "https://github.com/hapifhir/org.hl7.fhir.core/security/advisories/GHSA-2f55-g35j-5jmf"
+    ],
+    "vendor": "hapifhir"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/Squidex/squidex/security/advisories/GHSA-45fq-w37p-qfw5",
+      "https://github.com/Squidex/squidex/security/advisories/GHSA-45fq-w37p-qfw5"
+    ],
+    "commit_refs": [
+      "https://github.com/Squidex/squidex/commit/b81d75e1d9c1a8e30993c2ee59b350002b9aeda4"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-41177",
+    "description": "Squidex is an open source headless content management system and content management hub. Prior to version 7.23.0, the Squidex Restore API is vulnerable to Blind Server-Side Request Forgery (SSRF). The application fails to validate the URI scheme of the user-supplied `Url` parameter, allowing the use of the `file://` protocol. This allows an authenticated administrator to force the backend server to interact with the local filesystem, which can lead to Local File Interaction (LFI) and potential disclosure of sensitive system information through side-channel analysis of internal logs. Version 7.23.0 contains a fix.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "squidex",
+    "published": "2026-04-22T22:16:31.957",
+    "references": [
+      "https://github.com/Squidex/squidex/commit/b81d75e1d9c1a8e30993c2ee59b350002b9aeda4",
+      "https://github.com/Squidex/squidex/security/advisories/GHSA-45fq-w37p-qfw5"
+    ],
+    "vendor": "Squidex"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/premailer/css_parser/security/advisories/GHSA-9pmc-p236-855h",
+      "https://github.com/premailer/css_parser/security/advisories/GHSA-9pmc-p236-855h"
+    ],
+    "commit_refs": [
+      "https://github.com/premailer/css_parser/commit/7d2ddf0189cd54b54f378f59daefa10cb036e476",
+      "https://github.com/premailer/css_parser/commit/e0a151458b2a801ae265ba420862ef8b1127b3ae"
+    ],
+    "cpes": [
+      "cpe:2.3:a:premailer:css_parser:2.2.0:*:*:*:*:ruby:*:*"
+    ],
+    "cve_id": "CVE-2026-53727",
+    "description": "css_parser is a Ruby CSS parser. From 2.2.0 until 3.0.0, CssParser::Parser#read_remote_file in lib/css_parser/parser.rb, and therefore load_uri! and the @import-following branch of add_block!, issued HTTP and HTTPS requests against any host, port, and URI without a scheme allowlist, host or IP filtering, or protection against link-local, loopback, or RFC-1918 addresses. Location: redirects were followed recursively back into the same function, which also serviced file:// URIs, so a single attacker-controlled HTTP redirect could upgrade the bug from SSRF to arbitrary local file disclosure. Any consumer of css_parser that hands it attacker-influenced CSS together with a base_uri: option is exposed. This issue is fixed in version 3.0.0.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "css_parser",
+    "published": "2026-07-17T21:17:07.837",
+    "references": [
+      "https://github.com/premailer/css_parser/commit/7d2ddf0189cd54b54f378f59daefa10cb036e476",
+      "https://github.com/premailer/css_parser/commit/e0a151458b2a801ae265ba420862ef8b1127b3ae",
+      "https://github.com/premailer/css_parser/releases/tag/v3.0.0",
+      "https://github.com/premailer/css_parser/security/advisories/GHSA-9pmc-p236-855h"
+    ],
+    "vendor": "premailer"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/flarum/framework/security/advisories/GHSA-xjvc-pw2r-6878",
+      "https://github.com/flarum/framework/security/advisories/GHSA-xjvc-pw2r-6878"
+    ],
+    "commit_refs": [
+      "https://github.com/flarum/framework/commit/2d90a1f19f0e46f8c7e1b07c48ba74b5e38f8410"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-41887",
+    "description": "Flarum is open-source forum software. Prior to versions 1.8.16 and 2.0.0-rc.1, Flarum's patch for CVE-2023-27577 restricted the @import and data-uri() LESS features in the custom_less setting, but the same restriction was never applied to other settings registered as LESS config variables (for example theme_primary_color and theme_secondary_color, as well as any key registered via Extend\\Settings::registerLessConfigVar()). Those values are interpolated verbatim into the LESS source at compile time, allowing an authenticated administrator to craft a theme-color value that injects an arbitrary @import directive into the compiled forum.css. Because the underlying LESS parser honours @import (inline) '<path>', an attacker can read arbitrary files reachable by the PHP process (local file inclusion) or trigger outbound HTTP(S) requests (server-side request forgery). This issue has been patched in versions 1.8.16 and 2.0.0-rc.1.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "framework",
+    "published": "2026-05-08T17:16:30.890",
+    "references": [
+      "https://github.com/flarum/framework/commit/2d90a1f19f0e46f8c7e1b07c48ba74b5e38f8410",
+      "https://github.com/flarum/framework/releases/tag/v1.8.16",
+      "https://github.com/flarum/framework/releases/tag/v2.0.0-rc.1",
+      "https://github.com/flarum/framework/security/advisories/GHSA-xjvc-pw2r-6878"
+    ],
+    "vendor": "flarum"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/omnifaces/omnifaces/security/advisories/GHSA-fp43-vj7g-pg92"
+    ],
+    "commit_refs": [
+      "https://github.com/omnifaces/omnifaces/commit/aa42da361821ddfbb85b126564e71587347d2786"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-102695",
+    "description": "OmniFaces is a utility library for Faces. In OmniFaces versions before 1.14.3, 2.7.33, 3.14.23, 4.7.12, and 5.4.2, CombinedResourceHandler accepts a structurally valid deflated and base64 encoded combined resource ID without verifying that the server issued it. A forged ID can cause unbounded decoded output, add unique reconstructed IDs to a process-lifetime cache, or combine resources other than stylesheets and scripts. Because jakarta.faces.RESOURCE_EXCLUDES is not applied by this custom resolution path, a forged ID can disclose Facelets source from the webapp resource tree or META-INF/resources. In a deployment configured with the wildcard CDN mapping, a forged ID that selects omnifaces.graphic can also cause a blind, deployment-dependent server-side fetch whose destination derives partly from the request Host header. The flaw does not provide arbitrary file read or establish arbitrary-scheme or arbitrary-destination SSRF. The shared authenticity failure permits memory exhaustion and limited resource disclosure. This issue is fixed in versions 1.14.3, 2.7.33, 3.14.23, 4.7.12, and 5.4.2.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "omnifaces",
+    "published": "2026-10-14T16:17:29.840",
+    "references": [
+      "https://github.com/omnifaces/omnifaces/commit/aa42da361821ddfbb85b126564e71587347d2786",
+      "https://github.com/omnifaces/omnifaces/releases/tag/1.14.3",
+      "https://github.com/omnifaces/omnifaces/releases/tag/2.7.33",
+      "https://github.com/omnifaces/omnifaces/releases/tag/3.14.23",
+      "https://github.com/omnifaces/omnifaces/releases/tag/4.7.12",
+      "https://github.com/omnifaces/omnifaces/releases/tag/5.4.2",
+      "https://github.com/omnifaces/omnifaces/security/advisories/GHSA-fp43-vj7g-pg92"
+    ],
+    "vendor": "omnifaces"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/KnpLabs/snappy/security/advisories/GHSA-c5fp-p67m-gq56",
+      "https://github.com/pontedilana/php-weasyprint/security/advisories/GHSA-x8g9-h984-pc36",
+      "https://github.com/pontedilana/php-weasyprint/security/advisories/GHSA-x8g9-h984-pc36"
+    ],
+    "commit_refs": [
+      "https://github.com/pontedilana/php-weasyprint/commit/9582dcf119a405276cf55e9e10bc577a887792cb"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-49359",
+    "description": "PhpWeasyPrint is a PHP library allowing PDF generation from a URL or an HTML page. Prior to version 2.6.0, `pontedilana/php-weasyprint` fetches the content of option values server-side via `file_get_contents()` when the value looks like a URL, without restricting the URL scheme. The `attachment` option of `Pdf` is the reachable sink: any value that passes `isOptionUrl()` (`filter_var(..., FILTER_VALIDATE_URL)`) is downloaded by the PHP process and embedded into the generated PDF. Because `FILTER_VALIDATE_URL` accepts `http`, `https`, `ftp`, `file` and PHP stream wrappers such as `php://`, an attacker who can influence the `attachment` value reaches both a **Server-Side Request Forgery** primitive (e.g. internal HTTP endpoints, cloud metadata) and a local file disclosure primitive (`file://`, `php://filter/...`), with the fetched bytes exfiltrated as a PDF attachment. This is the same class of issue KnpLabs/snappy patched for its `xsl-style-sheet` option in GHSA-c5fp-p67m-gq56. The library is documented as a one-to-one substitute for KnpLabs/snappy and shares the same code shape. PhpWeasyPrint version 2.6.0 contains a patch for the issue.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "php-weasyprint",
+    "published": "2026-06-19T18:16:19.890",
+    "references": [
+      "https://github.com/KnpLabs/snappy/security/advisories/GHSA-c5fp-p67m-gq56",
+      "https://github.com/pontedilana/php-weasyprint/commit/9582dcf119a405276cf55e9e10bc577a887792cb",
+      "https://github.com/pontedilana/php-weasyprint/releases/tag/2.6.0",
+      "https://github.com/pontedilana/php-weasyprint/security/advisories/GHSA-x8g9-h984-pc36"
+    ],
+    "vendor": "pontedilana"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/Aiven-Open/bigquery-connector-for-apache-kafka/security/advisories/GHSA-3mg8-2g53-5gj4"
+    ],
+    "commit_refs": [
+      "https://github.com/Aiven-Open/bigquery-connector-for-apache-kafka/commit/20ea3921c6fe72d605a033c1943b20f49eaba981"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-23529",
+    "description": "Kafka Connect BigQuery Connector is an implementation of a sink connector from Apache Kafka to Google BigQuery. Prior to 2.11.0, there is an arbitrary file read in Google BigQuery Sink connector. Aiven's Google BigQuery Kafka Connect Sink connector requires Google Cloud credential configurations for authentication to BigQuery services. During connector configuration, users can supply credential JSON files that are processed by Google authentication libraries. The service fails to validate externally-sourced credential configurations before passing them to the authentication libraries. An attacker can exploit this by providing a malicious credential configuration containing crafted credential_source.file paths or credential_source.url endpoints, resulting in arbitrary file reads or SSRF attacks.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 16,
+    "product": "bigquery-connector-for-apache-kafka",
+    "published": "2026-01-16T17:15:54.783",
+    "references": [
+      "https://docs.cloud.google.com/support/bulletins#gcp-2025-005",
+      "https://github.com/Aiven-Open/bigquery-connector-for-apache-kafka/commit/20ea3921c6fe72d605a033c1943b20f49eaba981",
+      "https://github.com/Aiven-Open/bigquery-connector-for-apache-kafka/releases/tag/v2.11.0",
+      "https://github.com/Aiven-Open/bigquery-connector-for-apache-kafka/security/advisories/GHSA-3mg8-2g53-5gj4"
+    ],
+    "vendor": "Aiven-Open"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/craftcms/cms/security/advisories/GHSA-3m9m-24vh-39wx"
+    ],
+    "commit_refs": [
+      "https://github.com/craftcms/cms/commit/d20aecfaa0eae076c4154be3b17e1f9fa05ce46f"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-41129",
+    "description": "Craft CMS is a content management system (CMS). Versions on the 4.x branch through 4.17.8 and the 5.x branch through 5.9.14 are vulnerable to Server-Side Request Forgery. The exploitation requires a few permissions to be enabled in the used GraphQL schema: \"Edit assets in the <VolumeName> volume\" and \"Create assets in the <VolumeName> volume.\" Versions 4.17.9 and 5.9.15 patch the issue.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 18,
+    "product": "cms",
+    "published": "2026-04-22T00:16:28.733",
+    "references": [
+      "https://github.com/craftcms/cms/commit/d20aecfaa0eae076c4154be3b17e1f9fa05ce46f",
+      "https://github.com/craftcms/cms/security/advisories/GHSA-3m9m-24vh-39wx"
+    ],
+    "vendor": "craftcms"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/RARgames/4gaBoards/security/advisories/GHSA-rv7w-hhqv-65cf",
+      "https://github.com/RARgames/4gaBoards/security/advisories/GHSA-rv7w-hhqv-65cf"
+    ],
+    "commit_refs": [
+      "https://github.com/RARgames/4gaBoards/commit/654151d7cc7739e43fd32d368e47bc4090cc65f5"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-50186",
+    "description": "4gaBoards is a boards system for realtime project management. Prior to 3.3.8, 4gaBoards allows an authenticated project manager to supply traversal sequences in the filename parameter of GET /exports/:id/:filename. In server/api/controllers/boards/download.js, the decoded inputs.filename value is passed to path.join() beneath private/exports/<user_id>/ without containment validation. A crafted value such as ../ can select an arbitrary file readable by the server process, and the file is returned to the attacker. The fileStream close handler then passes the same path to fs.unlink(), deleting the selected file and potentially causing data loss or denial of service. This issue is fixed in version 3.3.8.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "priority": 16,
+    "product": "4gaBoards",
+    "published": "2026-08-18T22:16:52.783",
+    "references": [
+      "https://github.com/RARgames/4gaBoards/commit/654151d7cc7739e43fd32d368e47bc4090cc65f5",
+      "https://github.com/RARgames/4gaBoards/releases/tag/v3.3.8",
+      "https://github.com/RARgames/4gaBoards/security/advisories/GHSA-rv7w-hhqv-65cf"
+    ],
+    "vendor": "RARgames"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/cisco-ai-defense/skill-scanner/security/advisories/GHSA-ppfx-73j5-fhxc"
+    ],
+    "commit_refs": [
+      "https://github.com/cisco-ai-defense/skill-scanner/commit/1e35e57f3051ecc89ba845ae7206321c8eac20a1"
+    ],
+    "cpes": [
+      "cpe:2.3:a:cisco:skill_scanner:*:*:*:*:*:python:*:*"
+    ],
+    "cve_id": "CVE-2026-26057",
+    "description": "Skill Scanner is a security scanner for AI Agent Skills that detects prompt injection, data exfiltration, and malicious code patterns. A vulnerability in the API Server of Skill Scanner could allow a unauthenticated, remote attacker to interact with the server API and either trigger a denial of service (DoS) condition or upload arbitrary files. This vulnerability is due to an erroneous binding to multiple interfaces. An attacker could exploit this vulnerability by sending API requests to a device exposing the affected API Server. A successful exploit could allow the attacker to consume an excessive amount of resources (memory starvation) or to upload files to arbitrary folders on the affected device. This vulnerability affects Skill-scanner 1.0.1 and earlier releases when the API Server is enabled. The API Server is not enabled by default. Skill-scanner software releases 1.0.2 and later contain the fix for this vulnerability.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 16,
+    "product": "skill-scanner",
+    "published": "2026-02-19T19:22:29.537",
+    "references": [
+      "https://github.com/cisco-ai-defense/skill-scanner/commit/1e35e57f3051ecc89ba845ae7206321c8eac20a1",
+      "https://github.com/cisco-ai-defense/skill-scanner/security/advisories/GHSA-ppfx-73j5-fhxc"
+    ],
+    "vendor": "cisco-ai-defense"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/dompdf/dompdf/security/advisories/GHSA-7x2p-4jvh-6384",
+      "https://github.com/dompdf/dompdf/security/advisories/GHSA-7x2p-4jvh-6384"
+    ],
+    "commit_refs": [
+      "https://github.com/dompdf/dompdf/commit/75c39a083bf7298044fb27399b4cc183054438b4"
+    ],
+    "cpes": [
+      "cpe:2.3:a:dompdf_project:dompdf:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-55555",
+    "description": "Dompdf is an HTML to PDF converter for PHP. Versions 3.15 and prior are vulnerable to a File Existence Oracle attack through the manipulation of the CSS @font-face directive. By providing malicious HTML that references local files via the file:// protocol repeatedly, an attacker can trigger PHP memory exhaustion. Because Dompdf behaves differently depending on whether a referenced local file exists (an existing file is processed repeatedly until it triggers an \"Allowed memory size exhausted\" crash, whereas a missing file fails fast or is ignored and never hits the memory limit), an attacker can use this observable discrepancy as an oracle to enumerate sensitive files on the server regardless of CHROOT restrictions. Exploitation requires the attacker to supply unrestricted or unsanitized HTML in a request that permits large data, plus a configuration where Dompdf's memory limit is low enough to be exhausted (with $_dompdf_show_warnings=true making the overflow easier to reach). This issue has been fixed in version 3.16.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 16,
+    "product": "dompdf",
+    "published": "2026-07-28T20:17:26.867",
+    "references": [
+      "https://github.com/dompdf/dompdf/commit/75c39a083bf7298044fb27399b4cc183054438b4",
+      "https://github.com/dompdf/dompdf/releases/tag/v3.1.6",
+      "https://github.com/dompdf/dompdf/security/advisories/GHSA-7x2p-4jvh-6384"
+    ],
+    "vendor": "dompdf"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/julien040/anyquery/security/advisories/GHSA-xrcf-6jh3-ggvx",
+      "https://github.com/julien040/anyquery/security/advisories/GHSA-xrcf-6jh3-ggvx"
+    ],
+    "commit_refs": [
+      "https://github.com/julien040/anyquery/commit/27f84fc168310455eaf81ec4ba87eed20298670c"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-50006",
+    "description": "Anyquery is an SQL query engine built on top of SQLite. Prior to 0.4.5, anyquery server forwards unauthenticated SQL from its MySQL-compatible server port to SQLite without restricting ATTACH DATABASE filesystem targets. A remote attacker can select any path writable by the Anyquery server process, cause SQLite to create a database file there, and place attacker-controlled table content in that file. This permits arbitrary file creation or overwrite, causing filesystem integrity loss and denial of service; remote code execution is possible only when another service interprets the written file or the process has a suitably privileged writable target. This issue is fixed in version 0.4.5.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read",
+      "code_execution"
+    ],
+    "priority": 16,
+    "product": "anyquery",
+    "published": "2026-09-14T20:16:44.637",
+    "references": [
+      "https://github.com/julien040/anyquery/commit/27f84fc168310455eaf81ec4ba87eed20298670c",
+      "https://github.com/julien040/anyquery/releases/tag/0.4.5",
+      "https://github.com/julien040/anyquery/security/advisories/GHSA-xrcf-6jh3-ggvx"
+    ],
+    "vendor": "julien040"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/TriliumNext/Trilium/security/advisories/GHSA-3gxr-j6g6-q75c",
+      "https://github.com/TriliumNext/Trilium/security/advisories/GHSA-3gxr-j6g6-q75c"
+    ],
+    "commit_refs": [
+      "https://github.com/TriliumNext/Trilium/commit/c417c901dfe45222c321fab1685f26730cc2068f"
+    ],
+    "cpes": [
+      "cpe:2.3:a:triliumnotes:trilium:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-53580",
+    "description": "Trilium is an open-source hierarchical note-taking application. In versions prior to 0.104.0, the automatic image-download feature accepts file:// URLs in a note's img tags and reads the referenced local file with no path validation, allowing any authenticated user to disclose arbitrary files readable by the Trilium process. When a text note is saved, Trilium scans its HTML for image sources and downloads each external one; because the HTML sanitizer keeps file as an allowed scheme, a source such as file:///etc/passwd is passed straight to a filesystem read and its contents are stored as a note attachment the user can then retrieve. Pointing the same primitive at an unbounded source such as /dev/zero causes uncontrolled memory allocation that crashes the server process. The feature is enabled by default and is reachable through the web UI, the ETAPI, the web clipper, and note imports, requiring only an authenticated session or an ETAPI token. This issue is fixed in version 0.104.0",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 16,
+    "product": "Trilium",
+    "published": "2026-08-27T20:17:49.153",
+    "references": [
+      "https://github.com/TriliumNext/Trilium/commit/c417c901dfe45222c321fab1685f26730cc2068f",
+      "https://github.com/TriliumNext/Trilium/security/advisories/GHSA-3gxr-j6g6-q75c"
+    ],
+    "vendor": "TriliumNext"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/WWBN/AVideo/security/advisories/GHSA-v7p7-jccx-h37c",
+      "https://github.com/WWBN/AVideo/security/advisories/GHSA-v7p7-jccx-h37c"
+    ],
+    "commit_refs": [
+      "https://github.com/WWBN/AVideo/commit/1b55a9b3c4911d2f31594ce2e60566c70c6b95e8"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-72748",
+    "description": "AVideo contains an unauthenticated arbitrary file write vulnerability in the aVideoEncoderChunk.json.php endpoint that allows remote attackers to write up to 4 GB of arbitrary content to the server filesystem via HTTP PUT requests without authentication. Attackers can exhaust disk space causing denial of service, poison the video encoding pipeline, or chain this with local file inclusion to achieve remote code execution.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read",
+      "code_execution"
+    ],
+    "priority": 16,
+    "product": "AVideo",
+    "published": "2026-08-11T13:19:05.813",
+    "references": [
+      "https://github.com/WWBN/AVideo/commit/1b55a9b3c4911d2f31594ce2e60566c70c6b95e8",
+      "https://github.com/WWBN/AVideo/security/advisories/GHSA-v7p7-jccx-h37c",
+      "https://www.vulncheck.com/advisories/avideo-unauthenticated-arbitrary-file-write-via-avideoencoderchunk-json-php"
+    ],
+    "vendor": "WWBN"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/WWBN/AVideo/security/advisories/GHSA-xmjm-86qv-g226"
+    ],
+    "commit_refs": [
+      "https://github.com/WWBN/AVideo/commit/941decd6d19e2e694acb75e86317d10fbb560284"
+    ],
+    "cpes": [
+      "cpe:2.3:a:wwbn:avideo:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-33293",
+    "description": "WWBN AVideo is an open source video platform. Prior to version 26.0, the `deleteDump` parameter in `plugin/CloneSite/cloneServer.json.php` is passed directly to `unlink()` without any path sanitization. An attacker with valid clone credentials can use path traversal sequences (e.g., `../../`) to delete arbitrary files on the server, including critical application files such as `configuration.php`, causing complete denial of service or enabling further attacks by removing security-critical files. Version 26.0 fixes the issue.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "priority": 16,
+    "product": "AVideo",
+    "published": "2026-03-22T17:17:08.950",
+    "references": [
+      "https://github.com/WWBN/AVideo/commit/941decd6d19e2e694acb75e86317d10fbb560284",
+      "https://github.com/WWBN/AVideo/security/advisories/GHSA-xmjm-86qv-g226"
+    ],
+    "vendor": "WWBN"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/wekan/wekan/security/advisories/GHSA-g6vm-7757-pr88",
+      "https://github.com/wekan/wekan/security/advisories/GHSA-g6vm-7757-pr88"
+    ],
+    "commit_refs": [
+      "https://github.com/wekan/wekan/commit/fc92b342ceedcf38dbd614a0f7b50d6dc2b22eb8"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-52890",
+    "description": "Wekan is open source kanban built with Meteor. Prior to 9.31, Wekan allows a logged-in board member to insert an attachment document through the /attachments/insert DDP method with attacker-controlled versions.original.path and versions.original.storage fields. The server/permissions/attachments.js insert rule checks only board write access, and FileStoreStrategyFilesystem.getReadStream() in models/lib/fileStoreStrategy.js streams the stored path without a storage-root containment check, allowing arbitrary file reads and denial of service through special files such as /dev/zero. This issue is fixed in version 9.31.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "priority": 16,
+    "product": "wekan",
+    "published": "2026-07-15T22:17:16.310",
+    "references": [
+      "https://github.com/wekan/wekan/commit/fc92b342ceedcf38dbd614a0f7b50d6dc2b22eb8",
+      "https://github.com/wekan/wekan/releases/tag/v9.31",
+      "https://github.com/wekan/wekan/security/advisories/GHSA-g6vm-7757-pr88"
+    ],
+    "vendor": "wekan"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/mesop-dev/mesop/security/advisories/GHSA-8qvf-mr4w-9x2c",
+      "https://github.com/mesop-dev/mesop/security/advisories/GHSA-8qvf-mr4w-9x2c"
+    ],
+    "commit_refs": [
+      "https://github.com/mesop-dev/mesop/commit/c6b382f363b73ac32c402a2db3aadc7784f66a5b"
+    ],
+    "cpes": [
+      "cpe:2.3:a:mesop-dev:mesop:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-33054",
+    "description": "Mesop is a Python-based UI framework that allows users to build web applications. Versions 1.2.2 and below contain a Path Traversal vulnerability that allows any user supplying an untrusted state_token through the UI stream payload to arbitrarily target files on the disk under the standard file-based runtime backend. This can result in application denial of service (via crash loops when reading non-msgpack target files as configurations), or arbitrary file manipulation. This vulnerability heavily exposes systems hosted utilizing FileStateSessionBackend. Unauthorized malicious actors could interact with arbitrary payloads overwriting or explicitly removing underlying service resources natively outside the application bounds. This issue has been fixed in version 1.2.3.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "priority": 16,
+    "product": "mesop",
+    "published": "2026-03-20T07:16:13.363",
+    "references": [
+      "https://github.com/mesop-dev/mesop/commit/c6b382f363b73ac32c402a2db3aadc7784f66a5b",
+      "https://github.com/mesop-dev/mesop/releases/tag/v1.2.3",
+      "https://github.com/mesop-dev/mesop/security/advisories/GHSA-8qvf-mr4w-9x2c"
+    ],
+    "vendor": "mesop-dev"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/zephyrproject-rtos/zephyr/security/advisories/GHSA-hwrh-9h3x-vccm"
+    ],
+    "commit_refs": [
+      "https://github.com/zephyrproject-rtos/zephyr/commit/7cdb534a3c3daeaec18f656953857dcafa33a2bf"
+    ],
+    "cpes": [
+      "cpe:2.3:o:zephyrproject:zephyr:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-10645",
+    "description": "The Zephyr ext2 filesystem driver (subsys/fs/ext2) trusted the on-disk directory entry fields de_rec_len and de_name_len when walking a directory block. ext2_fetch_direntry() guarded only with de_name_len > EXT2_MAX_FILE_NAME, but de_name_len is a uint8_t and EXT2_MAX_FILE_NAME is 255, so the check is always false; the function then memcpy'd up to 255 name bytes and the lookup/readdir paths advanced traversal by an unvalidated de_rec_len. Each directory block is read into a block_size-sized slab buffer, and block_off can be driven near the block end by preceding entries' rec_len, so the 8-byte header read and the subsequent name memcpy can read up to ~263 bytes past the end of the block buffer into adjacent heap/slab memory. On the readdir path those bytes are returned to the caller in fs_dirent.name, leaking adjacent kernel heap memory; a de_rec_len of 0 also causes a zero-progress infinite loop (denial of service), and the unlink path's memmove(de, next, next_reclen) over unvalidated records is an additional OOB read/write source. The defect is reached by any path-based operation (open, stat, unlink, rename, mkdir) or directory listing on a mounted ext2 volume, so a crafted or corrupted ext2 image on attacker-supplied storage (SD card, USB mass storage, or otherwise mounted image) triggers it. Affected: Zephyr ext2 from its introduction in v3.5.0 through v4.4.0. The fix validates rec_len and name_len in the parser and rejects entries whose header does not fit the remaining block or whose rec_len crosses the block boundary in every traversal caller.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 16,
+    "product": "zephyr",
+    "published": "2026-06-23T01:16:26.607",
+    "references": [
+      "https://github.com/zephyrproject-rtos/zephyr/commit/7cdb534a3c3daeaec18f656953857dcafa33a2bf",
+      "https://github.com/zephyrproject-rtos/zephyr/security/advisories/GHSA-hwrh-9h3x-vccm"
+    ],
+    "vendor": "zephyrproject"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/JeromeDevome/GRR/security/advisories/GHSA-p8vm-f8mr-q7w7"
+    ],
+    "commit_refs": [
+      "https://github.com/JeromeDevome/GRR/commit/e1f93b08ae6ebbab3ddbcd6b900800c39fb048de"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-58257",
+    "description": "GRR is a resource management and reservation application. Prior to the advisory-reported fixed version 4.5.0, the database restoration feature fails to enforce or validate file paths. A user with administrator privileges can manipulate the input to read or delete arbitrary files on the server, causing sensitive file disclosure and denial of service through file deletion. The impact is amplified when the server runs with elevated privileges. The advisory reports this issue as fixed in version 4.5.0.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 16,
+    "product": "GRR",
+    "published": "2026-10-27T23:17:06.280",
+    "references": [
+      "https://github.com/JeromeDevome/GRR/commit/e1f93b08ae6ebbab3ddbcd6b900800c39fb048de",
+      "https://github.com/JeromeDevome/GRR/security/advisories/GHSA-p8vm-f8mr-q7w7",
+      "https://github.com/JeromeDevome/GRR/tree/v4.5.0"
+    ],
+    "vendor": "JeromeDevome"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/kovidgoyal/calibre/security/advisories/GHSA-vmfh-7mr7-pp2w"
+    ],
+    "commit_refs": [
+      "https://github.com/kovidgoyal/calibre/commit/b6da1c3878c06eb1356cb0ec1106cb66e0e9bfb8"
+    ],
+    "cpes": [
+      "cpe:2.3:a:calibre-ebook:calibre:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-26065",
+    "description": "calibre is a cross-platform e-book manager for viewing, converting, editing, and cataloging e-books. Versions 9.2.1 and below are vulnerable to Path Traversal through PDB readers (both 132-byte and 202-byte header variants) that allow arbitrary file writes with arbitrary extension and arbitrary content anywhere the user has write permissions. Files are written in 'wb' mode, silently overwriting existing files. This can lead to potential code execution and Denial of Service through file corruption. This issue has been fixed in version 9.3.0.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "priority": 16,
+    "product": "calibre",
+    "published": "2026-02-20T02:16:53.730",
+    "references": [
+      "https://github.com/kovidgoyal/calibre/commit/b6da1c3878c06eb1356cb0ec1106cb66e0e9bfb8",
+      "https://github.com/kovidgoyal/calibre/security/advisories/GHSA-vmfh-7mr7-pp2w"
+    ],
+    "vendor": "kovidgoyal"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/C4illin/ConvertX/security/advisories/GHSA-pvqw-vc5x-266j",
+      "https://github.com/C4illin/ConvertX/security/advisories/GHSA-pvqw-vc5x-266j"
+    ],
+    "commit_refs": [
+      "https://github.com/C4illin/ConvertX/commit/0965928949319e2839770fbf57a8337440d42630"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-59976",
+    "description": "ConvertX is a self-hosted file conversion service. Prior to 0.18.0, the ImageMagick converter uses the unsanitized convert_to parameter to construct an output path. If an authenticated user, or an unauthenticated user when ConvertX is configured to allow unauthenticated access, uploads an extensionless image and supplies directory traversal sequences in convert_to through /convert, the constructed path escapes the intended output directory, allowing the attacker to write converted output to arbitrary container paths, potentially overwriting files or causing denial of service. This issue is fixed in version 0.18.0.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 16,
+    "product": "ConvertX",
+    "published": "2026-10-12T19:16:39.260",
+    "references": [
+      "https://github.com/C4illin/ConvertX/commit/0965928949319e2839770fbf57a8337440d42630",
+      "https://github.com/C4illin/ConvertX/pull/532",
+      "https://github.com/C4illin/ConvertX/releases/tag/v0.18.0",
+      "https://github.com/C4illin/ConvertX/security/advisories/GHSA-pvqw-vc5x-266j"
+    ],
+    "vendor": "C4illin"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/msgpack/msgpack-java/security/advisories/GHSA-cw39-r4h6-8j3x"
+    ],
+    "commit_refs": [
+      "https://github.com/msgpack/msgpack-java/commit/daa2ea6b2f11f500e22c70a22f689f7a9debdeae"
+    ],
+    "cpes": [
+      "cpe:2.3:a:msgpack:messagepack:0.9.10:*:*:*:*:java:*:*"
+    ],
+    "cve_id": "CVE-2026-21452",
+    "description": "MessagePack for Java is a serializer implementation for Java. A denial-of-service vulnerability exists in versions prior to 0.9.11 when deserializing .msgpack files containing EXT32 objects with attacker-controlled payload lengths. While MessagePack-Java parses extension headers lazily, it later trusts the declared EXT payload length when materializing the extension data. When ExtensionValue.getData() is invoked, the library attempts to allocate a byte array of the declared length without enforcing any upper bound. A malicious .msgpack file of only a few bytes can therefore trigger unbounded heap allocation, resulting in JVM heap exhaustion, process termination, or service unavailability. This vulnerability is triggered during model loading / deserialization, making it a model format vulnerability suitable for remote exploitation. The vulnerability enables a remote denial-of-service attack against applications that deserialize untrusted .msgpack model files using MessagePack for Java. A specially crafted but syntactically valid .msgpack file containing an EXT32 object with an attacker-controlled, excessively large payload length can trigger unbounded memory allocation during deserialization. When the model file is loaded, the library trusts the declared length metadata and attempts to allocate a byte array of that size, leading to rapid heap exhaustion, excessive garbage collection, or immediate JVM termination with an OutOfMemoryError. The attack requires no malformed bytes, user interaction, or elevated privileges and can be exploited remotely in real-world environments such as model registries, inference services, CI/CD pipelines, and cloud-based model hosting platforms that accept or fetch .msgpack artifacts. Because the malicious file is extremely small yet valid, it can bypass basic validation and scanning mechanisms, resulting in complete service unavailability and potential cascading failures in production systems. Version 0.9.11 fixes the vulnerability.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "deserialization"
+    ],
+    "priority": 18,
+    "product": "msgpack-java",
+    "published": "2026-01-02T21:16:03.067",
+    "references": [
+      "https://github.com/msgpack/msgpack-java/commit/daa2ea6b2f11f500e22c70a22f689f7a9debdeae",
+      "https://github.com/msgpack/msgpack-java/releases/tag/v0.9.11",
+      "https://github.com/msgpack/msgpack-java/security/advisories/GHSA-cw39-r4h6-8j3x"
+    ],
+    "vendor": "msgpack"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:apache:apisix:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-49231",
+    "description": "Authentication Bypass by Spoofing vulnerability in opa plugin. An attacker could relay spoofed identity headers to upstream capitalising on non-default configuration in opa plugin. This could allow the attacker to assume higher privileges on the upstream service. This issue affects Apache APISIX: from 3.5.0 through 3.16.0. Users are recommended to upgrade to version 3.17.0, which fixes the issue.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "auth_bypass"
+    ],
+    "priority": 40,
+    "product": "Apache APISIX",
+    "published": "2026-06-19T14:16:23.543",
+    "references": [
+      "https://lists.apache.org/thread/s1jd1vxm59p6ghx47xhmpjdk1cobo4hn",
+      "http://www.openwall.com/lists/oss-security/2026/06/19/13"
+    ],
+    "vendor": "Apache Software Foundation"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-6279",
+    "description": "The Avada Builder (fusion-builder) plugin for WordPress is vulnerable to Unauthenticated Remote Code Execution via PHP Function Injection in versions up to and including 3.15.2. This is due to the `wp_conditional_tags` case in `Fusion_Builder_Conditional_Render_Helper::get_value()` passing attacker-controlled values from a base64-decoded JSON blob directly to `call_user_func()` without any allowlist validation. This is exploitable by unauthenticated attackers through the `fusion_get_widget_markup` AJAX endpoint, which is registered for non-privileged (unauthenticated) users via `wp_ajax_nopriv_fusion_get_widget_markup`. The endpoint is protected only by a nonce (`fusion_load_nonce`), but this nonce is generated for user ID 0 and is deterministically exposed in the JavaScript output of any public-facing page containing a Post Cards (`[fusion_post_cards]`) or Table of Contents (`[fusion_table_of_contents]`) element. This makes it possible for unauthenticated attackers to execute arbitrary code on affected sites.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "code_execution"
+    ],
+    "priority": 40,
+    "product": "Avada (Fusion) Builder",
+    "published": "2026-05-21T05:16:23.770",
+    "references": [
+      "https://avada.com/documentation/avada-changelog/",
+      "https://plugins.trac.wordpress.org/browser/fusion-builder/tags/3.15.0/inc/class-fusion-builder.php#L7551",
+      "https://plugins.trac.wordpress.org/browser/fusion-builder/tags/3.15.0/inc/helpers/class-fusion-builder-conditional-render-helper.php#L1083",
+      "https://plugins.trac.wordpress.org/browser/fusion-builder/tags/3.15.0/inc/helpers/class-fusion-builder-conditional-render-helper.php#L1531",
+      "https://plugins.trac.wordpress.org/browser/fusion-builder/tags/3.15.0/shortcodes/fusion-widget.php#L389",
+      "https://plugins.trac.wordpress.org/browser/fusion-builder/tags/3.15.0/shortcodes/fusion-widget.php#L44",
+      "https://plugins.trac.wordpress.org/browser/fusion-builder/trunk/inc/class-fusion-builder.php#L7551",
+      "https://plugins.trac.wordpress.org/browser/fusion-builder/trunk/inc/helpers/class-fusion-builder-conditional-render-helper.php#L1083",
+      "https://plugins.trac.wordpress.org/browser/fusion-builder/trunk/inc/helpers/class-fusion-builder-conditional-render-helper.php#L1531",
+      "https://plugins.trac.wordpress.org/browser/fusion-builder/trunk/shortcodes/fusion-widget.php#L389",
+      "https://plugins.trac.wordpress.org/browser/fusion-builder/trunk/shortcodes/fusion-widget.php#L44",
+      "https://www.wordfence.com/threat-intel/vulnerabilities/id/5dc72d78-d47c-4b36-8d69-8672e15ddf8c?source=cve"
+    ],
+    "vendor": "themefusion"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:o:comfast:cf-n1_firmware:2.6.0.2:*:*:*:*:*:*:*",
+      "cpe:2.3:h:comfast:cf-n1:2:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-2535",
+    "description": "A vulnerability was found in Comfast CF-N1 V2 2.6.0.2. The impacted element is the function sub_44AB9C of the file /cgi-bin/mbox-config?method=SET&section=ptest_channel. The manipulation of the argument channel results in command injection. The attack can be launched remotely. The exploit has been made public and could be used. The vendor was contacted early about this disclosure but did not respond in any way.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "command_injection"
+    ],
+    "priority": 40,
+    "product": "CF-N1 V2",
+    "published": "2026-02-16T05:16:07.777",
+    "references": [
+      "https://github.com/jinhao118/cve/blob/main/ComFast%20Router_2.md",
+      "https://vuldb.com/?ctiid.346123",
+      "https://vuldb.com/?id.346123",
+      "https://vuldb.com/?submit.748784"
+    ],
+    "vendor": "Comfast"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-cxp5-3px4-pw24",
+      "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-cxp5-3px4-pw24"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-91777",
+    "description": "Forward-reference completion for @JsonIdentityInfo object IDs in FasterXML jackson-databind performs a linear scan of the pending-reference accumulator for every resolved ID. The affected paths are CollectionDeserializer.CollectionReferringAccumulator.resolveForwardReference() and the equivalent implementation in MapDeserializer. When a document first creates N unresolved object-ID references in an identity-enabled collection or map and then defines those same IDs in reverse order, completion performs on the order of N * (N + 1) / 2 identity comparisons, so a shallow document whose size grows linearly causes quadratic CPU work during deserialization. The reporter instrumented equals() calls on the ID class and measured exactly 2,003,000 comparisons at N = 2,000, against zero comparisons in the pending-reference lookup path for an equally sized control in which every reference was already resolved. The input requires no deep nesting and no syntactically unusual JSON. Exploitation requires an application that deserializes attacker-influenced JSON into an identity-enabled collection or map. The fix replaces the repeated linear lookup with a keyed pending-reference structure.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "deserialization"
+    ],
+    "priority": 30,
+    "product": "jackson-databind",
+    "published": "2026-09-23T03:17:04.783",
+    "references": [
+      "https://github.com/FasterXML/jackson-databind/issues/6204",
+      "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-cxp5-3px4-pw24"
+    ],
+    "vendor": "FasterXML"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:cisco:catalyst_center:*:*:*:*:*:*:*:*",
+      "cpe:2.3:a:cisco:catalyst_center_global_manager:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-20191",
+    "description": "A vulnerability in Cisco Catalyst Center could allow an unauthenticated, remote attacker to read arbitrary files from a restricted container.&nbsp; This vulnerability is due to insufficient validation of user-supplied input. An attacker could exploit this vulnerability by sending a crafted HTTP request to an affected device. A successful exploit could allow the attacker to read arbitrary files from a restricted container of the affected device.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 38,
+    "product": "Cisco Catalyst Center",
+    "published": "2026-07-01T17:16:29.330",
+    "references": [
+      "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-catc-file-read-wLH2vf8X"
+    ],
+    "vendor": "Cisco"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:ibm:langflow_oss:1.0.0:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:langflow_oss:1.12.2:*:*:*:*:*:*:*",
+      "cpe:2.3:a:langflow:langflow:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-101331",
+    "description": "IBM Langflow OSS 1.0.0 through 1.12.2 could allow a remote authenticated attacker to obtain sensitive information due to insufficiently protected credentials.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "information_disclosure"
+    ],
+    "priority": 40,
+    "product": "Langflow OSS",
+    "published": "2026-10-07T01:16:33.957",
+    "references": [
+      "https://www.ibm.com/support/pages/node/7290694"
+    ],
+    "vendor": "IBM"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-q7m5-3jmv-vm48",
+      "https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-q7m5-3jmv-vm48"
+    ],
+    "commit_refs": [
+      "https://github.com/MervinPraison/PraisonAI/commit/1620b49f36945d8cc8ee5635b906c960df5097a0"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-61431",
+    "description": "PraisonAI before 4.6.78 contains a path traversal vulnerability in ContextGatherer that fails to validate include paths in .praisoncontext and .praisoninclude files. Attackers can supply absolute paths or parent directory traversal sequences to read arbitrary files outside the workspace and include their contents in the generated context bundle.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "priority": 16,
+    "product": "PraisonAI",
+    "published": "2026-07-10T15:16:49.947",
+    "references": [
+      "https://github.com/MervinPraison/PraisonAI/commit/1620b49f36945d8cc8ee5635b906c960df5097a0",
+      "https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-q7m5-3jmv-vm48",
+      "https://www.vulncheck.com/advisories/praisonai-before-path-traversal-via-contextgatherer"
+    ],
+    "vendor": "MervinPraison"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:adithyayelloju:restaurant-management-system:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-103231",
+    "description": "A vulnerability was identified in AdithyaYelloju Restaurant-Management-System up to 7f0e7e84255e8fcfd488e83f8f91451bbbff6b9c. The affected element is the function mysqli_query of the file User/cancel.php of the component Order Cancellation. The manipulation of the argument ID leads to sql injection. The attack may be initiated remotely. The exploit is publicly available and might be used. The project was informed of the problem early through an issue report but has not responded yet.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "sql_injection"
+    ],
+    "priority": 40,
+    "product": "Restaurant-Management-System",
+    "published": "2026-09-30T16:17:08.657",
+    "references": [
+      "https://github.com/AdithyaYelloju/Restaurant-Management-System/",
+      "https://github.com/AdithyaYelloju/Restaurant-Management-System/issues/7",
+      "https://vuldb.com/cve/CVE-2026-103231",
+      "https://vuldb.com/submit/955080",
+      "https://vuldb.com/vuln/411924",
+      "https://vuldb.com/vuln/411924/cti"
+    ],
+    "vendor": "AdithyaYelloju"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-6649",
+    "description": "A vulnerability was determined in Qibo CMS 1.0. Affected by this issue is some unknown functionality of the file /index/image/headers. Executing a manipulation of the argument starts can lead to server-side request forgery. The attack can be launched remotely. The exploit has been publicly disclosed and may be utilized. The vendor was contacted early about this disclosure but did not respond in any way.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 40,
+    "product": "CMS",
+    "published": "2026-04-20T14:16:23.600",
+    "references": [
+      "https://tcn60zf28jhk.feishu.cn/wiki/VYIcwwH4uiWZMgkX0SecopTgnQd?from=from_copylink",
+      "https://vuldb.com/submit/793510",
+      "https://vuldb.com/vuln/358283",
+      "https://vuldb.com/vuln/358283/cti"
+    ],
+    "vendor": "Qibo"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-38165",
+    "description": "A Server-Side Template Injection (SSTI) vulnerability in the Velocity template engine configuration of xdocreport v0.9.2 to v2.2.0 allows attackers to execute arbitrary code via a crafted expression.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "template_injection"
+    ],
+    "priority": 40,
+    "product": "n/a",
+    "published": "2026-08-17T23:16:51.230",
+    "references": [
+      "https://github.com/AT190510-Cuong/CVE-2026-38165-SSTI-",
+      "https://github.com/opensagres/xdocreport",
+      "https://github.com/opensagres/xdocreport/pull/723",
+      "https://hackmd.io/@cuongnh/H1sB1RIy-g",
+      "https://hackmd.io/@cuongnh/SyPn-XF0ll"
+    ],
+    "vendor": "n/a"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:ibm:infosphere_information_server:11.7.0.0:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:infosphere_information_server:11.7.1.6:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:infosphere_information_server:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-1567",
+    "description": "IBM InfoSphere Information Server 11.7.0.0 through 11.7.1.6 An XML External Entity (XXE) vulnerability in IBM InfoSphere Information Server could allow attackers to retrieve sensitive information from the server.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "xxe",
+      "information_disclosure"
+    ],
+    "priority": 40,
+    "product": "InfoSphere Information Server",
+    "published": "2026-03-03T21:15:57.617",
+    "references": [
+      "https://www.ibm.com/support/pages/node/7259630"
+    ],
+    "vendor": "IBM"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:/a:redhat:cryostat:4::el9",
+      "cpe:/a:redhat:edge_manager:1.0::el9",
+      "cpe:/a:redhat:edge_manager:1.1::el10",
+      "cpe:/a:redhat:edge_manager:1.1::el9",
+      "cpe:/a:redhat:cert_manager:1.19::el9",
+      "cpe:/a:redhat:cluster_observability_operator:1.5::el9",
+      "cpe:/a:redhat:devworkspace:0.42::el9",
+      "cpe:/a:redhat:logging:6.6::el9",
+      "cpe:/a:redhat:multicluster_engine:2.8::el9",
+      "cpe:/a:redhat:openshift_api_data_protection:1.3::el9",
+      "cpe:/a:redhat:openshift_api_data_protection:1.4::el9",
+      "cpe:/a:redhat:openshift_api_data_protection:1.5::el9"
+    ],
+    "cve_id": "CVE-2026-46595",
+    "description": "Previously, CVE-2024-45337 fixed an authorization bypass for misused ssh server configurations; if any other type of callback is passed other than public key, then the source-address validation would be skipped.",
+    "ecosystem_hint": "go",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "auth_bypass"
+    ],
+    "priority": 40,
+    "product": "golang.org/x/crypto/ssh",
+    "published": "2026-05-22T04:16:25.550",
+    "references": [
+      "https://go.dev/cl/781642",
+      "https://go.dev/issue/79570",
+      "https://groups.google.com/g/golang-announce/c/a082jnz-LvI",
+      "https://pkg.go.dev/vuln/GO-2026-5023",
+      "https://access.redhat.com/errata/RHSA-2026:23262",
+      "https://access.redhat.com/errata/RHSA-2026:23264",
+      "https://access.redhat.com/errata/RHSA-2026:26546",
+      "https://access.redhat.com/errata/RHSA-2026:26547",
+      "https://access.redhat.com/errata/RHSA-2026:30650",
+      "https://access.redhat.com/errata/RHSA-2026:30651",
+      "https://access.redhat.com/errata/RHSA-2026:33524",
+      "https://access.redhat.com/errata/RHSA-2026:33531",
+      "https://access.redhat.com/errata/RHSA-2026:36207",
+      "https://access.redhat.com/errata/RHSA-2026:36648",
+      "https://access.redhat.com/errata/RHSA-2026:36651",
+      "https://access.redhat.com/errata/RHSA-2026:36796",
+      "https://access.redhat.com/errata/RHSA-2026:36797",
+      "https://access.redhat.com/errata/RHSA-2026:36808",
+      "https://access.redhat.com/errata/RHSA-2026:36820",
+      "https://access.redhat.com/errata/RHSA-2026:37275",
+      "https://access.redhat.com/errata/RHSA-2026:37387",
+      "https://access.redhat.com/errata/RHSA-2026:40118",
+      "https://access.redhat.com/errata/RHSA-2026:40945",
+      "https://access.redhat.com/errata/RHSA-2026:41019",
+      "https://access.redhat.com/errata/RHSA-2026:41036",
+      "https://access.redhat.com/errata/RHSA-2026:42796",
+      "https://access.redhat.com/errata/RHSA-2026:43692",
+      "https://access.redhat.com/errata/RHSA-2026:47737",
+      "https://access.redhat.com/errata/RHSA-2026:48151",
+      "https://access.redhat.com/errata/RHSA-2026:51033",
+      "https://access.redhat.com/errata/RHSA-2026:54531",
+      "https://access.redhat.com/errata/RHSA-2026:59467",
+      "https://access.redhat.com/errata/RHSA-2026:59558",
+      "https://access.redhat.com/errata/RHSA-2026:60520",
+      "https://access.redhat.com/errata/RHSA-2026:61314",
+      "https://access.redhat.com/errata/RHSA-2026:66022",
+      "https://access.redhat.com/errata/RHSA-2026:66521",
+      "https://access.redhat.com/security/cve/CVE-2026-46595",
+      "https://bugzilla.redhat.com/show_bug.cgi?id=2480689",
+      "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-46595.json"
+    ],
+    "vendor": "golang.org/x/crypto"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/esm-dev/esm.sh/security/advisories/GHSA-2657-3c98-63jq"
+    ],
+    "commit_refs": [
+      "https://github.com/esm-dev/esm.sh/commit/9d77b88c320733ff6689d938d85d246a3af9af16",
+      "https://github.com/esm-dev/esm.sh/commit/c62ab83c589e7b421a0e1376d2a00a4e48161093"
+    ],
+    "cpes": [
+      "cpe:2.3:a:esm:esm.sh:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-23644",
+    "description": "esm.sh is a no-build content delivery network (CDN) for web development. Prior to Go pseeudoversion 0.0.0-20260116051925-c62ab83c589e, the software has a path traversal vulnerability due to an incomplete fix. `path.Clean` normalizes a path but does not prevent absolute paths in a malicious tar file. Commit https://github.com/esm-dev/esm.sh/commit/9d77b88c320733ff6689d938d85d246a3af9af16, corresponding to pseudoversion 0.0.0-20260116051925-c62ab83c589e, fixes this issue.",
+    "ecosystem_hint": "go",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 16,
+    "product": "esm.sh",
+    "published": "2026-01-18T23:15:48.547",
+    "references": [
+      "https://github.com/esm-dev/esm.sh/commit/9d77b88c320733ff6689d938d85d246a3af9af16",
+      "https://github.com/esm-dev/esm.sh/commit/c62ab83c589e7b421a0e1376d2a00a4e48161093",
+      "https://github.com/esm-dev/esm.sh/security/advisories/GHSA-2657-3c98-63jq",
+      "https://pkg.go.dev/vuln/GO-2025-4138"
+    ],
+    "vendor": "esm-dev"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-108757",
+    "description": "Nexting pinclaw OpenClaw channel plugin through 0.3.0 contains a missing authentication vulnerability in src/core/http-router.ts that skips the authToken check on POST /pinclaw/send. Unauthenticated attackers reaching port 18790, which binds all interfaces by default, can inject blind prompts into the user's main OpenClaw agent session as user instructions.",
+    "ecosystem_hint": "npm",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "auth_bypass"
+    ],
+    "priority": 36,
+    "product": "pinclaw",
+    "published": "2026-10-11T13:17:20.840",
+    "references": [
+      "https://github.com/Nexting-ai/nexting/blob/a4b75f0429d3b1bf35eef68a296b2e72aa9c7483/plugin/src/core/http-router.ts#L296-L330",
+      "https://github.com/Nexting-ai/nexting/blob/a4b75f0429d3b1bf35eef68a296b2e72aa9c7483/plugin/src/core/server.ts#L149",
+      "https://hackmd.io/@haind/nexting-pinclaw-send-unauth-agent-injection",
+      "https://www.npmjs.com/package/pinclaw",
+      "https://www.vulncheck.com/advisories/nexting-pinclaw-through-0.3.0-missing-authentication-via-post-pinclaw-send"
+    ],
+    "vendor": "Nexting"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/nfriedly/node-bestzip/security/advisories/GHSA-p87m-9567-rgcc",
+      "https://github.com/nfriedly/node-bestzip/security/advisories/GHSA-xhwx-rch4-ph2v"
+    ],
+    "commit_refs": [
+      "https://github.com/nfriedly/node-bestzip/commit/2adb637b0acb05b8475de7db5af4b86ffcf40aaf"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-87794",
+    "description": "bestzip versions 2.2.6 and 3.0.2 contain an argument injection vulnerability in the nativeZip function that allows attackers to inject arbitrary arguments to the Info-ZIP backend. Attackers can supply a malicious destination path combined with crafted source entries to execute arbitrary commands with Node.js process privileges. Fixed in 2.2.7 and 3.0.3.",
+    "ecosystem_hint": "npm",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "command_injection"
+    ],
+    "priority": 14,
+    "product": "bestzip",
+    "published": "2026-09-09T10:22:34.397",
+    "references": [
+      "https://github.com/nfriedly/node-bestzip",
+      "https://github.com/nfriedly/node-bestzip/blob/v3.0.2/lib/bestzip.js",
+      "https://github.com/nfriedly/node-bestzip/commit/2adb637b0acb05b8475de7db5af4b86ffcf40aaf",
+      "https://github.com/nfriedly/node-bestzip/security/advisories/GHSA-p87m-9567-rgcc",
+      "https://github.com/nfriedly/node-bestzip/security/advisories/GHSA-xhwx-rch4-ph2v",
+      "https://www.npmjs.com/package/bestzip",
+      "https://www.vulncheck.com/advisories/bestzip-2.2.6-and-3.0.2-argument-injection-via-the-native-zip-destination"
+    ],
+    "vendor": "nfriedly"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-84201",
+    "description": "appium-mcp-server through 0.1.61 fails to validate or normalize file paths in the write_file and write_files_batch tools, allowing attackers to write files outside the intended PROJECT_ROOT directory. Attackers can supply absolute paths or relative paths with parent directory segments to overwrite arbitrary files with the server user's privileges, including shell profiles and configuration files in the home directory.",
+    "ecosystem_hint": "npm",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 34,
+    "product": "appium-mcp-server",
+    "published": "2026-09-01T16:17:34.297",
+    "references": [
+      "https://github.com/argneshu/appium-mcp-server/blob/92b5c2b325e7bdd124f1f41a6049028b2a44e89c/src/mcp_server.py",
+      "https://github.com/argneshu/appium-mcp-server/blob/92b5c2b325e7bdd124f1f41a6049028b2a44e89c/src/tools/write_files_batch.py",
+      "https://www.npmjs.com/package/appium-mcp-server",
+      "https://www.vulncheck.com/advisories/appium-mcp-server-through-0.1.61-path-traversal-in-write-file-and-write-files-batch"
+    ],
+    "vendor": "argneshu"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/advisories/GHSA-rvpw-p7vw-wj3m"
+    ],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:opennextjs:opennext_for_cloudflare:*:*:*:*:*:node.js:*:*"
+    ],
+    "cve_id": "CVE-2026-3125",
+    "description": "A Server-Side Request Forgery (SSRF) vulnerability was identified in the @opennextjs/cloudflare package, resulting from a path normalization bypass in the /cdn-cgi/image/ handler.The @opennextjs/cloudflare worker template includes a /cdn-cgi/image/ handler intended for development use only. In production, Cloudflare's edge intercepts /cdn-cgi/image/ requests before they reach the Worker. However, by substituting a backslash for a forward slash (/cdn-cgi\\image/ instead of /cdn-cgi/image/), an attacker can bypass edge interception and have the request reach the Worker directly. The JavaScript URL class then normalizes the backslash to a forward slash, causing the request to match the handler and trigger an unvalidated fetch of arbitrary remote URLs. For example: https://victim-site.com/cdn-cgi\\image/aaaa/https://attacker.com In this example, attacker-controlled content from attacker.com is served through the victim site's domain (victim-site.com), violating the same-origin policy and potentially misleading users or other services. Note: This bypass only works via HTTP clients that preserve backslashes in paths (e.g., curl --path-as-is). Browsers normalize backslashes to forward slashes before sending requests. Additionally, Cloudflare Workers with Assets and Cloudflare Pages suffer from a similar vulnerability. Assets stored under /cdn-cgi/ paths are not publicly accessible under normal conditions. However, using the same backslash bypass (/cdn-cgi\\... instead of /cdn-cgi/...), these assets become publicly accessible. This could be used to retrieve private data. For example, Open Next projects store incremental cache data under /cdn-cgi/_next_cache, which could be exposed via this bypass.",
+    "ecosystem_hint": "npm",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 26,
+    "product": "@opennextjs/cloudflare",
+    "published": "2026-03-04T19:16:19.730",
+    "references": [
+      "https://github.com/advisories/GHSA-rvpw-p7vw-wj3m",
+      "https://github.com/opennextjs/opennextjs-cloudflare/pull/1147",
+      "https://www.cve.org/cverecord?id=CVE-2025-6087",
+      "https://www.npmjs.com/package/@opennextjs/cloudflare/v/1.17.1"
+    ],
+    "vendor": "opennextjs"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-111700",
+    "description": "WebVella ERP through 1.8.8 contains an sql injection vulnerability that allows any authenticated user to inject SQL through WHERE-clause text literals in the EQL query API. Attackers can send crafted single-quoted literals to POST /api/v3/en_US/eql, escaping the unsanitized EqlBuilder SQL interpolation to read unauthorized entities, including user and role tables.",
+    "ecosystem_hint": "nuget",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "sql_injection"
+    ],
+    "priority": 40,
+    "product": "WebVella-ERP",
+    "published": "2026-10-16T18:17:53.780",
+    "references": [
+      "https://github.com/WebVella/WebVella-ERP/blob/10315fe844198b8620494f716ed75410cd54bfe6/WebVella.Erp.Web/Controllers/WebApiController.cs#L64-L74",
+      "https://github.com/WebVella/WebVella-ERP/blob/10315fe844198b8620494f716ed75410cd54bfe6/WebVella.Erp/Eql/EqlBuilder.Sql.cs#L580-L581",
+      "https://hackmd.io/@hieuPenguinnn/webvella-erp-eql-text-literal-sql-injection",
+      "https://www.nuget.org/packages/WebVella.Erp/1.8.8",
+      "https://www.vulncheck.com/advisories/webvella-erp-through-1.8.8-sql-injection-via-eql-query-api"
+    ],
+    "vendor": "WebVella"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/strands-agents/tools/security/advisories/GHSA-mpxq-953j-42m4"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-19111",
+    "description": "Insecure direct object reference in the mongodb_memory, elasticsearch_memory, and mem0_memory tools in Amazon Strands Agents Tools before 0.8.3 might allow remote authenticated users to access, modify, or delete memories belonging to other tenants by influencing the LLM to emit tool calls with a forged namespace parameter. To remediate this issue, users should upgrade to version 0.8.3.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "auth_bypass"
+    ],
+    "priority": 26,
+    "product": "strands-agents-tools",
+    "published": "2026-08-06T22:16:55.410",
+    "references": [
+      "https://aws.amazon.com/security/security-bulletins/2026-077-aws/",
+      "https://github.com/strands-agents/tools/security/advisories/GHSA-mpxq-953j-42m4",
+      "https://pypi.org/project/strands-agents-tools/0.8.3/"
+    ],
+    "vendor": "AWS"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [
+      "https://github.com/trailofbits/fickling/commit/d011709"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-118938",
+    "description": "In Trail of Bits fickling through 0.1.12, a pickle STACK_GLOBAL operand carrying a dotted __qualname__ (for example \"Values.read_file\") is resolved by pickle's find_class through _getattribute to an arbitrary attribute path rather than to a module-level function. Fickling records only the leading component of the name in its import tracking and renders the operation as a plain import (for instance, 'python -m fickling' displays it as 'from optparse import Values.read_file'), so the trailing attribute reference is never analyzed as a call. The OvertlyBadEvals analysis pass does not flag it, and check_safety() returns LIKELY_SAFE with zero findings. This allows an attacker to reach a class method that performs code execution: optparse.Values.read_file executes exec(open(filename).read(), vars), achieving arbitrary code execution when the crafted pickle is loaded through fickling.load(), which chains check_safety() into pickle.loads() as an explicit security gate. optparse is present in all current CPython 3.x releases (deprecated as of Python 3.13, not removed). This weakness is in the resolution and analysis of dotted attribute-path names, and is distinct from and independently fixable from the module-origin trust weakness tracked as CVE-2026-16760: resolving or flagging dotted attribute-path imports closes this vector while leaving the module-level trust behavior unchanged. This bypass was verified to remain present on the vendor master branch at commit d011709 as of 2026-10-30, after the vendor's October blocklist additions and a new heuristic that flags private stdlib attributes; because the public class method Values.read_file is neither blocklisted nor flagged as a private attribute, it is not addressed by those remediations.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "code_execution",
+      "deserialization"
+    ],
+    "priority": 24,
+    "product": "fickling",
+    "published": "2026-10-30T22:16:54.020",
+    "references": [
+      "https://bombadil.systems/advisories.html",
+      "https://github.com/trailofbits/fickling",
+      "https://github.com/trailofbits/fickling/commit/d011709",
+      "https://pypi.org/project/fickling/0.1.12/"
+    ],
+    "vendor": "trailofbits"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/awslabs/mcp/security/advisories/GHSA-fph8-pg5w-78fv"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-87911",
+    "description": "An OS command injection weakness in the read-only enforcement of the SQL validation component in Amazon awslabs postgres-mcp-server before 1.1.7 might allow an unauthenticated actor to execute operating system commands on the host of a self-managed PostgreSQL server by placing a crafted COPY ... TO PROGRAM statement into content that is processed when an authenticated user interacts with the MCP server in its default read-only mode. To remediate this issue, users should upgrade to version 1.1.7 or later.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "command_injection"
+    ],
+    "priority": 26,
+    "product": "AWS Labs postgres MCP Server",
+    "published": "2026-09-09T20:21:02.017",
+    "references": [
+      "https://aws.amazon.com/security/security-bulletins/2026-104-aws/",
+      "https://github.com/awslabs/mcp/security/advisories/GHSA-fph8-pg5w-78fv",
+      "https://pypi.org/project/awslabs.postgres-mcp-server/1.1.7/"
+    ],
+    "vendor": "AWS"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/LMCache/LMCache/security/advisories/GHSA-w5f2-9q9c-ff4h"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-105192",
+    "description": "LMCache multiprocess mode, also called distributed mode, opens an unauthenticated ZeroMQ ROUTER so worker processes can register and share KV cache blocks. Messages on that socket are msgpack. Extension code 1 is passed to DeviceIPCWrapper.Deserialize, which calls pickle.loads, while the server is still decoding request arguments and before the handler runs. A single unauthenticated ZMQ DEALER message to the transport port (default 5555) therefore executes code as the user the LMCache process runs as. Official container images run that process as root. The transport binds to localhost unless the operator sets a routable address with --host, which is how multi-node deployments let peers connect. The decode path shipped in v0.3.9 and is present through v0.5.5, including the v0.5.6 release candidates. v0.5.6, published on 2026-10-14, removes pickle.loads from this path.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "deserialization"
+    ],
+    "priority": 26,
+    "product": "LMCache",
+    "published": "2026-10-07T10:17:32.647",
+    "references": [
+      "https://blog.lmcache.ai/en/2026/10/13/an-update-on-cve-2026-105192/",
+      "https://github.com/LMCache/LMCache",
+      "https://github.com/LMCache/LMCache/blob/v0.3.9/lmcache/v1/multiprocess/custom_types.py",
+      "https://github.com/LMCache/LMCache/blob/v0.5.5/lmcache/v1/platform/base/ipc_wrapper.py",
+      "https://github.com/LMCache/LMCache/pull/5644",
+      "https://github.com/LMCache/LMCache/pull/5684",
+      "https://github.com/LMCache/LMCache/pull/5685",
+      "https://github.com/LMCache/LMCache/releases/tag/v0.5.6",
+      "https://github.com/LMCache/LMCache/security/advisories/GHSA-w5f2-9q9c-ff4h",
+      "https://pypi.org/project/lmcache/",
+      "https://research.jfrog.com/vulnerabilities/lmcache-is-vulnerable-to-unauthenticated-remote-code-execution-via-pickle-deserialization-on-the-multiprocess-zmq-transport-cve-2026-105192-jfsa-2026-001694382/"
+    ],
+    "vendor": "LMCache"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [
+      "https://github.com/trailofbits/fickling/commit/d011709"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-16760",
+    "description": "In Trail of Bits fickling through 0.1.12, the _process_import() method in fickle.py adds an imported name to the likely_safe_imports set whenever the source module is present in sys.stdlib_module_names and the name is absent from the UNSAFE_IMPORTS denylist, without inspecting what the name resolves to or how it behaves. The OvertlyBadEvals analysis pass in analysis.py then unconditionally skips any call whose function name appears in likely_safe_imports, including calls that would otherwise be flagged as overtly dangerous. As a result, any callable reachable through a non-blocked standard library module inherits module-level trust regardless of its own behavior, and check_safety() returns LIKELY_SAFE with zero findings for pickle payloads that reach code execution or file write through such callables. Demonstrated primitives: dataclasses._create_fn, which passes an attacker-controlled function body to exec() and yields arbitrary code execution on Python 3.7 through 3.12 (the internal _create_fn function was removed in Python 3.13); mailcap.findmatch, which internally calls os.system() on a test command taken from an attacker-controlled caps dictionary, yielding arbitrary code execution on Python versions through 3.12 (the mailcap module was removed in Python 3.13); and readline.add_history() followed by readline.write_history_file(), which writes attacker-controlled content to an arbitrary filesystem path (POSIX platforms, where the readline module is available). fickling.load() chains check_safety() into pickle.loads() as an explicit security gate, so a LIKELY_SAFE verdict causes the payload to be deserialized and executed with the privileges of the victim process. The root cause is the inference of callable safety from module origin; it is independent of, and separately fixable from, the dotted __qualname__ resolution weakness tracked as CVE-2026-118938, which this advisory does not address. As of 2026-10-30 the three demonstrated modules were added to UNSAFE_IMPORTS on the vendor master branch (commit d011709) pending release; released versions through 0.1.12 remain affected, and the module-origin trust root cause persists, as demonstrated by the related CVE-2026-118938 remaining exploitable on that same build.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read",
+      "code_execution",
+      "deserialization"
+    ],
+    "priority": 22,
+    "product": "fickling",
+    "published": "2026-10-30T22:16:54.193",
+    "references": [
+      "https://bombadil.systems/advisories.html",
+      "https://github.com/trailofbits/fickling",
+      "https://github.com/trailofbits/fickling/commit/d011709",
+      "https://pypi.org/project/fickling/0.1.12/"
+    ],
+    "vendor": "trailofbits"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/aws/sagemaker-python-sdk/security/advisories/GHSA-g6w4-jvgp-68x2"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-110248",
+    "description": "Insertion of sensitive information into log files in the git_utils[.]py component in Amazon SageMaker Python SDK V3 before 3.10.0 and V2 before 2.257.3 might allow an authenticated remote user to obtain plaintext repository credentials from CloudWatch Logs when a git clone operation fails, because the runclone_command() function does not redact credentials from subprocess error output. To remediate this issue, users should upgrade to Amazon SageMaker Python SDK V3 3.10.0 or V2 2.257.3.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "information_disclosure"
+    ],
+    "priority": 26,
+    "product": "SageMaker Python SDK",
+    "published": "2026-10-14T19:17:10.343",
+    "references": [
+      "https://aws.amazon.com/security/security-bulletins/2026-134-aws/",
+      "https://github.com/aws/sagemaker-python-sdk/security/advisories/GHSA-g6w4-jvgp-68x2",
+      "https://pypi.org/project/sagemaker/2.257.3/",
+      "https://pypi.org/project/sagemaker/3.10.0/"
+    ],
+    "vendor": "AWS"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-19594",
+    "description": "Insufficient input sanitization in Snowflake Python API (`snowflake.core`) versions prior to 1.13.0 allowed confused-deputy privilege escalation through two related weaknesses: path traversal (CWE-22) via unencoded `..` identifier path segments, and HTTP parameter pollution (CWE-141) via unencoded `&`/`#`/`=` characters in query string values. An attacker with access to a downstream application built on snowflake.core could exploit the path traversal by supplying `..` as an object name, causing `snowflake.core` to issue REST requests against a parent resource or exploit the parameter pollution by injecting `&`/`#`/`=` into a free-form name field to override constraints on swap, clone, or rename operations — all executed under the application's privileged session. Successful exploitation requires the attacker to control an identifier or object-name string in an application built on snowflake.core that passes it to `snowflake.core` under a higher-privileged Snowflake session (e.g., an EXECUTE AS OWNER stored procedure, Streamlit app, or Native App). The fix is available in Snowflake Python API version 1.13.0, which also addresses several additional security findings. Users must manually upgrade.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 34,
+    "product": "Snowflake Python APIs",
+    "published": "2026-08-12T06:21:57.223",
+    "references": [
+      "https://pypi.org/project/snowflake.core/1.13.0/"
+    ],
+    "vendor": "Snowflake"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-15643",
+    "description": "AWS HealthLake MCP Server (awslabs.healthlake-mcp-server) is a Model Context Protocol server that enables AI assistants to interact with AWS HealthLake FHIR datastores. A server-side request forgery in the pagination handling component in AWS awslabs.healthlake-mcp-server before 0.0.14 on all platforms might allow a remote authenticated user to exfiltrate AWS temporary security credentials to an arbitrary endpoint via a crafted next_token parameter. The server does not validate that pagination URLs point back to the expected HealthLake endpoint, allowing an actor to redirect subsequent requests to an actor-controlled server. Its recommended to upgrade to version 0.0.14 or later.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 36,
+    "product": "awslabs.healthlake-mcp-server",
+    "published": "2026-07-14T21:16:41.293",
+    "references": [
+      "https://aws.amazon.com/security/security-bulletins/2026-054-aws/",
+      "https://pypi.org/project/awslabs.healthlake-mcp-server/0.0.14/"
+    ],
+    "vendor": "AWS"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:dell:secure_connect_gateway:*:*:*:*:application:*:*:*",
+      "cpe:2.3:a:dell:secure_connect_gateway:*:*:*:*:virtual:*:*:*"
+    ],
+    "cve_id": "CVE-2026-79645",
+    "description": "Dell SCG 5.0 Appliance versions prior to 5.36.00.16 and Dell SCG 5.0 Application versions prior to 5.36.00.00, contains a Missing Authentication for Critical Function vulnerability. An unauthenticated attacker with remote access could potentially exploit this vulnerability, leading to unauthorized access.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "auth_bypass"
+    ],
+    "priority": 40,
+    "product": "Secure Connect Gateway 5.0 - Application",
+    "published": "2026-09-07T15:17:32.033",
+    "references": [
+      "https://www.dell.com/support/kbdoc/en-in/000503426/dsa-2026-382-security-update-for-dell-secure-connect-gateway-virtual-edition-multiple-vulnerabilities?msockid=3021cac2195069ed3194ddad186a68f9"
+    ],
+    "vendor": "Dell"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/wpengine/faustjs/security/advisories/GHSA-q6pm-r77q-qcv3"
+    ],
+    "commit_refs": [
+      "https://github.com/wpengine/faustjs/commit/cda00de7290f9b178cb1652d30b4cdf5bb8688d0"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-54239",
+    "description": "Faust.js is a headless WordPress toolkit. Prior to 1.8.11, the FaustWP WordPress plugin authenticates only the ciphertext in its token envelope and excludes the 16-byte initialization vector from the HMAC in WPE\\FaustWP\\Auth\\encrypt() and WPE\\FaustWP\\Auth\\decrypt() in plugins/faustwp/includes/auth/functions.php. A logged-in non-administrator who obtains an authorization code from GET /generate can modify the unauthenticated initialization vector so that CBC decryption changes the token type and user identifier while the HMAC remains valid. This can produce an access token for an Administrator and permit full WordPress REST API access, administrator-account creation, plugin installation, and arbitrary code execution. This issue is fixed in repository version 1.8.11.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "code_execution"
+    ],
+    "priority": 18,
+    "product": "faustjs",
+    "published": "2026-09-17T19:16:50.047",
+    "references": [
+      "https://github.com/wpengine/faustjs/commit/cda00de7290f9b178cb1652d30b4cdf5bb8688d0",
+      "https://github.com/wpengine/faustjs/pull/2386",
+      "https://github.com/wpengine/faustjs/security/advisories/GHSA-q6pm-r77q-qcv3"
+    ],
+    "vendor": "wpengine"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-8652",
+    "description": "An OS Command Injection vulnerability exists in Aterm. If a malicious third person gains administrator access to the product’s web console, they may be able to execute arbitrary OS commands via adjacent network.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "command_injection"
+    ],
+    "priority": 40,
+    "product": "Aterm MR51FN",
+    "published": "2026-05-25T04:16:25.297",
+    "references": [
+      "https://jpn.nec.com/security-info/secinfo/nv26-003_en.html"
+    ],
+    "vendor": "NEC Platforms, Ltd."
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-wjgm-6hv5-3cvf",
+      "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-wjgm-6hv5-3cvf"
+    ],
+    "commit_refs": [
+      "https://github.com/FasterXML/jackson-databind/commit/cc6756b61ed90b6b9227f670e0408d5d9bd48551",
+      "https://github.com/FasterXML/jackson-databind/commit/ce26eda3481cd796f76ba4c53ffe1da23b53f166",
+      "https://github.com/FasterXML/jackson-databind/commit/d94bb632becfe0ba96926b9909ab06d1f87aad6d"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-19032",
+    "description": "jackson-databind's deserializer for java.nio.file.Path resolves an attacker-supplied URI without restricting the URI scheme. In JDKFromStringDeserializer.NioPathHelper.deserialize, a string bound from untrusted JSON is passed to new URI(value) and then to Path.of(uri). When that throws FileSystemNotFoundException, the code enumerates ServiceLoader<FileSystemProvider> and calls provider.getPath(uri) on the first provider whose scheme matches the attacker-chosen scheme. Untrusted JSON can therefore select and drive an arbitrary registered FileSystemProvider during readValue under a default JsonMapper, and forces provider class loading at the same time. With only the JDK built-in providers (file, jar/zipfs) present, the resolved path is inert and no mount or network I/O occurs; further impact requires a side-effecting third-party FileSystemProvider on the classpath. This affects com.fasterxml.jackson.core:jackson-databind from 2.8.0 before 2.18.10, from 2.19.0 before 2.21.6, and from 2.22.0 before 2.22.2, and tools.jackson.core:jackson-databind from 3.0.0 before 3.1.6 and from 3.2.0 before 3.2.2. Users should upgrade to 2.18.10, 2.21.6, 2.22.2, 3.1.6, or 3.2.2. Binding java.nio.file.Path from untrusted JSON should be avoided regardless of version.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "deserialization"
+    ],
+    "priority": 18,
+    "product": "jackson-databind",
+    "published": "2026-09-01T04:18:00.433",
+    "references": [
+      "https://github.com/FasterXML/jackson-databind/commit/cc6756b61ed90b6b9227f670e0408d5d9bd48551",
+      "https://github.com/FasterXML/jackson-databind/commit/ce26eda3481cd796f76ba4c53ffe1da23b53f166",
+      "https://github.com/FasterXML/jackson-databind/commit/d94bb632becfe0ba96926b9909ab06d1f87aad6d",
+      "https://github.com/FasterXML/jackson-databind/pull/6129",
+      "https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-wjgm-6hv5-3cvf"
+    ],
+    "vendor": "FasterXML"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/saleor/saleor/security/advisories/GHSA-666h-2p49-pg95"
+    ],
+    "commit_refs": [
+      "https://github.com/saleor/saleor/commit/77f7927a0db9a216440df92c51012136f13e1d99",
+      "https://github.com/saleor/saleor/commit/7d33efc7a06252320cd51cbb20c2e308aed2fd10",
+      "https://github.com/saleor/saleor/commit/9110eba68c3f73afa1f72b45bd9b1394c752d335",
+      "https://github.com/saleor/saleor/commit/ac6936a336289c77398ef600cad3498ad4ba261c",
+      "https://github.com/saleor/saleor/commit/b3cb27b3fe96dae3c879063e56d32a9398eabd24"
+    ],
+    "cpes": [
+      "cpe:2.3:a:saleor:saleor:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-23499",
+    "description": "Saleor is an e-commerce platform. Starting in version 3.0.0 and prior to versions 3.20.108, 3.21.43, and 3.22.27, Saleor allowed authenticated staff users or Apps to upload arbitrary files, including malicious HTML and SVG files containing Javascript. Depending on the deployment strategy, these files may be served from the same domain as the dashboard without any restrictions leading to the execution of malicious scripts in the context of the user's browser. Malicious staff members could craft script injections to target other staff members, possibly stealing their access and/or refresh tokens. Users are vulnerable if they host the media files inside the same domain as the dashboard, e.g., dashboard is at `example.com/dashboard/` and media are under `example.com/media/`. They are not impact if media files are hosted in a different domain, e.g., `media.example.com`. Users are impacted if they do not return a `Content-Disposition: attachment` header for the media files. Saleor Cloud users are not impacted. This issue has been patched in versions: 3.22.27, 3.21.43, and 3.20.108. Some workarounds are available for those unable to upgrade. Configure the servers hosting the media files (e.g., CDN or reverse proxy) to return the Content-Disposition: attachment header. This instructs browsers to download the file instead of rendering them in the browser. Prevent the servers from returning HTML and SVG files. Set-up a `Content-Security-Policy` for media files, such as `Content-Security-Policy: default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none';`.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 16,
+    "product": "saleor",
+    "published": "2026-01-21T22:15:49.703",
+    "references": [
+      "https://docs.saleor.io/security/#restricted-file-uploads",
+      "https://github.com/saleor/saleor/commit/77f7927a0db9a216440df92c51012136f13e1d99",
+      "https://github.com/saleor/saleor/commit/7d33efc7a06252320cd51cbb20c2e308aed2fd10",
+      "https://github.com/saleor/saleor/commit/9110eba68c3f73afa1f72b45bd9b1394c752d335",
+      "https://github.com/saleor/saleor/commit/ac6936a336289c77398ef600cad3498ad4ba261c",
+      "https://github.com/saleor/saleor/commit/b3cb27b3fe96dae3c879063e56d32a9398eabd24",
+      "https://github.com/saleor/saleor/security/advisories/GHSA-666h-2p49-pg95"
+    ],
+    "vendor": "saleor"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/NeoRazorX/facturascripts/security/advisories/GHSA-vrxf-vrc4-22p7",
+      "https://github.com/NeoRazorX/facturascripts/security/advisories/GHSA-vrxf-vrc4-22p7"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-42878",
+    "description": "FacturaScripts is an open source accounting and invoicing software. Prior to v2026, an unauthenticated information disclosure vulnerability in the Installer controller allows any remote attacker to trigger phpinfo() on a fresh FacturaScripts deployment by requesting /?phpinfo=TRUE, exposing full PHP configuration, server environment variables (including any database credentials, API keys, or application secrets set as env vars), filesystem paths, and loaded extensions without being authenticated. This vulnerability is fixed in v2026.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "information_disclosure"
+    ],
+    "priority": 30,
+    "product": "facturascripts",
+    "published": "2026-05-27T19:16:17.763",
+    "references": [
+      "https://github.com/NeoRazorX/facturascripts/security/advisories/GHSA-vrxf-vrc4-22p7"
+    ],
+    "vendor": "NeoRazorX"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/pydantic/pydantic-ai/security/advisories/GHSA-wjp5-868j-wqv7"
+    ],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:/a:redhat:enterprise_linux_ai:3",
+      "cpe:2.3:a:pydantic:pydantic_ai:*:*:*:*:*:python:*:*"
+    ],
+    "cve_id": "CVE-2026-25640",
+    "description": "Pydantic AI is a Python agent framework for building applications and workflows with Generative AI. From 1.34.0 to before 1.51.0, a path traversal vulnerability in the Pydantic AI web UI allows an attacker to serve arbitrary JavaScript in the context of the application by crafting a malicious URL. In affected versions, the CDN URL is constructed using a version query parameter from the request URL. This parameter is not validated, allowing path traversal sequences that cause the server to fetch and serve attacker-controlled HTML/JavaScript from an arbitrary source on the same CDN, instead of the legitimate chat UI package. If a victim clicks the link or visits it via an iframe, attacker-controlled code executes in their browser, enabling theft of chat history and other client-side data. This vulnerability only affects applications that use Agent.to_web to serve a chat interface and clai web to serve a chat interface from the CLI. These are typically run locally (on localhost), but may also be deployed on a remote server. This vulnerability is fixed in 1.51.0.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 28,
+    "product": "pydantic-ai",
+    "published": "2026-02-06T20:16:11.110",
+    "references": [
+      "https://github.com/pydantic/pydantic-ai/releases/tag/v1.51.0",
+      "https://github.com/pydantic/pydantic-ai/security/advisories/GHSA-wjp5-868j-wqv7",
+      "https://access.redhat.com/security/cve/CVE-2026-25640",
+      "https://bugzilla.redhat.com/show_bug.cgi?id=2437753",
+      "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-25640.json"
+    ],
+    "vendor": "pydantic"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-7131",
+    "description": "A vulnerability has been found in code-projects Online Lot Reservation System up to 1.0. The impacted element is an unknown function of the file /loginuser.php. The manipulation of the argument email/password leads to sql injection. It is possible to initiate the attack remotely. The exploit has been disclosed to the public and may be used.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "sql_injection"
+    ],
+    "priority": 40,
+    "product": "Online Lot Reservation System",
+    "published": "2026-04-27T15:16:21.433",
+    "references": [
+      "https://code-projects.org/",
+      "https://github.com/zzk6th/cve/issues/1",
+      "https://vuldb.com/submit/800978",
+      "https://vuldb.com/vuln/359730",
+      "https://vuldb.com/vuln/359730/cti"
+    ],
+    "vendor": "code-projects"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:songxinjianqwe:chat:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-97326",
+    "description": "A weakness has been identified in songxinjianqwe Chat up to ac63d25297079eed5e4ba7e88d3b7a032637150d. Affected by this issue is some unknown functionality of the file chat-server/src/main/java/cn/sinjinsong/chat/server/ChatServer.java of the component chat-server. This manipulation causes server-side request forgery. The attack may be initiated remotely. The exploit has been made available to the public and could be used for attacks. This product uses a rolling release model to deliver continuous updates. As a result, specific version information for affected or updated releases is not available. The vendor was contacted early about this disclosure but did not respond in any way.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 40,
+    "product": "Chat",
+    "published": "2026-09-24T20:17:35.907",
+    "references": [
+      "https://github.com/HazyX0/cve/issues/1",
+      "https://vuldb.com/cve/CVE-2026-97326",
+      "https://vuldb.com/submit/908781",
+      "https://vuldb.com/vuln/409334",
+      "https://vuldb.com/vuln/409334/cti"
+    ],
+    "vendor": "songxinjianqwe"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/infiniflow/ragflow/security/advisories/GHSA-vvwj-fvwh-4whx"
+    ],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:infiniflow:ragflow:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-28797",
+    "description": "RAGFlow is an open-source RAG (Retrieval-Augmented Generation) engine. In versions 0.24.0 and prior, a Server-Side Template Injection (SSTI) vulnerability exists in RAGFlow's Agent workflow Text Processing (StringTransform) and Message components. These components use Python's jinja2.Template (unsandboxed) to render user-supplied templates, allowing any authenticated user to execute arbitrary operating system commands on the server. At time of publication, there are no publicly available patches.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "template_injection"
+    ],
+    "priority": 30,
+    "product": "ragflow",
+    "published": "2026-04-03T22:16:26.320",
+    "references": [
+      "https://github.com/infiniflow/ragflow/security/advisories/GHSA-vvwj-fvwh-4whx"
+    ],
+    "vendor": "infiniflow"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:schneider-electric:struxureware_data_center_expert:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-8045",
+    "description": "CWE-611 Improper Restriction of XML External Entity Reference vulnerability exists that could cause information disclosure of server-side file contents when an attacker with a Data Center Expert user account submits crafted XML payloads to SOAP service endpoints.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "xxe",
+      "information_disclosure"
+    ],
+    "priority": 40,
+    "product": "EcoStruxure™ IT Data Center Expert",
+    "published": "2026-06-09T16:16:44.453",
+    "references": [
+      "https://download.schneider-electric.com/files?p_Doc_Ref=SEVD-2026-160-01&p_enDocType=Security+and+Safety+Notice&p_File_Name=SEVD-2026-160-01.pdf"
+    ],
+    "vendor": "Schneider Electric"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/antonio-castellon/module-auth/security/advisories/GHSA-gfj5-979r-92pw"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-58399",
+    "description": "@acastellon/auth is an authentication control system for microservices. Versions prior to 2.3.0 appear to allow an unauthenticated authentication bypass in validateToken() through spoofable auth-user and Host request headers. The validateToken middleware contains a service-to-service bypass for auth-user: service-brother when req.get('host').startsWith(getHostName()). Both values involved in the check can be influenced by an unauthenticated HTTP client: auth-user is a request header, and Host is also client-controlled. As a result, a remote unauthenticated attacker can send a request with crafted headers and bypass token validation before the normal legacy/JWT/OIDC validation logic runs. A fix has been implemented in v2.3.0.",
+    "ecosystem_hint": "npm",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "auth_bypass"
+    ],
+    "priority": 26,
+    "product": "module-auth",
+    "published": "2026-07-01T15:17:11.377",
+    "references": [
+      "https://github.com/antonio-castellon/module-auth/issues/6",
+      "https://github.com/antonio-castellon/module-auth/security/advisories/GHSA-gfj5-979r-92pw",
+      "https://www.npmjs.com/package/@acastellon/auth/v/2.3.0"
+    ],
+    "vendor": "antonio-castellon"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-36044",
+    "description": "@pensar/apex <= 0.0.58 is vulnerable to OS command injection via the smart_enumerate tool. The createSmartEnumerateTool() function in src/core/agent/tools.ts constructs a shell command by concatenating unsanitized values from the extensions array and url parameter into a string passed to Node.js child_process.exec(). Because exec() spawns a shell, shell metacharacters in those values are interpreted by the host shell, resulting in arbitrary OS command execution with the privileges of the running process. NOTE: this is disputed by the Supplier because the report is about intended behavior, as explained in the Security Policy of the pensarai/apex GitHub repo.",
+    "ecosystem_hint": "npm",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "command_injection"
+    ],
+    "priority": 36,
+    "product": "n/a",
+    "published": "2026-05-27T14:16:45.143",
+    "references": [
+      "https://gist.github.com/NucleiAv/47e87da08b90ef464fd9b35affe578fb",
+      "https://github.com/pensarai/apex/security",
+      "https://www.npmjs.com/package/@pensar/apex"
+    ],
+    "vendor": "n/a"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-80347",
+    "description": "mcp-fetch checks a fetch target against its SSRF guard without removing the brackets that surround an IPv6 literal. isSafeUrl reads the hostname from the parsed URL, which for a literal such as http://[::1]/ yields the bracketed string, and then tests it with net.isIP. That call returns zero for a bracketed value, so the branch holding the private-address checks is skipped entirely. The guard falls back to resolving the hostname, the bracketed string is not a resolvable name, no addresses are returned, and the target is reported safe. The HTTP client then strips the brackets and connects. Because the address may be given in IPv4-mapped form, the same path reaches any IPv4 target the loopback and private checks were meant to exclude, including link-local metadata endpoints. isPrivateIPv6 also has no case for the ::ffff: prefix, so the mapped form would still pass even if the brackets were removed. The fetch target is supplied as a tool argument, so an attacker who can influence what the model requests can read internal responses back into the model context.",
+    "ecosystem_hint": "npm",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 36,
+    "product": "mcp-fetch",
+    "published": "2026-08-26T10:16:42.803",
+    "references": [
+      "https://github.com/kazuph/mcp-fetch",
+      "https://github.com/kazuph/mcp-fetch/issues/16",
+      "https://www.npmjs.com/package/@kazuph/mcp-fetch",
+      "https://www.vulncheck.com/advisories/mcp-fetch-through-1.6.3-server-side-request-forgery-via-unstripped-ipv6-literal-brackets"
+    ],
+    "vendor": "kazuph"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-72577",
+    "description": "Multiple vulnerabilities in NASA fprime-gds through 3.4.3 allow an unauthenticated remote attacker to achieve arbitrary code execution on the ground station host and inject arbitrary commands to connected spacecraft. The Flask application in src/fprime_gds/flask/app.py applies no authentication to any endpoint.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "code_execution"
+    ],
+    "priority": 36,
+    "product": "fprime-gds",
+    "published": "2026-08-10T11:17:30.533",
+    "references": [
+      "https://github.com/nasa/fprime-gds",
+      "https://github.com/nasa/fprime-gds/blob/main/src/fprime_gds/flask/commands.py",
+      "https://github.com/nasa/fprime-gds/blob/main/src/fprime_gds/flask/updown.py",
+      "https://pypi.org/project/fprime-gds/"
+    ],
+    "vendor": "NASA"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-76843",
+    "description": "The official Flair wheels for 0.15.0 and 0.15.1 still contain flair/models/clustering.py, whose ClusteringModel.load static method returns pickle.loads(joblib.load(str(model_file))) and so executes arbitrary Python while loading a model file. Loading a model supplied by an attacker therefore runs that attacker's code with the privileges of the loading process. This is the same sink and the same file as CVE-2024-10073, which records 0.15.0 as the fixed version on the basis that clustering support was dropped in that release; the module was removed from the documented API but remains present in the distributed artifact and reachable by importing flair.models.clustering directly, so the earlier record's fixed version does not hold for the shipped package.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "deserialization"
+    ],
+    "priority": 36,
+    "product": "flair",
+    "published": "2026-08-24T14:17:02.087",
+    "references": [
+      "https://github.com/flairNLP/flair",
+      "https://github.com/flairNLP/flair/blob/v0.14.0/flair/models/clustering.py",
+      "https://pypi.org/project/flair/0.15.1/",
+      "https://www.vulncheck.com/advisories/flair-and-deserialization-of-untrusted-data-via-clusteringmodel-load"
+    ],
+    "vendor": "flairNLP"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/awslabs/mcp/security/advisories/GHSA-66mr-jr63-2jgw"
+    ],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:amazon:aws_transform_mcp_server:*:*:*:*:*:python:*:*"
+    ],
+    "cve_id": "CVE-2026-18953",
+    "description": "Improper limitation of a pathname to a restricted directory in the get_resource tool in Amazon awslabs.aws-transform-mcp-server 0.1.0 through 0.1.4 might allow a context-dependent actor to write arbitrary files outside the intended working directory via the savePath parameter. To remediate this issue, users should upgrade to version 0.1.5 or later.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 24,
+    "product": "aws-transform-mcp-server",
+    "published": "2026-08-05T20:17:07.770",
+    "references": [
+      "https://aws.amazon.com/security/security-bulletins/2026-075-aws/",
+      "https://github.com/awslabs/mcp/security/advisories/GHSA-66mr-jr63-2jgw",
+      "https://pypi.org/project/awslabs.aws-transform-mcp-server/0.1.5/"
+    ],
+    "vendor": "AWS"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-76054",
+    "description": "Invocation of Process Using Visible Sensitive Information in Black Duck blackduck-c-cpp 1.0.17 through 3.0.6 allows an actor able to execute code within the scanned project's build to obtain the Black Duck API token via the ambient process environment, which is inherited by subprocesses launched during build capture and signature scanning. This applies only where the token is supplied through the BLACKDUCK_API_TOKEN or BD_HUB_TOKEN environment variable. Upgrading does not remediate prior disclosure; any token supplied to an affected version through an environment variable should be rotated.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "information_disclosure"
+    ],
+    "priority": 36,
+    "product": "blackduck-c-cpp",
+    "published": "2026-08-24T15:16:46.650",
+    "references": [
+      "https://community.blackduck.com/s/article/Black-Duck-Product-Security-Advisory-CVE-2026-76054-CVE-2026-76055",
+      "https://pypi.org/project/blackduck-c-cpp/"
+    ],
+    "vendor": "Black Duck"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/awslabs/mcp/security/advisories/GHSA-6x7f-488g-75wm"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-15415",
+    "description": "AWS HealthOmics is a HIPAA-eligible service that fully manages the compute, storage, and workflow engine infrastructure required to run bioinformatics analyses at scale for clinical diagnostics, drug discovery, and agricultural research. Improper limitation of a pathname to a restricted directory in the linting tools of the AWS HealthOmics MCP Server (aws-healthomics-mcp-server) before version 0.0.36 might allow an actor who can influence the MCP agent to write an actor-controlled content to arbitrary locations outside the intended workflow bundle directory, via directory traversal sequences in the workflow_files input. To remediate this issue, users should upgrade to version 0.0.36 or later.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 24,
+    "product": "aws-healthomics-mcp-server",
+    "published": "2026-07-17T20:17:15.923",
+    "references": [
+      "https://aws.amazon.com/security/security-bulletins/2026-060-aws/",
+      "https://github.com/awslabs/mcp/security/advisories/GHSA-6x7f-488g-75wm",
+      "https://pypi.org/project/awslabs.aws-healthomics-mcp-server/0.0.36/"
+    ],
+    "vendor": "AWS"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/strands-agents/tools/security/advisories/GHSA-ppcf-fpr3-x46v"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-15746",
+    "description": "Strands Agents is an open-source Python SDK for building and running AI agents. The strands-agents-tools package provides pre-built tools for use with the SDK, including the elasticsearch_memory tool for agent memory storage. We identified CVE-2026-15746, a server-side request forgery (SSRF) issue in the elasticsearch_memory tool. The tool exposed its connection parameters (es_url, cloud_id, api_key) as fields the large language model (LLM) could control through the tool schema. When a caller omitted the api_key parameter, the tool fell back to the operator's ELASTICSEARCH_API_KEY environment variable and sent it to whichever host the LLM specified. A crafted prompt could cause the tool to connect to a threat-actor-controlled server and disclose the operator's Elasticsearch API key in the Authorization header. We recommend you upgrade to strands-agents-tools version 0.7.0 or later. As a precautionary measure, we recommend all operators rotate their ELASTICSEARCH_API_KEY, even if there is no indication the credential was exposed.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 26,
+    "product": "strands-agents-tools",
+    "published": "2026-07-15T19:16:57.773",
+    "references": [
+      "https://aws.amazon.com/security/security-bulletins/2026-056-aws/",
+      "https://github.com/strands-agents/tools/security/advisories/GHSA-ppcf-fpr3-x46v",
+      "https://pypi.org/project/strands-agents-tools/0.7.0/"
+    ],
+    "vendor": "Amazon"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/WWBN/AVideo/security/advisories/GHSA-gpgp-w4x2-h3h7",
+      "https://github.com/WWBN/AVideo/security/advisories/GHSA-gpgp-w4x2-h3h7"
+    ],
+    "commit_refs": [
+      "https://github.com/WWBN/AVideo/commit/d5992fff2811df4adad1d9fc7d0a5837b882aed7"
+    ],
+    "cpes": [
+      "cpe:2.3:a:wwbn:avideo:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-40907",
+    "description": "WWBN AVideo is an open source video platform. In versions 29.0 and prior, the endpoint `plugin/Live/view/Live_restreams/list.json.php` contains an Insecure Direct Object Reference (IDOR) vulnerability that allows any authenticated user with streaming permission to retrieve other users' live restream configurations, including third-party platform stream keys and OAuth tokens (access_token, refresh_token) for services like YouTube Live, Facebook Live, and Twitch. Commit d5992fff2811df4adad1d9fc7d0a5837b882aed7 fixes the issue.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "auth_bypass"
+    ],
+    "priority": 18,
+    "product": "AVideo",
+    "published": "2026-04-21T20:17:03.080",
+    "references": [
+      "https://github.com/WWBN/AVideo/commit/d5992fff2811df4adad1d9fc7d0a5837b882aed7",
+      "https://github.com/WWBN/AVideo/security/advisories/GHSA-gpgp-w4x2-h3h7"
+    ],
+    "vendor": "WWBN"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [
+      "https://github.com/ArtifexSoftware/mupdf/commit/a26f0142e7d390d4a82c6e5ae0e312e07cc4ec85"
+    ],
+    "cpes": [],
+    "cve_id": "CVE-2026-3308",
+    "description": "An integer overflow vulnerability in 'pdf-image.c' in Artifex's MuPDF version 1.27.0 allows an attacker to maliciously craft a PDF that can trigger an integer overflow within the 'pdf_load_image_imp' function. This allows a heap out-of-bounds write that could be exploited for arbitrary code execution.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "code_execution"
+    ],
+    "priority": 28,
+    "product": "MuPDF",
+    "published": "2026-03-31T14:16:12.560",
+    "references": [
+      "https://cgit.ghostscript.com/cgi-bin/cgit.cgi/mupdf.git/commit/?id=a26f0142e7d390d4a82c6e5ae0e312e07cc4ec85",
+      "https://github.com/ArtifexSoftware/mupdf",
+      "https://github.com/ArtifexSoftware/mupdf/commit/a26f0142e7d390d4a82c6e5ae0e312e07cc4ec85",
+      "https://lists.debian.org/debian-lts-announce/2026/04/msg00020.html",
+      "https://www.kb.cert.org/vuls/id/951662"
+    ],
+    "vendor": "Artifex Software Inc. *PyMuPDF*"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:ibm:aix:7.2:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:aix:7.2.0:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:aix:7.3:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:aix:7.3.0:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:powervm_vios:4.1:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:powervm_vios:4.1.0:*:*:*:*:*:*:*",
+      "cpe:2.3:o:ibm:aix:*:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:vios:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-16842",
+    "description": "IBM AIX 7.2, and 7.3 and IBM PowerVM VIOS 4.1 could allow a remote attacker to execute arbitrary commands due to improper neutralization of special elements used in an OS command.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "command_injection"
+    ],
+    "priority": 40,
+    "product": "AIX",
+    "published": "2026-08-19T20:17:05.513",
+    "references": [
+      "https://www.ibm.com/support/pages/node/7283858"
+    ],
+    "vendor": "IBM"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/tesseract-ocr/tesseract/security/advisories/GHSA-7v9h-3q3m-w68g",
+      "https://github.com/tesseract-ocr/tesseract/security/advisories/GHSA-7v9h-3q3m-w68g"
+    ],
+    "commit_refs": [
+      "https://github.com/tesseract-ocr/tesseract/commit/c94a5532ee04db5a4919542832fd94caee5ea58f"
+    ],
+    "cpes": [
+      "cpe:2.3:a:tesseract-ocr:tesseract_ocr:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-88050",
+    "description": "Tesseract is an open source OCR engine. In version 5.5.3 and earlier, RecodedCharID::DeSerialize in src/ccutil/unicharcompress.h validates length_ but accepts negative code_ values from a crafted .traineddata recoder component. UnicharCompress::ComputeCodeRange in src/ccutil/unicharcompress.cpp can consequently produce code_range_ equal to zero, after which SetupDecoder indexes is_valid_start_ with the negative code on a size-zero vector. The resulting out-of-bounds bit write uses a large wrapped index and reliably causes a wild-address crash or allocation failure on the default LSTM engine. No fixed release is available as of this review.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "deserialization"
+    ],
+    "priority": 18,
+    "product": "tesseract",
+    "published": "2026-09-10T17:17:09.223",
+    "references": [
+      "https://github.com/tesseract-ocr/tesseract/commit/c94a5532ee04db5a4919542832fd94caee5ea58f",
+      "https://github.com/tesseract-ocr/tesseract/security/advisories/GHSA-7v9h-3q3m-w68g"
+    ],
+    "vendor": "tesseract-ocr"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/rikyoz/bit7z/security/advisories/GHSA-wjch-42rm-q53h",
+      "https://github.com/rikyoz/bit7z/security/advisories/GHSA-wjch-42rm-q53h"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-45384",
+    "description": "bit7z is a cross-platform C++ static library that allows the compression/extraction of archive files. Prior to version 4.0.12, there is an arbitrary file overwrite vulnerability via symlink attack on predictable temp files during archive update. This issue has been patched in version 4.0.12.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 28,
+    "product": "bit7z",
+    "published": "2026-06-10T22:16:58.377",
+    "references": [
+      "https://github.com/rikyoz/bit7z/releases/tag/v4.0.12",
+      "https://github.com/rikyoz/bit7z/security/advisories/GHSA-wjch-42rm-q53h"
+    ],
+    "vendor": "rikyoz"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:gvectors:wpforo_forum:*:*:*:*:*:wordpress:*:*"
+    ],
+    "cve_id": "CVE-2026-28559",
+    "description": "wpForo Forum 2.4.14 contains an information disclosure vulnerability that allows unauthenticated users to retrieve private and unapproved forum topics via the global RSS feed endpoint. Attackers request the RSS feed without a forum ID parameter, bypassing the privacy and status WHERE clauses that are only applied when a specific forum ID is present in the query.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "information_disclosure"
+    ],
+    "priority": 40,
+    "product": "wpForo Forum",
+    "published": "2026-02-28T22:16:02.933",
+    "references": [
+      "https://wordpress.org/plugins/wpforo/",
+      "https://wordpress.org/plugins/wpforo/#developers",
+      "https://www.vulncheck.com/advisories/wpforo-forum-information-disclosure-via-global-rss-feed"
+    ],
+    "vendor": "gVectors Team"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:dhtmlx:pdf_export_module:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-41552",
+    "description": "PDF Export Module used in DHTMLX's products Gantt and Scheduler is vulnerable to Path Traversal due to lack of HTML sanitization. An unauthenticated user could craft the html payload which could include local files from the server and display them in the generated PDF. This issue was fixed in PDF Export Module version 0.7.6.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 38,
+    "product": "PDF Export Module",
+    "published": "2026-05-15T13:16:18.990",
+    "references": [
+      "https://cert.pl/en/posts/2026/05/CVE-2026-7182",
+      "https://docs.dhtmlx.com/gantt/guides/pdf-export-module-whatsnew/#076:~:text=Fixed%20Remote%20Code%20Execution%20and%20File%20Read%20vulnerabilities"
+    ],
+    "vendor": "DHTMLX"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:yzmcms:yzmcms:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-13529",
+    "description": "A vulnerability was determined in YzmCMS up to 7.5. This affects an unknown function of the file /application/install/index.php. Executing a manipulation of the argument siteurl can lead to sql injection. The attack can be executed remotely. A high complexity level is associated with this attack. The exploitability is reported as difficult. The exploit has been publicly disclosed and may be utilized. The vendor was contacted early about this disclosure but did not respond in any way.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "sql_injection"
+    ],
+    "priority": 40,
+    "product": "YzmCMS",
+    "published": "2026-06-29T04:16:29.497",
+    "references": [
+      "https://github.com/drose025/security/blob/main/1.md",
+      "https://vuldb.com/cve/CVE-2026-13529",
+      "https://vuldb.com/submit/840800",
+      "https://vuldb.com/vuln/374537",
+      "https://vuldb.com/vuln/374537/cti"
+    ],
+    "vendor": "n/a"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-16294",
+    "description": "The PowerPress Podcasting plugin by Blubrry WordPress plugin before 11.17.1 does not validate one of its Podcast Episode URL settings before performing a server-side request with it, allowing users with a role as low as Contributor to perform Server-Side Request Forgery attacks that can target internal services.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 40,
+    "product": "PowerPress Podcasting plugin by Blubrry",
+    "published": "2026-08-12T06:18:55.203",
+    "references": [
+      "https://wpscan.com/vulnerability/9363aaff-40d6-41c0-8edd-cbf671240ad2/"
+    ],
+    "vendor": "Unknown"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-73330",
+    "description": "CamaleonCMS 2.9.1 contains a server-side template injection vulnerability that allows authenticated administrators to execute arbitrary commands by embedding ERB tags in the email parameter of the test_email settings action, which are evaluated when an SMTP rejection reflects the recipient address back in the exception message rendered as an inline ERB template. Attackers can submit a crafted email parameter containing ERB expressions through the admin settings test_email endpoint, causing the Rails inline template renderer to evaluate attacker-controlled Ruby code and achieve arbitrary command execution as the Rails process user.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "template_injection"
+    ],
+    "priority": 40,
+    "product": "CamaleonCMS",
+    "published": "2026-08-12T20:17:55.197",
+    "references": [
+      "https://enrik-m.github.io/posts/Camaleon-CMS-Vulnerabilties/#44-stored-xss-via-draft-post-title",
+      "https://github.com/owen2345/camaleon-cms",
+      "https://www.vulncheck.com/advisories/camaleoncms-server-side-template-injection-via-test-email-action"
+    ],
+    "vendor": "owen2345"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:ibm:datapower_gateway_106cd:10.6.1:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:datapower_gateway_106cd:10.6.6:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:datapower_gateway_1060:10.6.0.0:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:datapower_gateway_1060:10.6.0.10:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:datapower_gateway_1100:11.0.0.0:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:datapower_gateway_1100:11.0.0.2:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:datapower_gateway_1050:10.5.0.0:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:datapower_gateway_1050:10.5.0.22:*:*:*:*:*:*:*",
+      "cpe:2.3:a:ibm:datapower_gateway:*:*:*:*:-:*:*:*",
+      "cpe:2.3:a:ibm:datapower_gateway:*:*:*:*:continuous_delivery:*:*:*",
+      "cpe:2.3:a:ibm:datapower_gateway:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-14905",
+    "description": "IBM DataPower Gateway 10.5.0.0 through 10.5.0.22, 10.6.1 through 10.6.6, 10.6.0.0 through 10.6.0.10, and 11.0.0.0 through 11.0.0.2 is vulnerable to an XML external entity injection (XXE) attack when processing XML data. A remote attacker could exploit this vulnerability to expose sensitive information or consume memory resources.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "xxe",
+      "information_disclosure"
+    ],
+    "priority": 40,
+    "product": "DataPower Gateway 10.6CD",
+    "published": "2026-10-08T15:17:49.837",
+    "references": [
+      "https://www.ibm.com/support/pages/node/7289775"
+    ],
+    "vendor": "IBM"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/aws/codecatalyst-blueprints/security/advisories/GHSA-c7rj-fr2j-64w7"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-85012",
+    "description": "Improper neutralization of special elements used in an OS command (CWE-78) in the blueprint resynthesis framework in Amazon Web Services codecatalyst-blueprints before 0.3.156 might allow a user with permission to commit to a repository in the project to execute arbitrary commands in the blueprint resynthesis environment via shell metacharacters in the owner field of a [local] merge strategy entry in a crafted .ownership-file. Version 0.3.156 removes shell interpretation of the owner field, running the command directly rather than through a shell, and rejects values outside an allowlisted command form. This eliminates shell metacharacter command injection. To remediate this issue, users should upgrade to version 0.3.156 or later. No action is required for use of the Amazon CodeCatalyst service. Resynthesis runs in an isolated per-project environment with scoped credentials, and the service applies server-side validation there that rejects [local] merge strategy commands outside a restricted allowlisted form, including for blueprint versions published before 0.3.156.",
+    "ecosystem_hint": "npm",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "command_injection"
+    ],
+    "priority": 26,
+    "product": "@amazon-codecatalyst/blueprints.blueprint",
+    "published": "2026-09-03T18:17:33.190",
+    "references": [
+      "https://aws.amazon.com/security/security-bulletins/2026-095-aws/",
+      "https://github.com/aws/codecatalyst-blueprints/security/advisories/GHSA-c7rj-fr2j-64w7",
+      "https://www.npmjs.com/package/@amazon-codecatalyst/blueprints.blueprint/v/0.3.156"
+    ],
+    "vendor": "AWS"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:yzhao062:pyod:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-15529",
+    "description": "A vulnerability was detected in yzhao062 pyod up to 3.6.1. Affected is the function pyod.utils.persistence.load of the file pyod/utils/persistence.py. Performing a manipulation of the argument path results in deserialization. The attack can be initiated remotely. Upgrading to version 3.6.2 is able to address this issue. It is recommended to apply a patch to fix this issue. The pull request to fix this issue requires some minor changes.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "deserialization"
+    ],
+    "priority": 36,
+    "product": "pyod",
+    "published": "2026-07-13T04:16:28.577",
+    "references": [
+      "https://github.com/yzhao062/pyod/",
+      "https://github.com/yzhao062/pyod/issues/697",
+      "https://github.com/yzhao062/pyod/pull/698",
+      "https://pypi.org/project/pyod/3.6.2/",
+      "https://vuldb.com/cve/CVE-2026-15529",
+      "https://vuldb.com/submit/854559",
+      "https://vuldb.com/vuln/377872",
+      "https://vuldb.com/vuln/377872/cti"
+    ],
+    "vendor": "yzhao062"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-97662",
+    "description": "An argument injection issue in the diff scan operation in AWS security-agent-mcp-server before version 0.2.0 might allow context-dependent threat actors to create, overwrite, or truncate arbitrary files on the host outside the intended workspace directory via a crafted reference value supplied to the diff scan operation. To remediate this issue, users should upgrade to version 0.2.0.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read",
+      "command_injection"
+    ],
+    "priority": 34,
+    "product": "security-agent-mcp-server",
+    "published": "2026-10-01T18:17:29.230",
+    "references": [
+      "https://aws.amazon.com/security/security-bulletins/2026-121-aws/",
+      "https://pypi.org/project/awslabs.security-agent-mcp-server/0.2.0/"
+    ],
+    "vendor": "AWS"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/advisories/GHSA-3rf6-x59v-5jfv"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-38360",
+    "description": "Directory Traversal vulnerability in fohrloop dash-uploader v.0.1.0 through v.0.7.0a2 allows a remote attacker to execute arbitrary code via the dash_uploader/httprequesthandler.py, BaseHttpRequestHandler.get_temp_root(), BaseHttpRequestHandler._post() components.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal"
+    ],
+    "priority": 24,
+    "product": "n/a",
+    "published": "2026-05-08T17:16:30.380",
+    "references": [
+      "https://github.com/a1ohadance/CVE-2026-38360",
+      "https://github.com/advisories/GHSA-3rf6-x59v-5jfv",
+      "https://github.com/fohrloop/dash-uploader",
+      "https://github.com/fohrloop/dash-uploader/blob/dev/dash_uploader/httprequesthandler.py",
+      "https://github.com/fohrloop/dash-uploader/blob/stable/dash_uploader/httprequesthandler.py",
+      "https://github.com/fohrloop/dash-uploader/issues/153",
+      "https://github.com/github/advisory-database/pull/7635",
+      "https://pypi.org/project/dash-uploader/"
+    ],
+    "vendor": "n/a"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-106032",
+    "description": "Server-side request forgery in the OpenAPI schema processing of the agent import functionality in Amazon Bedrock AgentCore Starter Toolkit before 0.3.14 might allow an authenticated remote actor in the same AWS account to cause the environment of a user importing a Bedrock Agent to issue arbitrary outbound requests and read arbitrary local files, via crafted external reference values in the OpenAPI content associated with a Bedrock Agent action group. To remediate this issue, users should upgrade to version 0.3.14. Note that bedrock-agentcore-starter-toolkit is deprecated. The @aws/agentcore npm CLI is the supported replacement and does not contain this issue. Migration to @aws/agentcore is the recommended long-term path.",
+    "ecosystem_hint": "pypi",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 36,
+    "product": "bedrock-agentcore-starter-toolkit",
+    "published": "2026-10-06T21:17:04.757",
+    "references": [
+      "https://pypi.org/project/bedrock-agentcore-starter-toolkit/0.3.14/",
+      "https://staging.prod.website.marketing.aws.dev/security/security-bulletins/2026-127-aws/"
+    ],
+    "vendor": "aws"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/devcode-it/openstamanager/security/advisories/GHSA-247v-7cw6-q57v"
+    ],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:devcode:openstamanager:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-27012",
+    "description": "OpenSTAManager is an open source management software for technical assistance and invoicing. In 2.9.8 and earlier, a privilege escalation and authentication bypass vulnerability in OpenSTAManager allows any attacker to arbitrarily change a user's group (idgruppo) by directly calling modules/utenti/actions.php. This can promote an existing account (e.g. agent) into the Amministratori group as well as demote any user including existing administrators.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "auth_bypass"
+    ],
+    "priority": 30,
+    "product": "openstamanager",
+    "published": "2026-03-03T22:16:28.833",
+    "references": [
+      "https://github.com/devcode-it/openstamanager/security/advisories/GHSA-247v-7cw6-q57v"
+    ],
+    "vendor": "devcode-it"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [
+      "https://github.com/dbgate/dbgate/commit/70e7b6b58e464d7a015ba16e8d7574b420ee4877"
+    ],
+    "cpes": [
+      "cpe:2.3:a:dbgate:dbgate:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-97225",
+    "description": "A flaw has been found in DbGate up to 7.2.5-beta.5. This affects an unknown function of the file packages/api/src/controllers/runners.js of the component JSON Runner. Executing a manipulation of the argument comment.text/script.schedule can lead to code injection. The attack may be performed from remote. Upgrading to version 7.2.5-beta.6 mitigates this issue. This patch is called 70e7b6b58e464d7a015ba16e8d7574b420ee4877. Upgrading the affected component is advised. This issue is distinct from CVE-2026-47668.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "code_execution"
+    ],
+    "priority": 28,
+    "product": "DbGate",
+    "published": "2026-09-24T16:17:28.880",
+    "references": [
+      "https://github.com/dbgate/dbgate/",
+      "https://github.com/dbgate/dbgate/commit/70e7b6b58e464d7a015ba16e8d7574b420ee4877",
+      "https://github.com/dbgate/dbgate/pull/1527",
+      "https://github.com/dbgate/dbgate/releases/tag/v7.2.5-beta.6",
+      "https://vuldb.com/cve/CVE-2026-97225",
+      "https://vuldb.com/submit/908099",
+      "https://vuldb.com/vuln/409319",
+      "https://vuldb.com/vuln/409319/cti"
+    ],
+    "vendor": "n/a"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-102059",
+    "description": "An Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection') vulnerability in the phone-home daemon (phcd) of Juniper Networks Junos OS and Junos OS Evolved on EX Series, SRX Series, and QFX Series allows an adjacent unauthenticated attacker to execute arbitrary commands with root privileges via a rogue DHCP server.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "command_injection"
+    ],
+    "priority": 40,
+    "product": "Junos OS",
+    "published": "2026-10-14T17:18:01.253",
+    "references": [
+      "https://supportportal.juniper.net/JSA112187"
+    ],
+    "vendor": "Juniper Networks"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-20242",
+    "description": "A vulnerability in the External Database Access feature of Cisco Secure Firewall Management Center (FMC) Software could allow an unauthenticated, remote attacker to execute arbitrary commands as&nbsp;root on an affected device. This vulnerability is due to insecure deserialization of a user-supplied Java byte stream from a host that is configured in the external database access list. An attacker could exploit this vulnerability by sending a crafted, serialized Java byte stream to a specific TCP port of an affected device. A successful exploit could allow the attacker to execute arbitrary commands on the device and elevate privileges to root. Notes: This vulnerability can be exploited only by an attacker who has control of a host in the external database access list. If the FMC management interface does not have public internet access, the attack surface that is associated with this vulnerability is reduced.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "deserialization"
+    ],
+    "priority": 40,
+    "product": "Cisco Secure Firewall Management Center (FMC)",
+    "published": "2026-09-16T20:17:22.697",
+    "references": [
+      "https://sec.cloudapps.cisco.com/security/center/content/CiscoSecurityAdvisory/cisco-sa-fmc-javarce-y2NypXwk"
+    ],
+    "vendor": "Cisco"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-5427",
+    "description": "The Kubio plugin for WordPress is vulnerable to Arbitrary File Upload in versions up to and including 2.7.2. This is due to insufficient capability checks in the kubio_rest_pre_insert_import_assets() function, which is hooked to the rest_pre_insert_{post_type} filter for posts, pages, templates, and template parts. When a post is created or updated via the REST API, Kubio parses block attributes looking for URLs in the 'kubio' attribute namespace and automatically imports them via importRemoteFile() without verifying the user has the upload_files capability. This makes it possible for authenticated attackers with Contributor-level access and above to bypass WordPress's normal media upload restrictions and upload files fetched from external URLs to the media library, creating attachment posts in the database.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "file_read"
+    ],
+    "priority": 38,
+    "product": "Kubio AI Page Builder",
+    "published": "2026-04-17T05:16:18.973",
+    "references": [
+      "https://plugins.trac.wordpress.org/browser/kubio/tags/2.7.1/lib/filters/post-insert.php#L17",
+      "https://plugins.trac.wordpress.org/browser/kubio/tags/2.7.1/lib/importer/importer-filters/kubio-blocks.php#L20",
+      "https://plugins.trac.wordpress.org/browser/kubio/tags/2.7.1/lib/src/Core/Importer.php#L546",
+      "https://plugins.trac.wordpress.org/browser/kubio/trunk/lib/filters/post-insert.php#L17",
+      "https://plugins.trac.wordpress.org/browser/kubio/trunk/lib/importer/importer-filters/kubio-blocks.php#L20",
+      "https://plugins.trac.wordpress.org/browser/kubio/trunk/lib/src/Core/Importer.php#L546",
+      "https://plugins.trac.wordpress.org/changeset/3506647/kubio/trunk/lib/src/Core/Importer.php",
+      "https://www.wordfence.com/threat-intel/vulnerabilities/id/d8096f3c-e1a9-424f-af10-3e80212db985?source=cve"
+    ],
+    "vendor": "extendthemes"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/zephyrproject-rtos/zephyr/security/advisories/GHSA-xcf7-r86m-5q9f"
+    ],
+    "commit_refs": [
+      "https://github.com/zephyrproject-rtos/zephyr/commit/255bccc1badd1aa06c6e5ddf5b40de8463b33f02"
+    ],
+    "cpes": [
+      "cpe:2.3:o:zephyrproject:zephyr:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-10647",
+    "description": "The USB CDC-NCM device class (subsys/usb/device_next/class/usbd_cdc_ncm.c) ignores the return value of usbd_ep_enqueue() in its ethernet transmit callback cdc_ncm_send(). When the enqueue fails, the function still calls k_sem_take(&data->sync_sem, K_FOREVER), blocking on a completion semaphore that is only ever signaled from the bulk-IN transfer-completion callback. Because nothing was enqueued, that callback never fires and the calling thread — a shared network traffic-class TX thread — deadlocks permanently while holding the interface TX lock, halting transmission until reboot (and leaking the transmit buffer). The enqueue fails under conditions controlled by the attached USB host: usbd_ep_enqueue() returns -EPERM whenever the bus is suspended (a standard, persistent host operation), and the underlying udc_ep_enqueue() returns -EPERM/-ENODEV on disconnect, bus reset, or endpoint disable. The cdc_ncm_send() guard only checks the DATA_IFACE_ENABLED and IFACE_UP flags, not the suspended state, so a packet transmitted while the host holds the bus suspended reaches the failing enqueue and deadlocks the TX path. The realistic trigger is a bus suspend that occurs while the exported network interface is active and has traffic to send — host sleep, USB selective/auto-suspend, or hub power management — after which any device-originated packet deadlocks the path, recoverable only by reboot. The impact is a persistent loss of the virtual network connection between the host's NCM interface and the Zephyr device; because the deadlocked thread is a shared traffic-class TX thread, egress on other network interfaces can stall as well. There is no memory corruption or information disclosure. The defect was introduced with the CDC-NCM driver and shipped in releases through v4.4.0; it is fixed by checking the usbd_ep_enqueue() return value and freeing the buffer before the blocking wait.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "information_disclosure"
+    ],
+    "priority": 18,
+    "product": "zephyr",
+    "published": "2026-06-29T22:16:42.940",
+    "references": [
+      "https://github.com/zephyrproject-rtos/zephyr/commit/255bccc1badd1aa06c6e5ddf5b40de8463b33f02",
+      "https://github.com/zephyrproject-rtos/zephyr/security/advisories/GHSA-xcf7-r86m-5q9f"
+    ],
+    "vendor": "zephyrproject"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-3576",
+    "description": "The Planyo Online Reservation System plugin for WordPress is vulnerable to Server-Side Request Forgery leading to Local File Inclusion in all versions up to, and including, 3.0. The ulap.php file acts as an AJAX proxy and is directly accessible without WordPress bootstrapping or any authentication. The send_http_post() function validates the host of the provided URL against an allowlist that includes 'localhost', but critically fails to validate the URL scheme/protocol. This makes it possible for unauthenticated attackers to supply a file:// URL (e.g., file://localhost/etc/passwd) which bypasses the host allowlist check because parse_url() returns 'localhost' as the host. The URL is then passed to curl_init() or fopen(), both of which support the file:// protocol, allowing the attacker to read arbitrary local files on the server and have their contents returned in the HTTP response. This can lead to disclosure of sensitive files such as /etc/passwd, wp-config.php (containing database credentials and authentication keys), and other server-side files.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "path_traversal",
+      "file_read",
+      "ssrf"
+    ],
+    "priority": 38,
+    "product": "Planyo online reservation system",
+    "published": "2026-07-11T05:16:34.013",
+    "references": [
+      "https://plugins.trac.wordpress.org/browser/planyo-online-reservation-system/tags/2.7/ulap.php#L118",
+      "https://plugins.trac.wordpress.org/browser/planyo-online-reservation-system/tags/2.7/ulap.php#L120",
+      "https://plugins.trac.wordpress.org/browser/planyo-online-reservation-system/tags/2.7/ulap.php#L59",
+      "https://plugins.trac.wordpress.org/browser/planyo-online-reservation-system/tags/2.7/ulap.php#L84",
+      "https://plugins.trac.wordpress.org/browser/planyo-online-reservation-system/tags/2.7/ulap.php#L96",
+      "https://plugins.trac.wordpress.org/browser/planyo-online-reservation-system/trunk/ulap.php#L118",
+      "https://plugins.trac.wordpress.org/browser/planyo-online-reservation-system/trunk/ulap.php#L120",
+      "https://plugins.trac.wordpress.org/browser/planyo-online-reservation-system/trunk/ulap.php#L59",
+      "https://plugins.trac.wordpress.org/browser/planyo-online-reservation-system/trunk/ulap.php#L84",
+      "https://plugins.trac.wordpress.org/browser/planyo-online-reservation-system/trunk/ulap.php#L96",
+      "https://plugins.trac.wordpress.org/changeset?reponame=&old=3488647%40planyo-online-reservation-system&new=3488647%40planyo-online-reservation-system",
+      "https://www.wordfence.com/threat-intel/vulnerabilities/id/5038d12a-e119-4ab7-aadc-69b765ae7027?source=cve"
+    ],
+    "vendor": "xtreeme"
+  },
+  {
+    "advisory_refs": [],
+    "commit_refs": [],
+    "cpes": [
+      "cpe:2.3:a:itsourcecode:online_house_rental_system:*:*:*:*:*:*:*:*"
+    ],
+    "cve_id": "CVE-2026-10251",
+    "description": "A weakness has been identified in itsourcecode Online House Rental System 1.0. The impacted element is an unknown function of the file /ajax.php?action=login. Executing a manipulation of the argument Username can lead to sql injection. The attack may be performed from remote. The exploit has been made available to the public and could be used for attacks.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "sql_injection"
+    ],
+    "priority": 40,
+    "product": "Online House Rental System",
+    "published": "2026-06-01T13:16:29.083",
+    "references": [
+      "https://github.com/zhengdexu-bot/zhengdexu/issues/3",
+      "https://itsourcecode.com/",
+      "https://vuldb.com/cve/CVE-2026-10251",
+      "https://vuldb.com/submit/824090",
+      "https://vuldb.com/vuln/367529",
+      "https://vuldb.com/vuln/367529/cti"
+    ],
+    "vendor": "itsourcecode"
+  },
+  {
+    "advisory_refs": [
+      "https://github.com/TryGhost/Ghost/security/advisories/GHSA-rrq6-9r3c-7w26"
+    ],
+    "commit_refs": [],
+    "cpes": [],
+    "cve_id": "CVE-2026-103291",
+    "description": "Ghost versions from 3.20.2 before 6.51.0 contain a server-side request forgery vulnerability in image dimension refetching that allows authenticated staff users to trigger outbound HTTP requests to arbitrary URLs. Attackers can point image cards at attacker-controlled hosts or internal network endpoints to access metadata services and internal resources unavailable from the public internet.",
+    "ecosystem_hint": "",
+    "osv_refs": [],
+    "prefilter_reason": "matched web-facing secret-disclosure pattern",
+    "primitives": [
+      "ssrf"
+    ],
+    "priority": 30,
+    "product": "Ghost",
+    "published": "2026-10-01T11:17:25.680",
+    "references": [
+      "https://github.com/TryGhost/Ghost/security/advisories/GHSA-rrq6-9r3c-7w26",
+      "https://www.vulncheck.com/advisories/ghost-3.20.2-before-6.51.0-ssrf-via-image-size-fetch"
+    ],
+    "vendor": "TryGhost"
+  }
+]
