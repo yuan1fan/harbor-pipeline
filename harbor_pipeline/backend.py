@@ -103,6 +103,7 @@ def _run(command: list[str], *, timeout: int, log_path: Path) -> subprocess.Comp
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        errors="replace",
         **no_window_kwargs(),
     )
     try:
@@ -159,7 +160,7 @@ def run_in_image(
     try:
         proc = subprocess.Popen(
             argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            **no_window_kwargs(),
+            errors="replace", **no_window_kwargs(),
         )
     except OSError as exc:
         return {"exit": -1, "output": f"docker run failed: {exc}"}

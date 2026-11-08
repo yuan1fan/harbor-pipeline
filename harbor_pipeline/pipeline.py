@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -2800,7 +2801,31 @@ class CvePipeline:
             return job
         error = job.error or {}
         used = int(job.attempts.get("retry", 0))
-        if used >= self.config.pipeline.max_repairs:
+        category = str(error.get("category") or "")
+        message = str(error.get("message") or "").lower()
+        # Public CVE/OSV endpoints reset connections in some networks. Treat
+        # those as an outage rather than a candidate defect: back off and
+        # allow a longer retry window so a brief network drop does not burn
+        # the whole sample. A 404 or a permanently missing source still stops
+        # at the normal limit.
+        transient_source = category == "source_error" and any(
+            token in message
+            for token in (
+                "winerror",
+                "timed out",
+                "timeout",
+                "connection",
+                "reset",
+                "temporarily",
+                "502",
+                "503",
+                "504",
+            )
+        )
+        retry_limit = self.config.pipeline.max_repairs
+        if transient_source:
+            retry_limit = max(retry_limit, 12)
+        if used >= retry_limit:
             return job
         # A native authoring session that ended without a submission is not a
         # generic infrastructure fault; its own session budget is the right
@@ -2812,7 +2837,8 @@ class CvePipeline:
             and used >= self.config.pipeline.author_max_resumes + 1
         ):
             return job
-        category = str(error.get("category") or "")
+        if transient_source:
+            time.sleep(min(300, 15 * (2 ** min(used, 5))))
         if not error.get("retryable") and category in REPAIRABLE_CATEGORIES:
             if int(job.attempts.get("repair", 0)) >= self.config.pipeline.max_repairs:
                 return job
