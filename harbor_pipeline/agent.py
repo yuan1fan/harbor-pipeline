@@ -207,8 +207,8 @@ def agent_environment(
             env[key] = value
     token = env.get("ANTHROPIC_AUTH_TOKEN") or env.get("ANTHROPIC_API_KEY")
     if token:
-        # ``--bare`` accepts ANTHROPIC_API_KEY; the gateway also accepts the
-        # auth-token form. Set both in the child process only.
+        # The child CLI accepts ANTHROPIC_API_KEY; the gateway also accepts
+        # the auth-token form. Set both in the child process only.
         env["ANTHROPIC_API_KEY"] = token
         env["ANTHROPIC_AUTH_TOKEN"] = token
     env.setdefault("HOME", os.environ.get("USERPROFILE", str(Path.home())))
@@ -262,7 +262,11 @@ class ClaudeCodeAgent:
     ) -> list[str]:
         argv = [self.binary, "-p"]
         if bare:
-            argv.append("--bare")
+            # ``--bare`` silently drops Write/Grep/Glob from the built-in tool
+            # set (only Read/Edit/Bash survive), which makes it impossible to
+            # create a new target file. Loading no setting sources gives the
+            # same isolation without shrinking the tool set.
+            argv.extend(["--setting-sources", ""])
         if safe_mode:
             argv.append("--safe-mode")
         argv.extend(

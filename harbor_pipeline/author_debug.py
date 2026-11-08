@@ -24,6 +24,7 @@ def _name(workspace: Path, kind: str) -> str:
 
 def _run(args: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess:
     return subprocess.run([docker_binary(), *args], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace",
                           timeout=timeout, **no_window_kwargs())
 
 

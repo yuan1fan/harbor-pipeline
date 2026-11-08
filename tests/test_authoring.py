@@ -202,7 +202,11 @@ def test_agent_command_is_restricted_and_allowlisted(tmp_path: Path, monkeypatch
         settings_path=tmp_path / "settings.json", contract="contract"
     )
     joined = " ".join(command)
-    assert "--bare" in command
+    # --bare drops Write/Grep/Glob from the built-in tool set, so isolation
+    # comes from loading no setting sources instead.
+    assert "--bare" not in command
+    assert "--setting-sources" in command
+    assert command[command.index("--setting-sources") + 1] == ""
     assert "--restricted" in command
     assert "--strict-mcp-config" in command
     assert "--disable-slash-commands" in command
