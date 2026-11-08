@@ -1,0 +1,2791 @@
+[
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/parisneo/lollms/commit/a6625dc83786ff21d109b0d545ca61b770607ef3"
+  ],
+  "cpes": [
+   "cpe:2.3:a:lollms:lollms:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-0558",
+  "description": "A vulnerability in parisneo/lollms, up to and including version 2.2.0, allows unauthenticated users to upload and process files through the `/api/files/extract-text` endpoint. This endpoint does not enforce authentication, unlike other file-related endpoints, and lacks the `Depends(get_current_active_user)` dependency. This issue can lead to denial of service (DoS) through resource exhaustion, information disclosure, and violation of the application's documented security policies.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "parisneo/lollms",
+  "published": "2026-03-29T18:16:13.250",
+  "references": [
+   "https://github.com/parisneo/lollms/commit/a6625dc83786ff21d109b0d545ca61b770607ef3",
+   "https://huntr.com/bounties/0a722001-89ce-4c91-b6a6-a55ee5ba2113"
+  ],
+  "vendor": "parisneo"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/parisneo/lollms/commit/76a54f0df2df8a5b254aa627d487b5dc939a0263"
+  ],
+  "cpes": [
+   "cpe:2.3:a:lollms:lollms:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-0560",
+  "description": "A Server-Side Request Forgery (SSRF) vulnerability exists in parisneo/lollms versions prior to 2.2.0, specifically in the `/api/files/export-content` endpoint. The `_download_image_to_temp()` function in `backend/routers/files.py` fails to validate user-controlled URLs, allowing attackers to make arbitrary HTTP requests to internal services and cloud metadata endpoints. This vulnerability can lead to internal network access, cloud metadata access, information disclosure, port scanning, and potentially remote code execution.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf",
+   "code_execution",
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "parisneo/lollms",
+  "published": "2026-03-29T18:16:14.303",
+  "references": [
+   "https://github.com/parisneo/lollms/commit/76a54f0df2df8a5b254aa627d487b5dc939a0263",
+   "https://huntr.com/bounties/65e43a5e-b902-4369-b738-1825285a3ea5"
+  ],
+  "vendor": "parisneo"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/Usagi-org/ai-goofish-monitor/commit/f85d140b6b45029d9a0925feb96dad733b41396d"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-10044",
+  "description": "Usagi-org ai-goofish-monitor contains an unauthenticated arbitrary file read vulnerability in the GET /api/prompts/{filename} endpoint on Windows deployments that allows unauthenticated remote attackers to read arbitrary files by supplying absolute Windows paths or backslash-based traversal sequences. Attackers can bypass the incomplete path traversal guard, which only blocks forward slashes and '..', by providing absolute paths such as Windows system file locations, causing os.path.join to discard the intended prompts directory prefix and expose files accessible to the application process.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal",
+   "file_read"
+  ],
+  "priority": 26,
+  "product": "ai-goofish-monitor",
+  "published": "2026-05-28T22:16:58.453",
+  "references": [
+   "https://github.com/Usagi-org/ai-goofish-monitor/commit/f85d140b6b45029d9a0925feb96dad733b41396d",
+   "https://github.com/Usagi-org/ai-goofish-monitor/issues/488",
+   "https://github.com/Usagi-org/ai-goofish-monitor/pull/489",
+   "https://www.vulncheck.com/advisories/ai-goofish-monitor-unauthenticated-arbitrary-file-read-via-get-api-prompts"
+  ],
+  "vendor": "Usagi-org"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/jxxghp/MoviePilot/commit/0b7854a0af8751160b68c43c46ded48d2bd8a212"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-10107",
+  "description": "MoviePilot v2 contains a server-side request forgery vulnerability in the image proxy endpoint that allows authenticated attackers to request arbitrary URLs by supplying a resource_token cookie and a URL whose domain matches the assembled allowlist. Attackers can bypass internal network protections because the SecurityUtils.is_safe_url function performs only domain-membership checking without blocking private, loopback, or link-local addresses, enabling enumeration of internal services such as Jellyfin, Emby, or Plex and exfiltration of data from internal network resources.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "MoviePilot",
+  "published": "2026-05-29T18:16:31.160",
+  "references": [
+   "https://github.com/jxxghp/MoviePilot/commit/0b7854a0af8751160b68c43c46ded48d2bd8a212",
+   "https://github.com/jxxghp/MoviePilot/issues/5823",
+   "https://github.com/jxxghp/MoviePilot/releases/tag/v2.13.2",
+   "https://www.vulncheck.com/advisories/moviepilot-v2-ssrf-via-api-v1-system-img-proxy-endpoint"
+  ],
+  "vendor": "jxxghp"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/FalkorDB/QueryWeaver/commit/e6a49f508191d0f1bdad0f146da43819e7849f18"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-10130",
+  "description": "QueryWeaver contains an authentication bypass vulnerability that allows unauthenticated attackers to obtain valid session tokens for existing accounts by submitting a signup request with a known victim email address. The signup route unconditionally creates and links a new token to the matching Identity via a Cypher MERGE operation before checking whether the email belongs to an existing account, causing the server to return a valid authenticated session token for the victim's identity without requiring any prior credentials or user interaction.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "QueryWeaver",
+  "published": "2026-07-18T23:17:00.397",
+  "references": [
+   "https://github.com/FalkorDB/QueryWeaver",
+   "https://github.com/FalkorDB/QueryWeaver/commit/e6a49f508191d0f1bdad0f146da43819e7849f18",
+   "https://www.vulncheck.com/advisories/queryweaver-authentication-bypass-via-email-signup-token-issuance-for-existing-accounts"
+  ],
+  "vendor": "FalkorDB"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/backdrop/backdrop/commit/1ae67061d9d487bb6cb3b8611191354052f34749"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-104476",
+  "description": "Backdrop CMS before 1.35.1 contains an information disclosure vulnerability that allows unauthenticated attackers to retrieve configuration export archives left on the server after transfer. Attackers can download compressed archives generated by users with configuration export permission to obtain the full site configuration, including sensitive settings.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "backdrop",
+  "published": "2026-10-03T00:16:35.747",
+  "references": [
+   "https://backdropcms.org/security/backdrop-sa-core-2026-006",
+   "https://github.com/backdrop/backdrop",
+   "https://github.com/backdrop/backdrop/commit/1ae67061d9d487bb6cb3b8611191354052f34749",
+   "https://www.vulncheck.com/advisories/backdrop-cms-before-1.35.1-information-disclosure-via-configuration-export-archive"
+  ],
+  "vendor": "backdrop"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/MISP/MISP/commit/19a389d19"
+  ],
+  "cpes": [
+   "cpe:2.3:a:misp:misp:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-107175",
+  "description": "MISP contains a defect in its event save workflow that prevents the correlation engine from recalculating correlations when an event's distribution level or sharing group is modified. When a user edits an existing event and changes its distribution or sharing_group_id, the internal before-save hook stored the incoming (new) data rather than the previously persisted values. As a result, the after-save comparison that determines whether a correlation refresh is needed never detected the change, and stale correlations persisted. Security impact: - Stale correlations may continue to expose event data to users in a broader sharing group after the event has been moved to a more restrictive group, resulting in unintended information disclosure. - Conversely, newly relevant correlations may not appear after a distribution widening, degrading the completeness of threat intelligence sharing. Preconditions: - An authenticated user with write access to at least one MISP event. - The user modifies the event's distribution or sharing_group_id field. Affected versions: <2.5.48",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "MISP",
+  "published": "2026-10-07T13:17:20.563",
+  "references": [
+   "https://github.com/MISP/MISP/commit/19a389d19"
+  ],
+  "vendor": "MISP"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/ILIAS-eLearning/ILIAS/commit/ad1423c365a7ffd25bac711d995c643ce2af65c6"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-107639",
+  "description": "ILIAS before 9.24, 10.x before 10.12 and 11.x before 11.5 contains an argument injection vulnerability in assImagemapQuestionGUI that allows question authors to inject ImageMagick convert options via uploaded image filenames. Attackers can embed tab-separated options, which escapeshellcmd() does not neutralise, to write a PHP file under the web root and achieve remote code execution.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "command_injection",
+   "code_execution"
+  ],
+  "priority": 28,
+  "product": "ILIAS",
+  "published": "2026-10-08T15:17:47.117",
+  "references": [
+   "https://docu.ilias.de/go/blog/15821/950",
+   "https://docu.ilias.de/go/blog/15821/951",
+   "https://docu.ilias.de/go/blog/15821/952",
+   "https://github.com/ILIAS-eLearning/ILIAS",
+   "https://github.com/ILIAS-eLearning/ILIAS/blob/v10.11/components/ILIAS/TestQuestionPool/classes/class.assImagemapQuestion.php#L290-L306",
+   "https://github.com/ILIAS-eLearning/ILIAS/blob/v10.11/components/ILIAS/TestQuestionPool/classes/class.assImagemapQuestionGUI.php#L130",
+   "https://github.com/ILIAS-eLearning/ILIAS/blob/v10.11/components/ILIAS/TestQuestionPool/classes/class.ilImagemapPreview.php#L208-L238",
+   "https://github.com/ILIAS-eLearning/ILIAS/commit/ad1423c365a7ffd25bac711d995c643ce2af65c6",
+   "https://www.vulncheck.com/advisories/ilias-before-9.24-10.12-and-11.5-argument-injection-via-image-map-question-upload-filename"
+  ],
+  "vendor": "ILIAS-eLearning e.V."
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/dataease/dataease/commit/8509e218e6c1f0080eee9e379f269b2104785ef7"
+  ],
+  "cpes": [
+   "cpe:2.3:a:dataease:dataease:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-108824",
+  "description": "A flaw has been found in DataEase up to 3.0.0. The impacted element is the function Utils.buildCalcField of the file io/dataease/engine/utils/Utils.java. This manipulation of the argument calculated field causes sql injection. It is possible to initiate the attack remotely. The exploit has been published and may be used. Patch name: 8509e218e6c1f0080eee9e379f269b2104785ef7. It is recommended to apply a patch to fix this issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "sql_injection"
+  ],
+  "priority": 28,
+  "product": "DataEase",
+  "published": "2026-10-12T11:17:10.447",
+  "references": [
+   "https://gist.github.com/k4z01/536b77dfe537e84ca1047c94cc36ef22",
+   "https://github.com/dataease/dataease/",
+   "https://github.com/dataease/dataease/commit/8509e218e6c1f0080eee9e379f269b2104785ef7",
+   "https://github.com/dataease/dataease/pull/19285",
+   "https://github.com/k4z01/DataEase-Authenticated-SQL-Injection-/blob/main/README.md",
+   "https://vuldb.com/cve/CVE-2026-108824",
+   "https://vuldb.com/submit/964784",
+   "https://vuldb.com/vuln/416600",
+   "https://vuldb.com/vuln/416600/cti"
+  ],
+  "vendor": "n/a"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/201206030/novel/commit/fa82ce7e426a5b29db469b8f13d2e29fc1260871"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-110104",
+  "description": "Xxyopen novel through 3.5.0 contains a weak password hashing vulnerability that allows attackers to recover plaintext passwords because UserServiceImpl.register() stores unsalted MD5 digests in user_info.password. Attackers who obtain the password column through a database leak or backup exposure can crack hashes with precomputed tables or GPU brute force and reuse credentials.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "novel",
+  "published": "2026-10-13T17:17:34.310",
+  "references": [
+   "https://github.com/201206030/novel/blob/v3.5.0/src/main/java/io/github/xxyopen/novel/service/impl/UserServiceImpl.java#L70-L77",
+   "https://github.com/201206030/novel/commit/fa82ce7e426a5b29db469b8f13d2e29fc1260871",
+   "https://github.com/201206030/novel/pull/53",
+   "https://www.vulncheck.com/advisories/novel-through-3.5.0-unsalted-md5-password-storage"
+  ],
+  "vendor": "xxyopen"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/agit8or1/clientst0r/commit/7e75c6cc6a07621c10be9b07fafd99e89a02e327"
+  ],
+  "cpes": [
+   "cpe:2.3:a:agit8or1:clientst0r:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-112254",
+  "description": "A vulnerability was found in agit8or1 clientst0r up to 3.17.586. Affected by this vulnerability is the function _fetch_html of the file locations/services/property_url_importer.py of the component Property URL Importer. The manipulation of the argument url results in server-side request forgery. The attack may be launched remotely. The exploit has been made public and could be used. Upgrading to version 3.17.587 addresses this issue. The patch is identified as 7e75c6cc6a07621c10be9b07fafd99e89a02e327. The affected component should be upgraded. The vendor was contacted early, responded in a very professional manner and quickly released a fixed version of the affected product.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "clientst0r",
+  "published": "2026-10-19T20:17:52.800",
+  "references": [
+   "https://github.com/agit8or1/clientst0r/",
+   "https://github.com/agit8or1/clientst0r/commit/7e75c6cc6a07621c10be9b07fafd99e89a02e327",
+   "https://github.com/agit8or1/clientst0r/releases/tag/v3.17.587",
+   "https://vuldb.com/cve/CVE-2026-112254",
+   "https://vuldb.com/submit/986798",
+   "https://vuldb.com/vuln/422335",
+   "https://vuldb.com/vuln/422335/cti"
+  ],
+  "vendor": "agit8or1"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/dokuwiki/dokuwiki/commit/1531802afb2ac3eea147a887600fa5750e74e681"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-113356",
+  "description": "DokuWiki before 2026-07-14c contains a PHP object injection vulnerability in Draft::getDraftText() that passes draft file contents to unserialize() without restricting allowed classes. Authenticated users with edit rights can race concurrent draft rewrites to splice serialized data, instantiating gadgets like MemoryIndex or Installer for arbitrary file write, deletion, and code execution.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "file_read",
+   "deserialization"
+  ],
+  "priority": 26,
+  "product": "DokuWiki",
+  "published": "2026-10-20T11:17:20.143",
+  "references": [
+   "https://gist.github.com/sebastianosrt/a0c0252ca335e8e8b2c96fecf1f64538",
+   "https://github.com/dokuwiki/dokuwiki/blob/b61db59a8091fc992ac02959a9a09b576cc43ce0/inc/Draft.php#L122",
+   "https://github.com/dokuwiki/dokuwiki/commit/1531802afb2ac3eea147a887600fa5750e74e681",
+   "https://github.com/dokuwiki/dokuwiki/issues/4752",
+   "https://github.com/dokuwiki/dokuwiki/releases/tag/release-2026-07-14c",
+   "https://www.vulncheck.com/advisories/dokuwiki-before-2026-07-14c-php-object-injection-via-draft-race-condition"
+  ],
+  "vendor": "DokuWiki"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/hs-web/hsweb-framework/commit/8009845b577d8a2c4bbf4fdd8e8913799a714be6"
+  ],
+  "cpes": [
+   "cpe:2.3:a:hs-web:hsweb-framework:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-11470",
+  "description": "A vulnerability has been found in hs-web hsweb-framework up to 5.0.1. The affected element is the function denied of the file hsweb-system/hsweb-system-file/src/main/java/org/hswebframework/web/file/FileUploadProperties.java of the component File Upload. The manipulation of the argument filename leads to path traversal. It is possible to initiate the attack remotely. The exploit has been disclosed to the public and may be used. The identifier of the patch is 8009845b577d8a2c4bbf4fdd8e8913799a714be6. It is suggested to install a patch to address this issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal"
+  ],
+  "priority": 26,
+  "product": "hsweb-framework",
+  "published": "2026-06-08T01:16:22.433",
+  "references": [
+   "https://github.com/hs-web/hsweb-framework/",
+   "https://github.com/hs-web/hsweb-framework/commit/8009845b577d8a2c4bbf4fdd8e8913799a714be6",
+   "https://github.com/hs-web/hsweb-framework/issues/344",
+   "https://github.com/hs-web/hsweb-framework/issues/344#issuecomment-3798035002",
+   "https://vuldb.com/cve/CVE-2026-11470",
+   "https://vuldb.com/submit/833856",
+   "https://vuldb.com/vuln/369090",
+   "https://vuldb.com/vuln/369090/cti"
+  ],
+  "vendor": "hs-web"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/ArtalkJS/Artalk/commit/dae6bf49c9efec755a5b3ac3e379b4004c29a049"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-117565",
+  "description": "Artalk before 2.10.1 contains an unauthenticated server-side request forgery vulnerability that allows remote attackers to make the server fetch arbitrary URLs by submitting anonymous comments to /api/v2/comments. Attackers can set a page_key to an internal URL, which GetTitleByURL fetches after only scheme validation, then read the page title through the public comment list.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "Artalk",
+  "published": "2026-10-27T14:16:38.870",
+  "references": [
+   "https://github.com/ArtalkJS/Artalk",
+   "https://github.com/ArtalkJS/Artalk/blob/v2.10.0/internal/dao/service.go#L96-L103",
+   "https://github.com/ArtalkJS/Artalk/commit/dae6bf49c9efec755a5b3ac3e379b4004c29a049",
+   "https://github.com/ArtalkJS/Artalk/issues/1199",
+   "https://github.com/ArtalkJS/Artalk/releases/tag/v2.10.1",
+   "https://www.vulncheck.com/advisories/artalk-before-2.10.1-unauthenticated-ssrf-via-comment-page-title-fetch"
+  ],
+  "vendor": "ArtalkJS"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/zenml-io/zenml/commit/9ad2c65f24ded22a5a98d289d63a7f629b434b61"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-11876",
+  "description": "In zenml-io/zenml version 0.94.2, the `GET /api/v1/stack-deployment/stack` endpoint (`get_deployed_stack`) lacks proper RBAC authorization checks, allowing any authenticated user to enumerate all deployed stacks across all users and tenants. This includes stack component details, service connector information, and user IDs of stack owners. The vulnerability arises from two issues: missing endpoint-level RBAC checks and the use of a server-side `Client()` that bypasses the RBAC enforcement layer by directly accessing the database through `SqlZenStore`. This exposes sensitive information such as infrastructure topology, service connector details, stack ownership, and deployment metadata, potentially enabling cross-tenant reconnaissance and further attacks in multi-tenant ZenML Pro/Cloud deployments.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "zenml-io/zenml",
+  "published": "2026-07-21T15:16:30.480",
+  "references": [
+   "https://github.com/zenml-io/zenml/commit/9ad2c65f24ded22a5a98d289d63a7f629b434b61",
+   "https://huntr.com/bounties/3b434e02-0ee9-4b5e-a44b-0988b6f074c7"
+  ],
+  "vendor": "zenml-io"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/admpub/nging/commit/6434d026f668bdb5d59db658036fd6febbd29c0c"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-119653",
+  "description": "Nging through 5.3.5 contains an information disclosure vulnerability that allows any authenticated backend user to list host directories by abusing the public-tagged /user/autocomplete_path endpoint. Low-privileged users without file-manager permission can supply arbitrary paths in the query parameter to enumerate directories readable by the Nging process and confirm specific files exist.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "nging",
+  "published": "2026-10-30T15:16:48.967",
+  "references": [
+   "https://github.com/admpub/nging",
+   "https://github.com/admpub/nging/blob/v5.3.5/application/handler/user/init.go#L28-L42",
+   "https://github.com/admpub/nging/blob/v5.3.5/application/handler/user/profile.go#L136-L157",
+   "https://github.com/admpub/nging/commit/6434d026f668bdb5d59db658036fd6febbd29c0c",
+   "https://github.com/admpub/nging/issues/831",
+   "https://hackmd.io/@hieuPenguinnn/nging-user-autocomplete-path-filesystem-disclosure",
+   "https://www.vulncheck.com/advisories/nging-through-5.3.5-directory-listing-disclosure-via-user-autocomplete-path"
+  ],
+  "vendor": "admpub"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/towfiqi/serpbear/commit/12dc0a4bd91f06de2dab96f797c495942f7ef8c9"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-119705",
+  "description": "SerpBear before 3.1.1 contains a missing authentication vulnerability in pages/api/notify.ts that allows remote unauthenticated attackers to trigger notification emails because verifyUser() is never called. Attackers can repeatedly POST to /api/notify, optionally with a domain parameter, to exhaust SMTP rate limits, trigger provider abuse flags and flood recipients.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "serpbear",
+  "published": "2026-10-30T16:17:51.483",
+  "references": [
+   "https://github.com/towfiqi/serpbear",
+   "https://github.com/towfiqi/serpbear/blob/v3.1.0/pages/api/notify.ts#L16-L21",
+   "https://github.com/towfiqi/serpbear/commit/12dc0a4bd91f06de2dab96f797c495942f7ef8c9",
+   "https://github.com/towfiqi/serpbear/issues/359",
+   "https://github.com/towfiqi/serpbear/releases/tag/v3.1.1",
+   "https://www.vulncheck.com/advisories/serpbear-before-3.1.1-missing-authentication-via-post-api-notify"
+  ],
+  "vendor": "towfiqi"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/django/django/commit/13debb622a32720bda1bccda7622fd14fbf3931b",
+   "https://github.com/django/django/commit/47511a21026cdd721d8fbf8571cc079bc38bb46d",
+   "https://github.com/django/django/commit/5a260d309a4c8010c2ebda24eb758a5d95e2508a",
+   "https://github.com/django/django/commit/b9adb81339cc418f8f56b1050cca6dfec3ab6349"
+  ],
+  "cpes": [
+   "cpe:2.3:a:djangoproject:django:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-15920",
+  "description": "An issue was discovered in Django 5.2 before 5.2.17 and 6.0 before 6.0.8. `django.contrib.admin.utils.display_for_field()` renders `URLField` values as clickable links in the admin without validating the URL. A value stored with an unsafe scheme is displayed as a link on changelist and read-only admin pages, which allows cross-site scripting against staff users who click the link. Exploitation requires the unsafe value to already be stored in the database. `URLField` validation through a `ModelForm` or the admin rejects unsafe schemes, so this affects applications that persist `URLField` data without running model validation, for example through direct queryset writes, deserialization, or bulk import of untrusted input. Django would like to thank Egor Saltykov for reporting this issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "deserialization"
+  ],
+  "priority": 28,
+  "product": "Django",
+  "published": "2026-08-04T17:16:46.733",
+  "references": [
+   "https://docs.djangoproject.com/en/dev/releases/security/",
+   "https://github.com/django/django/commit/13debb622a32720bda1bccda7622fd14fbf3931b",
+   "https://github.com/django/django/commit/47511a21026cdd721d8fbf8571cc079bc38bb46d",
+   "https://github.com/django/django/commit/5a260d309a4c8010c2ebda24eb758a5d95e2508a",
+   "https://github.com/django/django/commit/b9adb81339cc418f8f56b1050cca6dfec3ab6349",
+   "https://groups.google.com/g/django-announce",
+   "https://www.djangoproject.com/weblog/2026/aug/04/security-releases/"
+  ],
+  "vendor": "djangoproject"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/MissionSquad/mcp-api/commit/f068ab4ad6f0907ac7001b995588c2673f11a755"
+  ],
+  "cpes": [
+   "cpe:2.3:a:missionsquad:mcp-api:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-19040",
+  "description": "A flaw has been found in MissionSquad mcp-api up to 1.11.9. The affected element is an unknown function of the file src/services/dcrClients.ts. Executing a manipulation can lead to server-side request forgery. The attack may be performed from remote. Upgrading to version 1.11.10 is sufficient to fix this issue. This patch is called f068ab4ad6f0907ac7001b995588c2673f11a755. You should upgrade the affected component.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "mcp-api",
+  "published": "2026-08-06T14:16:36.043",
+  "references": [
+   "https://github.com/MissionSquad/mcp-api/",
+   "https://github.com/MissionSquad/mcp-api/commit/f068ab4ad6f0907ac7001b995588c2673f11a755",
+   "https://github.com/MissionSquad/mcp-api/issues/42",
+   "https://github.com/MissionSquad/mcp-api/pull/45",
+   "https://github.com/MissionSquad/mcp-api/releases/tag/v1.11.10",
+   "https://vuldb.com/cve/CVE-2026-19040",
+   "https://vuldb.com/submit/863829",
+   "https://vuldb.com/vuln/386459",
+   "https://vuldb.com/vuln/386459/cti"
+  ],
+  "vendor": "MissionSquad"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/n8n-io/n8n/security/advisories/GHSA-jf52-3f2h-h9j5"
+  ],
+  "commit_refs": [
+   "https://github.com/n8n-io/n8n/commit/a61a5991093c41863506888336e808ac1eff8d59"
+  ],
+  "cpes": [
+   "cpe:2.3:a:n8n:n8n:*:*:*:*:*:node.js:*:*"
+  ],
+  "cve_id": "CVE-2026-21894",
+  "description": "n8n is an open source workflow automation platform. In versions from 0.150.0 to before 2.2.2, an authentication bypass vulnerability in the Stripe Trigger node allows unauthenticated parties to trigger workflows by sending forged Stripe webhook events. The Stripe Trigger creates and stores a Stripe webhook signing secret when registering the webhook endpoint, but incoming webhook requests were not verified against this secret. As a result, any HTTP client that knows the webhook URL could send a POST request containing a matching event type, causing the workflow to execute as if a legitimate Stripe event had been received. This issue affects n8n users who have active workflows using the Stripe Trigger node. An attacker could potentially fake payment or subscription events and influence downstream workflow behavior. The practical risk is reduced by the fact that the webhook URL contains a high-entropy UUID; however, authenticated n8n users with access to the workflow can view this webhook ID. This issue has been patched in version 2.2.2. A temporary workaround for this issue involves users deactivating affected workflows or restricting access to workflows containing Stripe Trigger nodes to trusted users only.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 18,
+  "product": "n8n",
+  "published": "2026-01-08T10:15:55.970",
+  "references": [
+   "https://github.com/n8n-io/n8n/commit/a61a5991093c41863506888336e808ac1eff8d59",
+   "https://github.com/n8n-io/n8n/pull/22764",
+   "https://github.com/n8n-io/n8n/security/advisories/GHSA-jf52-3f2h-h9j5"
+  ],
+  "vendor": "n8n-io"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/wekan/wekan/commit/91a936e07d2976d4246dfe834281c3aaa87f9503"
+  ],
+  "cpes": [
+   "cpe:2.3:a:wekan_project:wekan:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-2207",
+  "description": "A weakness has been identified in WeKan up to 8.20. This issue affects some unknown processing of the file server/publications/activities.js of the component Activity Publication Handler. Executing a manipulation can lead to information disclosure. It is possible to launch the attack remotely. Upgrading to version 8.21 is capable of addressing this issue. This patch is called 91a936e07d2976d4246dfe834281c3aaa87f9503. You should upgrade the affected component.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "WeKan",
+  "published": "2026-02-08T02:15:57.447",
+  "references": [
+   "https://github.com/wekan/wekan/",
+   "https://github.com/wekan/wekan/commit/91a936e07d2976d4246dfe834281c3aaa87f9503",
+   "https://github.com/wekan/wekan/releases/tag/v8.21",
+   "https://vuldb.com/?ctiid.344921",
+   "https://vuldb.com/?id.344921",
+   "https://vuldb.com/?submit.752163"
+  ],
+  "vendor": "n/a"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/osTicket/osTicket/commit/c59b067"
+  ],
+  "cpes": [
+   "cpe:2.3:a:enhancesoft:osticket:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-22200",
+  "description": "Enhancesoft osTicket versions 1.18.x prior to 1.18.3 and 1.17.x prior to 1.17.7 contain an arbitrary file read vulnerability in the ticket PDF export functionality. A remote attacker can submit a ticket containing crafted rich-text HTML that includes PHP filter expressions which are insufficiently sanitized before being processed by the mPDF PDF generator during export. When the attacker exports the ticket to PDF, the generated PDF can embed the contents of attacker-selected files from the server filesystem as bitmap images, allowing disclosure of sensitive local files in the context of the osTicket application user. This issue is exploitable in default configurations where guests may create tickets and access ticket status, or where self-registration is enabled.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal",
+   "file_read"
+  ],
+  "priority": 26,
+  "product": "osTicket",
+  "published": "2026-01-12T19:16:02.933",
+  "references": [
+   "https://github.com/osTicket/osTicket/commit/c59b067",
+   "https://github.com/osTicket/osTicket/releases/tag/v1.17.7",
+   "https://github.com/osTicket/osTicket/releases/tag/v1.18.3",
+   "https://horizon3.ai/attack-research/attack-blogs/ticket-to-shell-exploiting-php-filters-and-cnext-in-osticket-cve-2026-22200/",
+   "https://www.vulncheck.com/advisories/osticket-pdf-export-arbitrary-file-read"
+  ],
+  "vendor": "Enhancesoft"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/f/prompts.chat/commit/0f8d4c381abd7b2d7478c9fdee9522149c2d65e5"
+  ],
+  "cpes": [
+   "cpe:2.3:a:fka:prompts.chat:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-22661",
+  "description": "prompts.chat prior to commit 0f8d4c3 contains a path traversal vulnerability in skill file handling that allows attackers to write arbitrary files to the client system by crafting malicious ZIP archives with unsanitized filenames containing path traversal sequences. Attackers can exploit missing server-side filename validation to inject path traversal sequences ../ into skill file archives, which when extracted by vulnerable tools writing files outside the intended directory and overwriting shell initialization files to achieve code execution.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal",
+   "file_read"
+  ],
+  "priority": 26,
+  "product": "prompts.chat",
+  "published": "2026-04-03T21:17:08.970",
+  "references": [
+   "https://github.com/f/prompts.chat/commit/0f8d4c381abd7b2d7478c9fdee9522149c2d65e5",
+   "https://github.com/f/prompts.chat/pull/1101",
+   "https://www.vulncheck.com/advisories/prompts-chat-path-traversal-via-skill-file-handling"
+  ],
+  "vendor": "f"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/sigstore/fulcio/security/advisories/GHSA-59jp-pj84-45mr"
+  ],
+  "commit_refs": [
+   "https://github.com/sigstore/fulcio/commit/eaae2f2be56df9dea5f9b439ec81bedae4c0978d"
+  ],
+  "cpes": [
+   "cpe:2.3:a:linuxfoundation:fulcio:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-22772",
+  "description": "Fulcio is a certificate authority for issuing code signing certificates for an OpenID Connect (OIDC) identity. Prior to 1.8.5, Fulcio's metaRegex() function uses unanchored regex, allowing attackers to bypass MetaIssuer URL validation and trigger SSRF to arbitrary internal services. Since the SSRF only can trigger GET requests, the request cannot mutate state. The response from the GET request is not returned to the caller so data exfiltration is not possible. A malicious actor could attempt to probe an internal network through Blind SSRF. This vulnerability is fixed in 1.8.5.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 18,
+  "product": "fulcio",
+  "published": "2026-01-12T21:15:59.457",
+  "references": [
+   "https://github.com/sigstore/fulcio/commit/eaae2f2be56df9dea5f9b439ec81bedae4c0978d",
+   "https://github.com/sigstore/fulcio/security/advisories/GHSA-59jp-pj84-45mr"
+  ],
+  "vendor": "sigstore"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/lxsmnsyc/seroval/security/advisories/GHSA-hx9m-jf43-8ffr"
+  ],
+  "commit_refs": [
+   "https://github.com/lxsmnsyc/seroval/commit/ce9408ebc87312fcad345a73c172212f2a798060"
+  ],
+  "cpes": [
+   "cpe:2.3:a:lxsmnsyc:seroval:*:*:*:*:*:node.js:*:*"
+  ],
+  "cve_id": "CVE-2026-23956",
+  "description": "seroval facilitates JS value stringification, including complex structures beyond JSON.stringify capabilities. In versions 0.2.0 through 1.4.0, overriding RegExp serialization with extremely large patterns can exhaust JavaScript runtime memory during deserialization. Additionally, overriding RegExp serialization with patterns that trigger catastrophic backtracking can lead to ReDoS (Regular Expression Denial of Service). This issue has been fixed in version 1.4.1.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "deserialization"
+  ],
+  "priority": 18,
+  "product": "seroval",
+  "published": "2026-01-22T02:15:52.310",
+  "references": [
+   "https://github.com/lxsmnsyc/seroval/blob/v0.2.0/packages/seroval/src/index.ts#L90",
+   "https://github.com/lxsmnsyc/seroval/commit/ce9408ebc87312fcad345a73c172212f2a798060",
+   "https://github.com/lxsmnsyc/seroval/security/advisories/GHSA-hx9m-jf43-8ffr"
+  ],
+  "vendor": "lxsmnsyc"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/argoproj/argo-workflows/security/advisories/GHSA-cv78-6m8q-ph82"
+  ],
+  "commit_refs": [
+   "https://github.com/argoproj/argo-workflows/commit/159a5c56285ecd4d3bb0a67aeef4507779a44e17"
+  ],
+  "cpes": [
+   "cpe:/a:redhat:openshift_ai",
+   "cpe:2.3:a:argoproj:argo_workflows:*:*:*:*:*:go:*:*"
+  ],
+  "cve_id": "CVE-2026-23960",
+  "description": "Argo Workflows is an open source container-native workflow engine for orchestrating parallel jobs on Kubernetes. Prior to versions 3.6.17 and 3.7.8, stored XSS in the artifact directory listing allows any workflow author to execute arbitrary JavaScript in another user’s browser under the Argo Server origin, enabling API actions with the victim’s privileges. Versions 3.6.17 and 3.7.8 fix the issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "file_read"
+  ],
+  "priority": 16,
+  "product": "argo-workflows",
+  "published": "2026-01-21T22:15:50.627",
+  "references": [
+   "https://github.com/argoproj/argo-workflows/blob/9872c296d29dcc5e9c78493054961ede9fc30797/server/artifacts/artifact_server.go#L194-L244",
+   "https://github.com/argoproj/argo-workflows/commit/159a5c56285ecd4d3bb0a67aeef4507779a44e17",
+   "https://github.com/argoproj/argo-workflows/releases/tag/v3.6.17",
+   "https://github.com/argoproj/argo-workflows/releases/tag/v3.7.8",
+   "https://github.com/argoproj/argo-workflows/security/advisories/GHSA-cv78-6m8q-ph82",
+   "https://access.redhat.com/security/cve/CVE-2026-23960",
+   "https://bugzilla.redhat.com/show_bug.cgi?id=2431881",
+   "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-23960.json"
+  ],
+  "vendor": "argoproj"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/sigstore/rekor/security/advisories/GHSA-4c4x-jm2x-pf9j"
+  ],
+  "commit_refs": [
+   "https://github.com/sigstore/rekor/commit/60ef2bceba192c5bf9327d003bceea8bf1f8275f"
+  ],
+  "cpes": [
+   "cpe:2.3:a:linuxfoundation:rekor:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-24117",
+  "description": "Rekor is a software supply chain transparency log. In versions 1.4.3 and below, attackers can trigger SSRF to arbitrary internal services because /api/v1/index/retrieve supports retrieving a public key via user-provided URL. Since the SSRF only can trigger GET requests, the request cannot mutate state. The response from the GET request is not returned to the caller so data exfiltration is not possible. A malicious actor could attempt to probe an internal network through Blind SSRF. The issue has been fixed in version 1.5.0. To workaround this issue, disable the search endpoint with --enable_retrieve_api=false.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 18,
+  "product": "rekor",
+  "published": "2026-01-22T22:16:21.577",
+  "references": [
+   "https://github.com/sigstore/rekor/commit/60ef2bceba192c5bf9327d003bceea8bf1f8275f",
+   "https://github.com/sigstore/rekor/releases/tag/v1.5.0",
+   "https://github.com/sigstore/rekor/security/advisories/GHSA-4c4x-jm2x-pf9j"
+  ],
+  "vendor": "sigstore"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/lesterchan/wp-downloadmanager/commit/416b9f5459496166c0395f9e055d4c4cf872404a"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-2419",
+  "description": "The WP-DownloadManager plugin for WordPress is vulnerable to Path Traversal in all versions up to, and including, 1.69 via the 'download_path' configuration parameter. This is due to insufficient validation of the download path setting, which allows directory traversal sequences to bypass the WP_CONTENT_DIR prefix check. This makes it possible for authenticated attackers, with Administrator-level access and above, to configure the plugin to list and access arbitrary files on the server by exploiting the file browser functionality.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal",
+   "file_read"
+  ],
+  "priority": 26,
+  "product": "WP-DownloadManager",
+  "published": "2026-02-18T08:16:15.817",
+  "references": [
+   "https://github.com/lesterchan/wp-downloadmanager/commit/416b9f5459496166c0395f9e055d4c4cf872404a",
+   "https://plugins.trac.wordpress.org/browser/wp-downloadmanager/tags/1.69/download-options.php#L42",
+   "https://plugins.trac.wordpress.org/browser/wp-downloadmanager/trunk/download-options.php#L42",
+   "https://www.wordfence.com/threat-intel/vulnerabilities/id/0bb96da1-9c17-4264-ac29-b5ff8dec745d?source=cve"
+  ],
+  "vendor": "gamerz"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/honojs/hono/security/advisories/GHSA-w332-q679-j88p"
+  ],
+  "commit_refs": [
+   "https://github.com/honojs/hono/commit/cf9a78db4d0a19b117aee399cbe9d3a6d9bfd817"
+  ],
+  "cpes": [
+   "cpe:2.3:a:hono:hono:*:*:*:*:*:node.js:*:*"
+  ],
+  "cve_id": "CVE-2026-24473",
+  "description": "Hono is a Web application framework that provides support for any JavaScript runtime. Prior to version 4.11.7, Serve static Middleware for the Cloudflare Workers adapter contains an information disclosure vulnerability that may allow attackers to read arbitrary keys from the Workers environment. Improper validation of user-controlled paths can result in unintended access to internal asset keys. Version 4.11.7 contains a patch for the issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 18,
+  "product": "hono",
+  "published": "2026-01-27T20:16:23.107",
+  "references": [
+   "https://github.com/honojs/hono/commit/cf9a78db4d0a19b117aee399cbe9d3a6d9bfd817",
+   "https://github.com/honojs/hono/releases/tag/v4.11.7",
+   "https://github.com/honojs/hono/security/advisories/GHSA-w332-q679-j88p"
+  ],
+  "vendor": "honojs"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/sebastianbergmann/phpunit/security/advisories/GHSA-vvj3-c3rp-c85p"
+  ],
+  "commit_refs": [
+   "https://github.com/sebastianbergmann/phpunit/commit/3141742e00620e2968d3d2e732d320de76685fda"
+  ],
+  "cpes": [
+   "cpe:2.3:a:phpunit_project:phpunit:*:*:*:*:*:-:*:*",
+   "cpe:2.3:o:debian:debian_linux:11.0:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-24765",
+  "description": "PHPUnit is a testing framework for PHP. A vulnerability has been discovered in versions prior to 12.5.8, 11.5.50, 10.5.62, 9.6.33, and 8.5.52 involving unsafe deserialization of code coverage data in PHPT test execution. The vulnerability exists in the `cleanupForCoverage()` method, which deserializes code coverage files without validation, potentially allowing remote code execution if malicious `.coverage` files are present prior to the execution of the PHPT test. The vulnerability occurs when a `.coverage` file, which should not exist before test execution, is deserialized without the `allowed_classes` parameter restriction. An attacker with local file write access can place a malicious serialized object with a `__wakeup()` method into the file system, leading to arbitrary code execution during test runs with code coverage instrumentation enabled. This vulnerability requires local file write access to the location where PHPUnit stores or expects code coverage files for PHPT tests. This can occur through CI/CD pipeline attacks, the local development environment, and/or compromised dependencies. Rather than just silently sanitizing the input via `['allowed_classes' => false]`, the maintainer has chosen to make the anomalous state explicit by treating pre-existing `.coverage` files for PHPT tests as an error condition. Starting in versions in versions 12.5.8, 11.5.50, 10.5.62, 9.6.33, when a `.coverage` file is detected for a PHPT test prior to execution, PHPUnit will emit a clear error message identifying the anomalous state. Organizations can reduce the effective risk of this vulnerability through proper CI/CD configuration, including ephemeral runners, code review enforcement, branch protection, artifact isolation, and access control.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution",
+   "deserialization"
+  ],
+  "priority": 18,
+  "product": "phpunit",
+  "published": "2026-01-27T22:15:56.790",
+  "references": [
+   "https://github.com/sebastianbergmann/phpunit/commit/3141742e00620e2968d3d2e732d320de76685fda",
+   "https://github.com/sebastianbergmann/phpunit/releases/tag/10.5.63",
+   "https://github.com/sebastianbergmann/phpunit/releases/tag/11.5.50",
+   "https://github.com/sebastianbergmann/phpunit/releases/tag/12.5.8",
+   "https://github.com/sebastianbergmann/phpunit/releases/tag/8.5.52",
+   "https://github.com/sebastianbergmann/phpunit/releases/tag/9.6.33",
+   "https://github.com/sebastianbergmann/phpunit/security/advisories/GHSA-vvj3-c3rp-c85p",
+   "https://lists.debian.org/debian-lts-announce/2026/02/msg00009.html"
+  ],
+  "vendor": "sebastianbergmann"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/infiniflow/ragflow/security/advisories/GHSA-v7cf-w7gj-pgf4"
+  ],
+  "commit_refs": [
+   "https://github.com/infiniflow/ragflow/commit/64c75d558e4a17a4a48953b4c201526431d8338f"
+  ],
+  "cpes": [
+   "cpe:2.3:a:infiniflow:ragflow:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-24770",
+  "description": "RAGFlow is an open-source RAG (Retrieval-Augmented Generation) engine. In version 0.23.1 and possibly earlier versions, the MinerU parser contains a \"Zip Slip\" vulnerability, allowing an attacker to overwrite arbitrary files on the server (leading to Remote Code Execution) via a malicious ZIP archive. The MinerUParser class retrieves and extracts ZIP files from an external source (mineru_server_url). The extraction logic in `_extract_zip_no_root` fails to sanitize filenames within the ZIP archive. Commit 64c75d558e4a17a4a48953b4c201526431d8338f contains a patch for the issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "file_read",
+   "code_execution"
+  ],
+  "priority": 16,
+  "product": "ragflow",
+  "published": "2026-01-27T22:15:56.947",
+  "references": [
+   "https://github.com/infiniflow/ragflow/commit/64c75d558e4a17a4a48953b4c201526431d8338f",
+   "https://github.com/infiniflow/ragflow/security/advisories/GHSA-v7cf-w7gj-pgf4"
+  ],
+  "vendor": "infiniflow"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/TrustTunnel/TrustTunnel/security/advisories/GHSA-hgr9-frvw-5r76"
+  ],
+  "commit_refs": [
+   "https://github.com/TrustTunnel/TrustTunnel/commit/734bb5cf103b72390a95c853cbf91e699cc01bc0"
+  ],
+  "cpes": [
+   "cpe:2.3:a:adguard:trusttunnel:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-24902",
+  "description": "TrustTunnel is an open-source VPN protocol with a server-side request forgery and and private network restriction bypass in versions prior to 0.9.114. In `tcp_forwarder.rs`, SSRF protection for `allow_private_network_connections = false` was only applied in the `TcpDestination::HostName(peer)` path. The `TcpDestination::Address(peer) => peer` path proceeded to `TcpStream::connect()` without equivalent checks (for example `is_global_ip`, `is_loopback`), allowing loopback/private targets to be reached by supplying a numeric IP. The vulnerability is fixed in version 0.9.114.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 18,
+  "product": "TrustTunnel",
+  "published": "2026-01-29T22:15:54.893",
+  "references": [
+   "https://github.com/TrustTunnel/TrustTunnel/commit/734bb5cf103b72390a95c853cbf91e699cc01bc0",
+   "https://github.com/TrustTunnel/TrustTunnel/security/advisories/GHSA-hgr9-frvw-5r76"
+  ],
+  "vendor": "TrustTunnel"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/themavik/mindsdb/commit/74d6f0fd4b630218519a700fbee1c05c7fd4b1ed"
+  ],
+  "cpes": [
+   "cpe:2.3:a:mindsdb:mindsdb:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-2531",
+  "description": "A security vulnerability has been detected in MindsDB up to 25.14.1. This vulnerability affects the function clear_filename of the file mindsdb/utilities/security.py of the component File Upload. Such manipulation leads to server-side request forgery. The attack may be performed from remote. The exploit has been disclosed publicly and may be used. The name of the patch is 74d6f0fd4b630218519a700fbee1c05c7fd4b1ed. It is best practice to apply a patch to resolve this issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "MindsDB",
+  "published": "2026-02-16T04:15:51.897",
+  "references": [
+   "https://github.com/mindsdb/mindsdb/",
+   "https://github.com/mindsdb/mindsdb/issues/12163",
+   "https://github.com/mindsdb/mindsdb/pull/12213",
+   "https://github.com/themavik/mindsdb/commit/74d6f0fd4b630218519a700fbee1c05c7fd4b1ed",
+   "https://vuldb.com/?ctiid.346119",
+   "https://vuldb.com/?id.346119",
+   "https://vuldb.com/?submit.748219"
+  ],
+  "vendor": "n/a"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/lintsinghua/DeepAudit/commit/da853fdd8cbe9d42053b45d83f25708ba29b8b27"
+  ],
+  "cpes": [
+   "cpe:2.3:a:lintsinghua:deepaudit:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-2532",
+  "description": "A vulnerability was detected in lintsinghua DeepAudit up to 3.0.3. This issue affects some unknown processing of the file backend/app/api/v1/endpoints/embedding_config.py of the component IP Address Handler. Performing a manipulation results in server-side request forgery. It is possible to initiate the attack remotely. Upgrading to version 3.0.4 and 3.1.0 is capable of addressing this issue. The patch is named da853fdd8cbe9d42053b45d83f25708ba29b8b27. It is suggested to upgrade the affected component.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "DeepAudit",
+  "published": "2026-02-16T04:15:52.093",
+  "references": [
+   "https://github.com/lintsinghua/DeepAudit/",
+   "https://github.com/lintsinghua/DeepAudit/commit/da853fdd8cbe9d42053b45d83f25708ba29b8b27",
+   "https://github.com/lintsinghua/DeepAudit/issues/144",
+   "https://github.com/lintsinghua/DeepAudit/pull/145",
+   "https://github.com/lintsinghua/DeepAudit/releases/tag/v3.0.4",
+   "https://vuldb.com/?ctiid.346120",
+   "https://vuldb.com/?id.346120",
+   "https://vuldb.com/?submit.748220"
+  ],
+  "vendor": "lintsinghua"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/siyuan-note/siyuan/security/advisories/GHSA-c4jr-5q7w-f6r9",
+   "https://github.com/siyuan-note/siyuan/security/advisories/GHSA-c4jr-5q7w-f6r9"
+  ],
+  "commit_refs": [
+   "https://github.com/siyuan-note/siyuan/commit/d7f790755edf8c78d2b4176171e5a0cdcd720feb"
+  ],
+  "cpes": [
+   "cpe:2.3:a:b3log:siyuan:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-25539",
+  "description": "SiYuan is a personal knowledge management system. Prior to version 3.5.5, the /api/file/copyFile endpoint does not validate the dest parameter, allowing authenticated users to write files to arbitrary locations on the filesystem. This can lead to Remote Code Execution (RCE) by writing to sensitive locations such as cron jobs, SSH authorized_keys, or shell configuration files. This issue has been patched in version 3.5.5.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 18,
+  "product": "siyuan",
+  "published": "2026-02-04T22:16:00.083",
+  "references": [
+   "https://github.com/siyuan-note/siyuan/commit/d7f790755edf8c78d2b4176171e5a0cdcd720feb",
+   "https://github.com/siyuan-note/siyuan/security/advisories/GHSA-c4jr-5q7w-f6r9"
+  ],
+  "vendor": "siyuan-note"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/nolimits4web/swiper/security/advisories/GHSA-hmx5-qpq5-p643"
+  ],
+  "commit_refs": [
+   "https://github.com/nolimits4web/swiper/commit/d3e663322a13043ca63aaba235d8cf3900e0c8cf"
+  ],
+  "cpes": [
+   "cpe:2.3:a:swiperjs:swiper:*:*:*:*:*:node.js:*:*"
+  ],
+  "cve_id": "CVE-2026-27212",
+  "description": "Swiper is a free and mobile touch slider with hardware accelerated transitions and native behavior. Versions 6.5.1 through 12.1.1 have a Prototype pollution vulnerability. The vulnerability resides in line 94 of shared/utils.mjs, where the indexOf() function is used to check whether user provided input contain forbidden strings. Despite a previous fix that attempted to mitigate prototype pollution by checking whether user input contained a forbidden key, it is still possible to pollute Object.prototype via a crafted input using Array.prototype. The exploit works across Windows and Linux and on Node and Bun runtimes. Any application that processes attacker-controlled input using this package may be affected by the following: Authentication Bypass, Denial of Service and RCE. This issue is fixed in version 12.1.2.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution",
+   "auth_bypass"
+  ],
+  "priority": 18,
+  "product": "swiper",
+  "published": "2026-02-21T06:17:01.443",
+  "references": [
+   "https://github.com/nolimits4web/swiper/commit/d3e663322a13043ca63aaba235d8cf3900e0c8cf",
+   "https://github.com/nolimits4web/swiper/releases/tag/v12.1.2",
+   "https://github.com/nolimits4web/swiper/security/advisories/GHSA-hmx5-qpq5-p643"
+  ],
+  "vendor": "nolimits4web"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/n8n-io/n8n/security/advisories/GHSA-x2mw-7j39-93xq"
+  ],
+  "commit_refs": [
+   "https://github.com/n8n-io/n8n/commit/97365caf253978ba8e46d7bc53fa7ac3b6f67b32",
+   "https://github.com/n8n-io/n8n/commit/e22acaab3dcb2004e5fe0bf9ef2db975bde61866"
+  ],
+  "cpes": [
+   "cpe:2.3:a:n8n:n8n:*:*:*:*:*:node.js:*:*"
+  ],
+  "cve_id": "CVE-2026-27498",
+  "description": "n8n is an open source workflow automation platform. Prior to versions 2.2.0 and 1.123.8, an authenticated user with permission to create or modify workflows could chain the Read/Write Files from Disk node with git operations to achieve remote code execution. By writing to specific configuration files and then triggering a git operation, the attacker could execute arbitrary shell commands on the n8n host. The issue has been fixed in n8n versions 2.2.0 and 1.123.8. Users should upgrade to one of these versions or later to remediate the vulnerability. If upgrading is not immediately possible, administrators should consider the following temporary mitigations. Limit workflow creation and editing permissions to fully trusted users only, and/or disable the Read/Write Files from Disk node by adding `n8n-nodes-base.readWriteFile` to the `NODES_EXCLUDE` environment variable. These workarounds do not fully remediate the risk and should only be used as short-term mitigation measures.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 18,
+  "product": "n8n",
+  "published": "2026-02-25T23:16:21.213",
+  "references": [
+   "https://github.com/n8n-io/n8n/commit/97365caf253978ba8e46d7bc53fa7ac3b6f67b32",
+   "https://github.com/n8n-io/n8n/commit/e22acaab3dcb2004e5fe0bf9ef2db975bde61866",
+   "https://github.com/n8n-io/n8n/releases/tag/n8n@1.123.8",
+   "https://github.com/n8n-io/n8n/releases/tag/n8n@2.2.0",
+   "https://github.com/n8n-io/n8n/security/advisories/GHSA-x2mw-7j39-93xq"
+  ],
+  "vendor": "n8n-io"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/sooperset/mcp-atlassian/security/advisories/GHSA-xjgw-4wvw-rgm4"
+  ],
+  "commit_refs": [
+   "https://github.com/sooperset/mcp-atlassian/commit/52b9b0997681e87244b20d58034deae89c91631e"
+  ],
+  "cpes": [
+   "cpe:2.3:a:mcp-atlassian:mcp_atlassian:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-27825",
+  "description": "MCP Atlassian is a Model Context Protocol (MCP) server for Atlassian products (Confluence and Jira). Prior to version 0.17.0, the `confluence_download_attachment` MCP tool accepts a `download_path` parameter that is written to without any directory boundary enforcement. An attacker who can call this tool and supply or access a Confluence attachment with malicious content can write arbitrary content to any path the server process has write access to. Because the attacker controls both the write destination and the written content (via an uploaded Confluence attachment), this constitutes for arbitrary code execution (for example, writing a valid cron entry to `/etc/cron.d/` achieves code execution within one scheduler cycle with no server restart required). Version 0.17.0 fixes the issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 18,
+  "product": "mcp-atlassian",
+  "published": "2026-03-10T20:16:37.417",
+  "references": [
+   "https://github.com/sooperset/mcp-atlassian/commit/52b9b0997681e87244b20d58034deae89c91631e",
+   "https://github.com/sooperset/mcp-atlassian/security/advisories/GHSA-xjgw-4wvw-rgm4"
+  ],
+  "vendor": "sooperset"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/linode/terraform-provider-linode/security/advisories/GHSA-5rc7-2jj6-mp64"
+  ],
+  "commit_refs": [
+   "https://github.com/linode/terraform-provider-linode/commit/43a925d826b999f0355de3dc7330c55f496824c0"
+  ],
+  "cpes": [
+   "cpe:2.3:a:terraform:linode_provider:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-27900",
+  "description": "The Terraform Provider for Linode versions prior to v3.9.0 logged sensitive information including some passwords, StackScript content, and object storage data in debug logs without redaction. Provider debug logging is not enabled by default. This issue is exposed when debug/provider logs are explicitly enabled (for example in local troubleshooting, CI/CD jobs, or centralized log collection). If enabled, sensitive values may be written to logs and then retained, shared, or exported beyond the original execution environment. An authenticated user with access to provider debug logs (through log aggregation systems, CI/CD pipelines, or debug output) would thus be able to extract these sensitive credentials. Versions 3.9.0 and later sanitize debug logs by logging only non-sensitive metadata such as labels, regions, and resource IDs while redacting credentials, tokens, keys, scripts, and other sensitive content. Some other mitigations and workarounds are available. Disable Terraform/provider debug logging or set it to `WARN` level or above, restrict access to existing and historical logs, purge/retention-trim logs that may contain sensitive values, and/or rotate potentially exposed secrets/credentials.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 18,
+  "product": "terraform-provider-linode",
+  "published": "2026-02-26T02:16:20.770",
+  "references": [
+   "https://github.com/linode/terraform-provider-linode/commit/43a925d826b999f0355de3dc7330c55f496824c0",
+   "https://github.com/linode/terraform-provider-linode/pull/2269",
+   "https://github.com/linode/terraform-provider-linode/releases/tag/v3.9.0",
+   "https://github.com/linode/terraform-provider-linode/security/advisories/GHSA-5rc7-2jj6-mp64",
+   "http://www.openwall.com/lists/oss-security/2026/02/26/2"
+  ],
+  "vendor": "linode"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/openclaw/openclaw/security/advisories/GHSA-qw99-grcx-4pvm"
+  ],
+  "commit_refs": [
+   "https://github.com/openclaw/openclaw/commit/8d75a496bf5aaab1755c56cf48502d967c75a1d0",
+   "https://github.com/openclaw/openclaw/commit/a1e89afcc19efd641c02b24d66d689f181ae2b5c"
+  ],
+  "cpes": [
+   "cpe:2.3:a:openclaw:openclaw:*:*:*:*:*:node.js:*:*"
+  ],
+  "cve_id": "CVE-2026-28395",
+  "description": "OpenClaw version 2026.1.14-1 prior to 2026.2.12 contains an improper network binding vulnerability in the Chrome extension (must be installed and enabled) relay server that treats wildcard hosts as loopback addresses, allowing the relay HTTP/WS server to bind to all interfaces when a wildcard cdpUrl is configured. Remote attackers can access relay HTTP endpoints off-host to leak service presence and port information, or conduct denial-of-service and brute-force attacks against the relay token header.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 18,
+  "product": "OpenClaw",
+  "published": "2026-03-05T22:16:16.173",
+  "references": [
+   "https://github.com/openclaw/openclaw/commit/8d75a496bf5aaab1755c56cf48502d967c75a1d0",
+   "https://github.com/openclaw/openclaw/commit/a1e89afcc19efd641c02b24d66d689f181ae2b5c",
+   "https://github.com/openclaw/openclaw/security/advisories/GHSA-qw99-grcx-4pvm",
+   "https://www.vulncheck.com/advisories/openclaw-unintended-public-binding-of-chrome-extension-relay-via-wildcard-cdpurl"
+  ],
+  "vendor": "OpenClaw"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/Talishar/Talishar/security/advisories/GHSA-2659-p579-wv83"
+  ],
+  "commit_refs": [
+   "https://github.com/Talishar/Talishar/commit/a9c218efa37756c9e7eed056fbff6ee03f79aefc"
+  ],
+  "cpes": [
+   "cpe:2.3:a:talishar:talishar:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-28428",
+  "description": "Talishar is a fan-made Flesh and Blood project. Prior to commit a9c218e, an authentication bypass vulnerability in Talishar's game endpoint validation logic allows any unauthenticated attacker to perform authenticated game actions — including sending chat messages and submitting game inputs — by supplying an empty authKey parameter (authKey=). The server-side validation uses a loose comparison that accepts an empty string as a valid credential, while correctly rejecting non-empty but incorrect keys. This asymmetry means the authentication mechanism can be completely bypassed without knowing any valid token. This issue has been patched in commit a9c218e.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 18,
+  "product": "Talishar",
+  "published": "2026-03-06T05:16:31.607",
+  "references": [
+   "https://github.com/Talishar/Talishar/commit/a9c218efa37756c9e7eed056fbff6ee03f79aefc",
+   "https://github.com/Talishar/Talishar/security/advisories/GHSA-2659-p579-wv83"
+  ],
+  "vendor": "Talishar"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/feiyuchuixue/sz-boot-parent/commit/aefaabfd7527188bfba3c8c9eee17c316d094802"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-3188",
+  "description": "A security flaw has been discovered in feiyuchuixue sz-boot-parent up to 1.3.2-beta. This affects an unknown part of the file /api/admin/common/download/templates of the component API. Performing a manipulation of the argument templateName results in path traversal. Remote exploitation of the attack is possible. The exploit has been released to the public and may be used for attacks. Upgrading to version 1.3.3-beta is able to mitigate this issue. The patch is named aefaabfd7527188bfba3c8c9eee17c316d094802. It is recommended to upgrade the affected component. The project was informed beforehand and acted very professional: \"We have implemented path validity checks on parameters for the template download interface (...)\"",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal"
+  ],
+  "priority": 26,
+  "product": "sz-boot-parent",
+  "published": "2026-02-25T16:23:30.203",
+  "references": [
+   "https://github.com/feiyuchuixue/sz-boot-parent/",
+   "https://github.com/feiyuchuixue/sz-boot-parent/commit/aefaabfd7527188bfba3c8c9eee17c316d094802",
+   "https://github.com/feiyuchuixue/sz-boot-parent/releases/tag/v1.3.3-beta",
+   "https://github.com/yuccun/CVE/blob/main/sz-boot-parent-Path_Traversal_to_Arbitrary_Resource_File_Read.md",
+   "https://vuldb.com/?ctiid.347746",
+   "https://vuldb.com/?id.347746",
+   "https://vuldb.com/?submit.754041"
+  ],
+  "vendor": "feiyuchuixue"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/feiyuchuixue/sz-boot-parent/commit/aefaabfd7527188bfba3c8c9eee17c316d094802"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-3189",
+  "description": "A weakness has been identified in feiyuchuixue sz-boot-parent up to 1.3.2-beta. This vulnerability affects unknown code of the file /api/admin/common/files/download. Executing a manipulation of the argument url can lead to server-side request forgery. The attack can be executed remotely. Attacks of this nature are highly complex. It is stated that the exploitability is difficult. Upgrading to version 1.3.3-beta is able to resolve this issue. This patch is called aefaabfd7527188bfba3c8c9eee17c316d094802. Upgrading the affected component is advised. The project was informed beforehand and acted very professional: \"We have added a URL protocol whitelist validation to the file download interface, allowing only http and https protocols.\"",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "file_read",
+   "ssrf"
+  ],
+  "priority": 26,
+  "product": "sz-boot-parent",
+  "published": "2026-02-25T17:25:42.470",
+  "references": [
+   "https://github.com/feiyuchuixue/sz-boot-parent/",
+   "https://github.com/feiyuchuixue/sz-boot-parent/commit/aefaabfd7527188bfba3c8c9eee17c316d094802",
+   "https://github.com/feiyuchuixue/sz-boot-parent/releases/tag/v1.3.3-beta",
+   "https://github.com/yuccun/CVE/blob/main/sz-boot-parent-SSRF_and_Arbitrary_File_Read.md",
+   "https://vuldb.com/?ctiid.347747",
+   "https://vuldb.com/?id.347747",
+   "https://vuldb.com/?submit.754042"
+  ],
+  "vendor": "feiyuchuixue"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/Mintplex-Labs/anything-llm/security/advisories/GHSA-rrmw-2j6x-4mf2"
+  ],
+  "commit_refs": [
+   "https://github.com/Mintplex-Labs/anything-llm/commit/9e2d144dc8be6fab29f560f5bcdaa9ef7dbb4214"
+  ],
+  "cpes": [
+   "cpe:2.3:a:mintplexlabs:anythingllm:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-32626",
+  "description": "AnythingLLM is an application that turns pieces of content into context that any LLM can use as references during chatting. In 1.11.1 and earlier, AnythingLLM Desktop contains a Streaming Phase XSS vulnerability in the chat rendering pipeline that escalates to Remote Code Execution on the host OS due to insecure Electron configuration. This works with default settings and requires no user interaction beyond normal chat usage. The custom markdown-it image renderer in frontend/src/utils/chat/markdown.js interpolates token.content directly into the alt attribute without HTML entity escaping. The PromptReply component renders this output via dangerouslySetInnerHTML without DOMPurify sanitization — unlike HistoricalMessage which correctly applies DOMPurify.sanitize().",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 18,
+  "product": "anything-llm",
+  "published": "2026-03-16T14:19:40.033",
+  "references": [
+   "https://github.com/Mintplex-Labs/anything-llm/commit/9e2d144dc8be6fab29f560f5bcdaa9ef7dbb4214",
+   "https://github.com/Mintplex-Labs/anything-llm/security/advisories/GHSA-rrmw-2j6x-4mf2"
+  ],
+  "vendor": "Mintplex-Labs"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/siyuan-note/siyuan/security/advisories/GHSA-qvvf-q994-x79v"
+  ],
+  "commit_refs": [
+   "https://github.com/siyuan-note/siyuan/commit/5ee00907f0b0c4aca748ce21ef1977bb98178e14"
+  ],
+  "cpes": [
+   "cpe:2.3:a:b3log:siyuan:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-32749",
+  "description": "SiYuan is a personal knowledge management system. In versions 3.6.0 and below, POST /api/import/importSY and POST /api/import/importZipMd write uploaded archives to a path derived from the multipart filename field without sanitization, allowing an admin to write files to arbitrary locations outside the temp directory - including system paths that enable RCE. This can lead to aata destruction by overwriting workspace or application files, and for Docker containers running as root (common default), this grants full container compromise. This issue has been fixed in version 3.6.1.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 18,
+  "product": "siyuan",
+  "published": "2026-03-19T21:17:10.910",
+  "references": [
+   "https://github.com/siyuan-note/siyuan/commit/5ee00907f0b0c4aca748ce21ef1977bb98178e14",
+   "https://github.com/siyuan-note/siyuan/releases/tag/v3.6.1",
+   "https://github.com/siyuan-note/siyuan/security/advisories/GHSA-qvvf-q994-x79v"
+  ],
+  "vendor": "siyuan-note"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/WWBN/AVideo/security/advisories/GHSA-wxjw-phj6-g75w"
+  ],
+  "commit_refs": [
+   "https://github.com/WWBN/AVideo/commit/345a8d3ece0ad1e1b71a704c1579cbf885d8f3ae"
+  ],
+  "cpes": [
+   "cpe:2.3:a:wwbn:avideo:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-33647",
+  "description": "WWBN AVideo is an open source video platform. In versions up to and including 26.0, the `ImageGallery::saveFile()` method validates uploaded file content using `finfo` MIME type detection but derives the saved filename extension from the user-supplied original filename without an allowlist check. An attacker can upload a polyglot file (valid JPEG magic bytes followed by PHP code) with a `.php` extension. The MIME check passes, but the file is saved as an executable `.php` file in a web-accessible directory, achieving Remote Code Execution. Commit 345a8d3ece0ad1e1b71a704c1579cbf885d8f3ae contains a patch.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 18,
+  "product": "AVideo",
+  "published": "2026-03-23T19:16:40.750",
+  "references": [
+   "https://github.com/WWBN/AVideo/commit/345a8d3ece0ad1e1b71a704c1579cbf885d8f3ae",
+   "https://github.com/WWBN/AVideo/security/advisories/GHSA-wxjw-phj6-g75w"
+  ],
+  "vendor": "WWBN"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/ggml-org/llama.cpp/security/advisories/GHSA-j8rj-fmpv-wcxw"
+  ],
+  "commit_refs": [
+   "https://github.com/ggml-org/llama.cpp/commit/39bf0d3c6a95803e0f41aaba069ffbee26721042"
+  ],
+  "cpes": [
+   "cpe:2.3:a:ggml:llama.cpp:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-34159",
+  "description": "llama.cpp is an inference of several LLM models in C/C++. Prior to version b8492, the RPC backend's deserialize_tensor() skips all bounds validation when a tensor's buffer field is 0. An unauthenticated attacker can read and write arbitrary process memory via crafted GRAPH_COMPUTE messages. Combined with pointer leaks from ALLOC_BUFFER/BUFFER_GET_BASE, this gives full ASLR bypass and remote code execution. No authentication required, just TCP access to the RPC server port. This issue has been patched in version b8492.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution",
+   "deserialization"
+  ],
+  "priority": 18,
+  "product": "llama.cpp",
+  "published": "2026-04-01T18:16:29.687",
+  "references": [
+   "https://github.com/ggml-org/llama.cpp/commit/39bf0d3c6a95803e0f41aaba069ffbee26721042",
+   "https://github.com/ggml-org/llama.cpp/pull/20908",
+   "https://github.com/ggml-org/llama.cpp/security/advisories/GHSA-j8rj-fmpv-wcxw"
+  ],
+  "vendor": "ggml-org"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/Bytedesk/bytedesk/commit/975e39e4dd527596987559f56c5f9f973f64eff7"
+  ],
+  "cpes": [
+   "cpe:2.3:a:bytedesk:bytedesk:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-3788",
+  "description": "A security vulnerability has been detected in Bytedesk up to 1.3.9. This impacts the function getModels of the file source-code/src/main/java/com/bytedesk/ai/springai/providers/openrouter/SpringAIOpenrouterRestService.java of the component SpringAIOpenrouterRestController. Such manipulation of the argument apiUrl leads to server-side request forgery. The attack may be launched remotely. The exploit has been disclosed publicly and may be used. Upgrading to version 1.4.5.4 will fix this issue. The name of the patch is 975e39e4dd527596987559f56c5f9f973f64eff7. It is recommended to upgrade the affected component.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "Bytedesk",
+  "published": "2026-03-09T00:16:01.247",
+  "references": [
+   "https://github.com/Bytedesk/bytedesk/",
+   "https://github.com/Bytedesk/bytedesk/commit/975e39e4dd527596987559f56c5f9f973f64eff7",
+   "https://github.com/Bytedesk/bytedesk/issues/20",
+   "https://github.com/Bytedesk/bytedesk/issues/20#issue-3993526693",
+   "https://github.com/Bytedesk/bytedesk/issues/20#issuecomment-3976672715",
+   "https://github.com/Bytedesk/bytedesk/releases/tag/v1.4.5.4",
+   "https://vuldb.com/?ctiid.349755",
+   "https://vuldb.com/?id.349755",
+   "https://vuldb.com/?submit.768043"
+  ],
+  "vendor": "n/a"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/Bytedesk/bytedesk/commit/975e39e4dd527596987559f56c5f9f973f64eff7"
+  ],
+  "cpes": [
+   "cpe:2.3:a:bytedesk:bytedesk:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-3789",
+  "description": "A vulnerability was detected in Bytedesk up to 1.3.9. Affected is the function getModels of the file source-code/src/main/java/com/bytedesk/ai/springai/providers/gitee/SpringAIGiteeRestService.java of the component SpringAIGiteeRestController. Performing a manipulation of the argument apiUrl results in server-side request forgery. Remote exploitation of the attack is possible. The exploit is now public and may be used. Upgrading to version 1.4.5.4 is able to address this issue. The patch is named 975e39e4dd527596987559f56c5f9f973f64eff7. Upgrading the affected component is advised.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "Bytedesk",
+  "published": "2026-03-09T00:16:01.493",
+  "references": [
+   "https://github.com/Bytedesk/bytedesk/",
+   "https://github.com/Bytedesk/bytedesk/commit/975e39e4dd527596987559f56c5f9f973f64eff7",
+   "https://github.com/Bytedesk/bytedesk/issues/21",
+   "https://github.com/Bytedesk/bytedesk/issues/21#issue-3993531226",
+   "https://github.com/Bytedesk/bytedesk/issues/21#issuecomment-3976672522",
+   "https://github.com/Bytedesk/bytedesk/releases/tag/v1.4.5.4",
+   "https://vuldb.com/?ctiid.349756",
+   "https://vuldb.com/?id.349756",
+   "https://vuldb.com/?submit.768044"
+  ],
+  "vendor": "n/a"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-p6r2-4hgm-m6ff",
+   "https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-p6r2-4hgm-m6ff"
+  ],
+  "commit_refs": [
+   "https://github.com/FreeRDP/FreeRDP/commit/d7508ebcd82842a691ae4941e5104d14240a89ae"
+  ],
+  "cpes": [
+   "cpe:/o:redhat:enterprise_linux:10.2",
+   "cpe:/o:redhat:enterprise_linux:6",
+   "cpe:/o:redhat:enterprise_linux:7",
+   "cpe:/o:redhat:enterprise_linux:8",
+   "cpe:/o:redhat:enterprise_linux:9",
+   "cpe:2.3:a:freerdp:freerdp:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-40033",
+  "description": "FreeRDP before 3.26.0 contains a heap-buffer-overflow vulnerability in gdi_CacheToSurface that allows remote attackers to write out-of-bounds heap memory. The vulnerability occurs because rectangle validation clamps coordinates to UINT16_MAX but performs copy operations using unclamped cache entry dimensions, enabling malicious RDP servers to trigger large out-of-bounds writes and potentially achieve remote code execution or client crash.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 18,
+  "product": "FreeRDP",
+  "published": "2026-05-26T15:16:34.480",
+  "references": [
+   "https://github.com/FreeRDP/FreeRDP/commit/d7508ebcd82842a691ae4941e5104d14240a89ae",
+   "https://github.com/FreeRDP/FreeRDP/pull/12713",
+   "https://github.com/FreeRDP/FreeRDP/security/advisories/GHSA-p6r2-4hgm-m6ff",
+   "https://www.vulncheck.com/advisories/freerdp-heap-buffer-overflow-in-gdi-cachetosurface-via-rectangle-validation-bypass",
+   "https://access.redhat.com/errata/RHSA-2026:36203",
+   "https://access.redhat.com/errata/RHSA-2026:46393",
+   "https://access.redhat.com/security/cve/CVE-2026-40033",
+   "https://bugzilla.redhat.com/show_bug.cgi?id=2481473",
+   "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-40033.json"
+  ],
+  "vendor": "FreeRDP"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/CherryHQ/cherry-studio/commit/151853035e8e417a51559ebfc243eda98361a882"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-40501",
+  "description": "Cherry Studio versions 1.2.2 through 1.9.12, fixed in commit 1518530, contain a remote code execution vulnerability in SearchService that allows remote attackers to execute arbitrary code by delivering malicious JavaScript through controlled search provider content loaded into an Electron BrowserWindow configured with nodeIntegration enabled and contextIsolation disabled. Attackers who control a search engine provider, individual search result pages, or provider settings pages can execute JavaScript with full Node.js privileges, gaining access to fs, child_process, os, and process.env under the operating-system account of the Cherry Studio process.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 28,
+  "product": "cherry-studio",
+  "published": "2026-07-15T18:16:45.230",
+  "references": [
+   "https://gist.github.com/Mundi-Xu/99af1b08275fd437cfb79bfe481e68b7",
+   "https://github.com/CherryHQ/cherry-studio/commit/151853035e8e417a51559ebfc243eda98361a882",
+   "https://www.vulncheck.com/advisories/cherry-studio-rce-via-searchservice-nodeintegration-misconfiguration"
+  ],
+  "vendor": "CherryHQ"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/FreePBX/api/commit/5f194e39a47e5481e8947f9694304d32724175f6"
+  ],
+  "cpes": [
+   "cpe:2.3:a:freepbx:api:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-40520",
+  "description": "FreePBX api module version 17.0.8 and prior contain a command injection vulnerability in the initiateGqlAPIProcess() function where GraphQL mutation input fields are passed directly to shell_exec() without sanitization or escaping. An authenticated user with a valid bearer token can send a GraphQL moduleOperations mutation with backtick-wrapped commands in the module field to execute arbitrary commands on the underlying host as the web server user.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "command_injection"
+  ],
+  "priority": 28,
+  "product": "api",
+  "published": "2026-04-21T13:16:20.380",
+  "references": [
+   "https://github.com/FreePBX/api/blob/5f194e39a47e5481e8947f9694304d32724175f6/Api.class.php#L546C1-L554C3",
+   "https://github.com/FreePBX/api/blob/5f194e39a47e5481e8947f9694304d32724175f6/ApiGqlHelper.class.php#L34C1-L36C136",
+   "https://github.com/FreePBX/api/commit/5f194e39a47e5481e8947f9694304d32724175f6",
+   "https://www.vulncheck.com/advisories/freepbx-api-module-command-injection-via-graphql"
+  ],
+  "vendor": "FreePBX"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/volcengine/OpenViking/commit/c7bb1676f4d037609f041bf39e4e2bd52e8f9820"
+  ],
+  "cpes": [
+   "cpe:2.3:a:volcengine:openviking:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-40525",
+  "description": "OpenViking prior to version 0.3.9 contains an authentication bypass vulnerability in the VikingBot OpenAPI HTTP route surface where the authentication check fails open when the api_key configuration value is unset or empty. Remote attackers with network access to the exposed service can invoke privileged bot-control functionality without providing a valid X-API-Key header, including submitting attacker-controlled prompts, creating or using bot sessions, and accessing downstream tools, integrations, secrets, or data accessible to the bot.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "OpenViking",
+  "published": "2026-04-17T19:16:39.017",
+  "references": [
+   "https://github.com/volcengine/OpenViking/commit/c7bb1676f4d037609f041bf39e4e2bd52e8f9820",
+   "https://github.com/volcengine/OpenViking/pull/1447",
+   "https://github.com/volcengine/OpenViking/releases/tag/v0.3.9",
+   "https://www.vulncheck.com/advisories/openviking-authentication-bypass-via-vikingbot-openapi"
+  ],
+  "vendor": "volcengine"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/tclahr/uac/commit/2cc367d8ead388f05abd3cfb8af537788a124e72"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-41450",
+  "description": "UAC (Unix-like Artifacts Collector) versions prior to 3.3.0 contain a command injection vulnerability in the _command_collector function where foreach command output lines are substituted directly into command strings via sed without proper escaping before being evaluated with eval. Attackers can exploit this by crafting malicious filenames or artifact definitions containing shell metacharacters such as command substitution syntax or semicolons to execute arbitrary commands on the analyst's host system.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "command_injection"
+  ],
+  "priority": 28,
+  "product": "uac",
+  "published": "2026-08-21T18:16:48.257",
+  "references": [
+   "https://github.com/tclahr/uac/commit/2cc367d8ead388f05abd3cfb8af537788a124e72",
+   "https://github.com/tclahr/uac/pull/443",
+   "https://www.vulncheck.com/advisories/uac-command-injection-via-command-collector-sh"
+  ],
+  "vendor": "tclahr"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/wekan/wekan/commit/2cd702f48df2b8aef0e7381685f8e089986a18a4"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-41455",
+  "description": "WeKan before 8.35 contains a server-side request forgery vulnerability in webhook integration URL handling where the URL scheme field accepts any string without protocol restriction or destination validation. Attackers who can create or modify integrations can set webhook URLs to internal network addresses, causing the server to issue HTTP POST requests to attacker-controlled internal targets with full board event payloads, and can additionally exploit response handling to overwrite arbitrary comment text without authorization checks.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "wekan",
+  "published": "2026-04-22T22:16:32.677",
+  "references": [
+   "https://github.com/wekan/wekan/commit/2cd702f48df2b8aef0e7381685f8e089986a18a4",
+   "https://github.com/wekan/wekan/releases/tag/v8.35",
+   "https://www.vulncheck.com/advisories/wekan-ssrf-via-webhook-url"
+  ],
+  "vendor": "wekan"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/givanz/Vvveb/commit/517bc09faf44136e72de391aacc8b90a706f7ae7"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-41928",
+  "description": "Vvveb before 1.0.8.2 contains an information disclosure vulnerability in the cron controller that allows unauthenticated attackers to retrieve the application's secret cron key. Attackers can access the cron controller without authentication and retrieve the exposed secret key from the response, enabling them to trigger scheduled task execution outside of the intended schedule.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "Vvveb",
+  "published": "2026-05-07T22:16:35.313",
+  "references": [
+   "https://github.com/givanz/Vvveb/commit/517bc09faf44136e72de391aacc8b90a706f7ae7",
+   "https://www.vulncheck.com/advisories/vvveb-information-disclosure-via-cron-controller"
+  ],
+  "vendor": "givanz"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/heymrun/heym/commit/835843e6d2bf7d018cbb8e50f28f0426eaa20c84"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-45225",
+  "description": "Heym before 0.0.21 contains a path traversal vulnerability in the file upload endpoint that allows authenticated users to write attacker-controlled files to arbitrary locations by supplying a crafted filename with traversal sequences. Attackers can exploit the unvalidated filename parameter in the upload_file() handler to bypass path restrictions and write, read, or delete files outside the intended storage directory.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal"
+  ],
+  "priority": 26,
+  "product": "heym",
+  "published": "2026-05-12T22:16:37.990",
+  "references": [
+   "https://github.com/heymrun/heym/commit/835843e6d2bf7d018cbb8e50f28f0426eaa20c84",
+   "https://github.com/heymrun/heym/pull/92",
+   "https://github.com/heymrun/heym/releases/tag/v0.0.21",
+   "https://www.vulncheck.com/advisories/heym-path-traversal-file-upload-via-upload-file"
+  ],
+  "vendor": "heymrun"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/steipete/summarize/commit/ec8efd63295656fbfe8743620179c489bc5a242f"
+  ],
+  "cpes": [
+   "cpe:2.3:a:steipete:summarize:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-45242",
+  "description": "Summarize prior to 0.15.1 contains a path traversal vulnerability in the /v1/summarize daemon endpoint that allows authenticated callers to write files to arbitrary directories by supplying an absolute path or directory traversal sequence in the slidesDir request parameter. Attackers can exploit this to write slide_*.png and slides.json files to any writable directory and subsequently delete matching files at the specified location through repeat extraction.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal"
+  ],
+  "priority": 26,
+  "product": "summarize",
+  "published": "2026-05-18T19:16:28.240",
+  "references": [
+   "https://github.com/steipete/summarize/commit/ec8efd63295656fbfe8743620179c489bc5a242f",
+   "https://github.com/steipete/summarize/pull/220",
+   "https://github.com/steipete/summarize/releases/tag/v0.15.2",
+   "https://www.vulncheck.com/advisories/summarize-path-traversal-via-slidesdir-parameter"
+  ],
+  "vendor": "steipete"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/openssl/openssl/commit/3aad5eb7af4de4ee0633c30a8541a54d9bbde63c",
+   "https://github.com/openssl/openssl/commit/7d4a980c62258c5910cc883936e0c8dbab4d75a8",
+   "https://github.com/openssl/openssl/commit/9dfd688ad2290fc5075cacbc9bf0c9a93eefed54",
+   "https://github.com/openssl/openssl/commit/a541ae8bfe849a30cc885e8780715c0f488e496c",
+   "https://github.com/openssl/openssl/commit/c505d7559da5d5f9f2c3913c6883a5562ce7273e"
+  ],
+  "cpes": [
+   "cpe:/o:redhat:enterprise_linux:10.2",
+   "cpe:/o:redhat:rhel_els:6",
+   "cpe:/o:redhat:rhel_els:7",
+   "cpe:/a:redhat:enterprise_linux:8",
+   "cpe:/o:redhat:enterprise_linux:8",
+   "cpe:/o:redhat:rhel_eus_long_life:8.6",
+   "cpe:/a:redhat:rhel_tus:8.8",
+   "cpe:/o:redhat:rhel_tus:8.8",
+   "cpe:/a:redhat:rhel_e4s:8.8",
+   "cpe:/o:redhat:rhel_e4s:8.8",
+   "cpe:/a:redhat:enterprise_linux:9",
+   "cpe:/o:redhat:enterprise_linux:9"
+  ],
+  "cve_id": "CVE-2026-45447",
+  "description": "Issue summary: A specially crafted PKCS#7 or S/MIME signed message could trigger a use-after-free during PKCS#7 signature verification. Impact summary: A use-after-free may result in process crashes, heap corruption, or potentially remote code execution. When processing a PKCS#7 or S/MIME signed message, if the SignedData digestAlgorithms field is present as an empty ASN.1 SET, OpenSSL may incorrectly free a caller-owned BIO during PKCS7_verify(). A subsequent use of the BIO by the calling application results in a use-after-free condition. In the common case this occurs when the application later calls BIO_free() on the BIO originally passed to PKCS7_verify(). Depending on allocator behavior and application-specific BIO usage patterns, this may result in a crash or other memory corruption. In some application contexts this may potentially be exploitable for remote code execution. Applications that process PKCS#7 or S/MIME signed messages using OpenSSL PKCS#7 APIs may be affected. Applications using the CMS APIs for this processing are not affected. The FIPS modules in 4.0, 3.6, 3.5, 3.4, and 3.0 are not affected by this issue, as the affected code is outside the OpenSSL FIPS module boundary.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 28,
+  "product": "OpenSSL",
+  "published": "2026-06-09T17:17:19.277",
+  "references": [
+   "https://github.com/openssl/openssl/commit/3aad5eb7af4de4ee0633c30a8541a54d9bbde63c",
+   "https://github.com/openssl/openssl/commit/7d4a980c62258c5910cc883936e0c8dbab4d75a8",
+   "https://github.com/openssl/openssl/commit/9dfd688ad2290fc5075cacbc9bf0c9a93eefed54",
+   "https://github.com/openssl/openssl/commit/a541ae8bfe849a30cc885e8780715c0f488e496c",
+   "https://github.com/openssl/openssl/commit/c505d7559da5d5f9f2c3913c6883a5562ce7273e",
+   "https://openssl-library.org/news/secadv/20260609.txt",
+   "https://access.redhat.com/errata/RHSA-2026:25237",
+   "https://access.redhat.com/errata/RHSA-2026:25239",
+   "https://access.redhat.com/errata/RHSA-2026:26275",
+   "https://access.redhat.com/errata/RHSA-2026:26319",
+   "https://access.redhat.com/errata/RHSA-2026:29197",
+   "https://access.redhat.com/errata/RHSA-2026:34102",
+   "https://access.redhat.com/errata/RHSA-2026:35869",
+   "https://access.redhat.com/errata/RHSA-2026:36215",
+   "https://access.redhat.com/errata/RHSA-2026:36217",
+   "https://access.redhat.com/errata/RHSA-2026:39009",
+   "https://access.redhat.com/errata/RHSA-2026:39012",
+   "https://access.redhat.com/errata/RHSA-2026:39981",
+   "https://access.redhat.com/errata/RHSA-2026:44438",
+   "https://access.redhat.com/errata/RHSA-2026:47735",
+   "https://access.redhat.com/errata/RHSA-2026:47737",
+   "https://access.redhat.com/errata/RHSA-2026:58563",
+   "https://access.redhat.com/errata/RHSA-2026:58981",
+   "https://access.redhat.com/errata/RHSA-2026:59831",
+   "https://access.redhat.com/errata/RHSA-2026:66524",
+   "https://access.redhat.com/security/cve/CVE-2026-45447",
+   "https://bugzilla.redhat.com/show_bug.cgi?id=2481898",
+   "https://security.access.redhat.com/data/csaf/v2/vex/2026/cve-2026-45447.json"
+  ],
+  "vendor": "OpenSSL"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/lingdojo/kana-dojo/commit/31b85a5d7c4b323ddeba3b2dc5e7807558710544"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-48546",
+  "description": "KanaDojo before 0.1.18 contains a sandbox escape vulnerability that allows an attacker to execute arbitrary code by exploiting the explicit passing of the global require function into a Node.js vm.runInNewContext() sandbox context in the issue-auto-respond.yml workflow. Attackers can submit a pull request modifying messages.cjs to import arbitrary Node.js modules, bypassing sandbox restrictions and achieving remote code execution with full GitHub Actions runner privileges including access to AUTOMATION_PR_TOKEN.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 28,
+  "product": "kana-dojo",
+  "published": "2026-06-11T18:16:26.390",
+  "references": [
+   "https://github.com/lingdojo/kana-dojo/commit/31b85a5d7c4b323ddeba3b2dc5e7807558710544",
+   "https://github.com/lingdojo/kana-dojo/releases/tag/v0.1.18",
+   "https://www.vulncheck.com/advisories/kanadojo-sandbox-escape-rce-via-messages-cjs"
+  ],
+  "vendor": "lingdojo"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/spatie/laravel-medialibrary/commit/608ea03703d3887c46434f5dda6af56de6346aba"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-48555",
+  "description": "Spatie Laravel Media Library before version 11.23.0 contains a server-side request forgery vulnerability that allows remote attackers to cause the server to issue arbitrary outbound HTTP requests by passing user-controlled URLs to the addMediaFromUrl() method in InteractsWithMedia.php.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "laravel-medialibrary",
+  "published": "2026-05-29T20:16:28.817",
+  "references": [
+   "https://github.com/spatie/laravel-medialibrary/commit/608ea03703d3887c46434f5dda6af56de6346aba",
+   "https://github.com/spatie/laravel-medialibrary/pull/3939",
+   "https://github.com/spatie/laravel-medialibrary/releases/tag/11.23.0",
+   "https://www.vulncheck.com/advisories/spatie-laravel-media-library-ssrf-via-addmediafromurl"
+  ],
+  "vendor": "spatie"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/MusicPlayerDaemon/MPD/commit/78341dd6c7b101c3feede233d4cc4f8f1fcc4bb3"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-49129",
+  "description": "Music Player Daemon (MPD) before version 0.24.11 contains a server-side request forgery vulnerability in CurlInputPlugin where CURLOPT_FOLLOWLOCATION is set without CURLOPT_REDIR_PROTOCOLS_STR, allowing unauthenticated attackers to bypass the http/https scheme restriction by causing a malicious HTTP server to redirect to non-HTTP protocols such as gopher, ftp, sftp, ldap, dict, rtmp, or rtsp. Attackers can trigger this vulnerability via MPD commands that initiate URL fetches, including add, readcomments, albumart, readpicture, or load, to interact with internal or restricted network services on systems running libcurl versions prior to 7.85.0.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "MPD",
+  "published": "2026-05-28T20:16:26.683",
+  "references": [
+   "https://github.com/MusicPlayerDaemon/MPD/commit/78341dd6c7b101c3feede233d4cc4f8f1fcc4bb3",
+   "https://github.com/MusicPlayerDaemon/MPD/issues/2487",
+   "https://github.com/MusicPlayerDaemon/MPD/releases/tag/v0.24.11",
+   "https://mstreet97.github.io/security-research/opensource/vulnerability-disclosure/cybersecurity/cve/2026/05/25/Four_Bugs_Reachable_nc.html",
+   "https://raw.githubusercontent.com/MusicPlayerDaemon/MPD/v0.24.11/NEWS",
+   "https://www.musicpd.org/news/2026/05/mpd-0-24-11-released/",
+   "https://www.vulncheck.com/advisories/music-player-daemon-ssrf-via-curlinputplugin"
+  ],
+  "vendor": "MusicPlayerDaemon"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/plank/laravel-mediable/commit/49e3583bed13423611b3391f89e6b002571eed73"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-49972",
+  "description": "Laravel-Mediable before 7.0.0 contains a file upload vulnerability that allows unauthenticated attackers to achieve remote code execution by uploading a file with an embedded PHP extension disguised within a double extension such as shell.php.jpg. The PATHINFO_FILENAME extraction preserves the inner .php extension in the base name, and on misconfigured Apache or nginx servers that execute any filename containing .php as PHP, the stored file is interpreted as executable code while all MIME type, extension, and aggregate type validation checks pass due to the outer .jpg extension.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 28,
+  "product": "laravel-mediable",
+  "published": "2026-07-13T19:17:10.447",
+  "references": [
+   "https://github.com/plank/laravel-mediable/commit/49e3583bed13423611b3391f89e6b002571eed73",
+   "https://github.com/plank/laravel-mediable/releases/tag/7.0.0",
+   "https://www.vulncheck.com/advisories/laravel-mediable-file-upload-rce-via-extension-bypass"
+  ],
+  "vendor": "plank"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/shsuishang/modulithshop/commit/42bcb9463425d1be906c3b290cf29885eb5a2324"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-5328",
+  "description": "A weakness has been identified in shsuishang modulithshop up to 829bac71f507e84684c782b9b062b8bf3b5585d6. The impacted element is the function listItem of the file src/main/java/com/suisung/shopsuite/pt/service/impl/ProductIndexServiceImpl.java of the component ProductItemDao Interface. Executing a manipulation of the argument sidx/sort can lead to sql injection. The attack may be performed from remote. The exploit has been made available to the public and could be used for attacks. This product utilizes a rolling release system for continuous delivery, and as such, version information for affected or updated releases is not disclosed. This patch is called 42bcb9463425d1be906c3b290cf29885eb5a2324. A patch should be applied to remediate this issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "sql_injection"
+  ],
+  "priority": 28,
+  "product": "modulithshop",
+  "published": "2026-04-02T13:16:27.400",
+  "references": [
+   "https://github.com/shsuishang/modulithshop/",
+   "https://github.com/shsuishang/modulithshop/commit/42bcb9463425d1be906c3b290cf29885eb5a2324",
+   "https://github.com/shsuishang/modulithshop/issues/3",
+   "https://github.com/shsuishang/modulithshop/issues/3#issue-4081835434",
+   "https://vuldb.com/submit/780789",
+   "https://vuldb.com/vuln/354659",
+   "https://vuldb.com/vuln/354659/cti"
+  ],
+  "vendor": "shsuishang"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/steipete/summarize/commit/3c5522440c4833dde033e226baa39e6dda1dfc75"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-53782",
+  "description": "Summarize before 0.17.0 contains a server-side request forgery vulnerability that allows attackers who control a podcast RSS feed to direct the host to fetch transcript content from loopback addresses, link-local addresses, RFC 1918 private ranges, or other reserved destinations by supplying malicious podcast:transcript URL values. Attackers can bypass protections through DNS rebinding and redirect-based techniques, as redirect targets are not revalidated and hostnames are not resolved before request dispatch, exposing internal service responses through the summarization flow.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "summarize",
+  "published": "2026-06-11T20:16:25.787",
+  "references": [
+   "https://github.com/steipete/summarize/commit/3c5522440c4833dde033e226baa39e6dda1dfc75",
+   "https://github.com/steipete/summarize/pull/239",
+   "https://github.com/steipete/summarize/releases/tag/v0.17.0",
+   "https://www.vulncheck.com/advisories/summarize-ssrf-via-podcast-transcript-url-fetch"
+  ],
+  "vendor": "steipete"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/nesquena/hermes-webui/commit/4d90577e25d5537cb07290eca3fb8abff3bab316"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-55196",
+  "description": "Hermes WebUI before 0.51.409 contains an authentication bypass vulnerability in passkey registration endpoints that allows unauthenticated remote attackers to register arbitrary passkeys. When HERMES_WEBUI_PASSKEY=1 is enabled with no existing credentials, POST /api/auth/passkey/register/options and POST /api/auth/passkey/register endpoints are accessible without authentication, allowing attackers to claim the first passkey and gain permanent administrative control.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "hermes-webui",
+  "published": "2026-06-17T19:18:13.203",
+  "references": [
+   "https://github.com/nesquena/hermes-webui/commit/4d90577e25d5537cb07290eca3fb8abff3bab316",
+   "https://github.com/nesquena/hermes-webui/pull/4171",
+   "https://github.com/nesquena/hermes-webui/pull/4267",
+   "https://github.com/nesquena/hermes-webui/releases/tag/v0.51.442",
+   "https://www.vulncheck.com/advisories/hermes-webui-unauthenticated-passkey-registration-via-authentication-bypass"
+  ],
+  "vendor": "hermes-webui"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/owen2345/camaleon-cms/commit/26345034523a505cb01615509b7f0a665e89ae3e"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-56721",
+  "description": "CamaleonCMS version 2.9.2 and earlier contains a privilege escalation vulnerability via insecure direct object reference (IDOR) that allows authenticated low-privileged attackers to overwrite any user's credentials by exploiting a parameter confusion flaw between the authorization filter and action body in the UsersController. Attackers can send a PATCH request to the updated_ajax endpoint setting params[:id] to their own user ID to pass the self-authorization check while simultaneously setting params[:user_id] to a victim's ID, causing the controller to load and mutate the victim's account, including overwriting administrator passwords to achieve full site takeover.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "CamaleonCMS",
+  "published": "2026-08-11T16:17:33.563",
+  "references": [
+   "https://github.com/owen2345/camaleon-cms",
+   "https://github.com/owen2345/camaleon-cms/commit/26345034523a505cb01615509b7f0a665e89ae3e",
+   "https://github.com/owen2345/camaleon-cms/pull/1185",
+   "https://www.vulncheck.com/advisories/camaleoncms-privilege-escalation-via-parameter-confusion-in-userscontroller"
+  ],
+  "vendor": "owen2345"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/1Panel-dev/MaxKB/commit/6c156afc656afa62ea4280e504a06ac1c9696b36"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-56779",
+  "description": "MaxKB before 2.10.0 contains a server-side request forgery vulnerability in tool creation and update endpoints that allows authenticated users to make arbitrary server requests by supplying unvalidated downloadCallbackUrl and download_url parameters. Attackers with default workspace USER role can exploit this to access internal network services by providing malicious URLs to the ToolSerializer endpoints.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "MaxKB",
+  "published": "2026-06-25T19:16:44.833",
+  "references": [
+   "https://github.com/1Panel-dev/MaxKB/commit/6c156afc656afa62ea4280e504a06ac1c9696b36",
+   "https://github.com/1Panel-dev/MaxKB/issues/6272",
+   "https://www.vulncheck.com/advisories/maxkb-server-side-request-forgery-via-downloadcallbackurl-and-download-url-parameters"
+  ],
+  "vendor": "1Panel-dev"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/modoboa/modoboa/commit/a1878c4920a6e47c3217c6ff1ed4a8753c202661"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-56780",
+  "description": "Modoboa before 2.9.0 contains an insecure direct object reference vulnerability in the PUT /api/v1/accounts/{pk}/password/ endpoint that allows domain administrators to change any user's password. Attackers with domain admin privileges can bypass object-level access controls to reset superadmin passwords and achieve full account takeover.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "modoboa",
+  "published": "2026-06-29T18:16:38.550",
+  "references": [
+   "https://github.com/modoboa/modoboa/commit/a1878c4920a6e47c3217c6ff1ed4a8753c202661",
+   "https://github.com/modoboa/modoboa/pull/4038",
+   "https://www.vulncheck.com/advisories/modoboa-insecure-direct-object-reference-in-account-password-change-api"
+  ],
+  "vendor": "modoboa"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/parseablehq/parseable/commit/f307c4989cc9f3ff4204fd383dec7a39924e6b2a"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-56783",
+  "description": "Parseable before 2.9.2 contains an information disclosure vulnerability in the notification-target API endpoints that returns webhook tokens and basic-auth credentials in cleartext due to commented-out secret-masking functionality. Any authenticated user with the GetAlert action, including low-privilege reader roles, can recover credentials and internal endpoint URLs for all configured notification targets by querying GET /api/v1/targets or related endpoints.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "parseable",
+  "published": "2026-06-29T18:16:38.950",
+  "references": [
+   "https://github.com/parseablehq/parseable/commit/f307c4989cc9f3ff4204fd383dec7a39924e6b2a",
+   "https://github.com/parseablehq/parseable/issues/1693",
+   "https://github.com/parseablehq/parseable/pull/1698",
+   "https://github.com/parseablehq/parseable/releases/tag/v2.9.2",
+   "https://www.vulncheck.com/advisories/parseable-cleartext-credential-exposure-in-notification-target-api"
+  ],
+  "vendor": "parseablehq"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/bitwarden/server/commit/0a3d9f9deb7d407503207b0d0ca8f0165a890bee"
+  ],
+  "cpes": [
+   "cpe:2.3:a:bitwarden:server:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-57521",
+  "description": "Bitwarden Server before 2026.5.0 contains a broken access control vulnerability that allows any authenticated user to access arbitrary organization billing data by supplying an arbitrary organizationId to the PreviewInvoiceController endpoints without membership or authorization checks. Attackers can exploit the missing ManageOrganizationBillingRequirement on the preview invoice endpoints to retrieve Stripe-computed tax totals, subscription status, and billing details derived from any target organization's real customer and subscription data.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "server",
+  "published": "2026-06-25T20:17:17.220",
+  "references": [
+   "https://github.com/bitwarden/server/commit/0a3d9f9deb7d407503207b0d0ca8f0165a890bee",
+   "https://github.com/bitwarden/server/pull/7583",
+   "https://github.com/bitwarden/server/releases/tag/v2026.5.0",
+   "https://sanjokkarki.com.np/blog/bitwarden-preview-invoice-idor",
+   "https://www.vulncheck.com/advisories/bitwarden-server-broken-access-control-via-previewinvoicecontroller"
+  ],
+  "vendor": "bitwarden"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/HKUDS/Vibe-Trading/commit/0ab701302f90e701c9dc558a898a217a376610c3"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-58170",
+  "description": "Vibe-Trading before 0.1.10 builds the proposal file path by joining a caller-supplied proposal identifier onto the broker proposals directory without sanitization (agent/src/live/mandate/commit.py). A proposal identifier containing path traversal sequences causes the application to load an attacker-controlled JSON file as an authoritative live trading mandate. Combined with the file upload endpoint, an admitted caller can write a JSON file to a known location and traverse to it, and because the ceilings validation is skipped when ceilings are absent, the attacker fully controls the committed mandate.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal"
+  ],
+  "priority": 26,
+  "product": "Vibe-Trading",
+  "published": "2026-06-30T17:16:24.057",
+  "references": [
+   "https://github.com/HKUDS/Vibe-Trading/commit/0ab701302f90e701c9dc558a898a217a376610c3",
+   "https://github.com/HKUDS/Vibe-Trading/pull/256",
+   "https://github.com/HKUDS/Vibe-Trading/releases/tag/v0.1.10",
+   "https://www.vulncheck.com/advisories/vibe-trading-path-traversal-in-proposal-identifier-allows-forging-live-trading-mandates"
+  ],
+  "vendor": "HKUDS"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/juicedata/juicefs/commit/a46979cdd4082217081ee99b931ddc53d038e47a"
+  ],
+  "cpes": [
+   "cpe:2.3:a:juicedata:juicefs:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-59092",
+  "description": "JuiceFS through 1.3.1, fixed in commit a46979c, contains an authentication bypass vulnerability that allows unauthenticated remote attackers to access sensitive debug and metrics endpoints by exploiting improper handler registration on the shared http.DefaultServeMux. Attackers can request the /debug/pprof/cmdline endpoint to obtain the process command line containing metadata engine connection strings with database credentials, granting full read/write access to filesystem metadata, while other pprof handlers leak internal state and profiling handlers enable denial of service.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "juicefs",
+  "published": "2026-07-02T20:17:07.270",
+  "references": [
+   "https://github.com/juicedata/juicefs/commit/a46979cdd4082217081ee99b931ddc53d038e47a",
+   "https://github.com/juicedata/juicefs/issues/7213",
+   "https://github.com/juicedata/juicefs/pull/7214",
+   "https://www.vulncheck.com/advisories/juicefs-authentication-bypass-via-pprof-and-metrics-endpoints"
+  ],
+  "vendor": "juicedata"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/mem0ai/mem0/commit/a3154d59e52386d4e1189c1f5f44819868f76514"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-59706",
+  "description": "mem0 contains unauthenticated config API endpoints that expose LLM API keys in plaintext and allow server-side request forgery via attacker-controlled ollama_base_url parameter. Unauthenticated attackers can retrieve stored secrets like OpenAI API keys via GET /api/v1/config/ or trigger SSRF attacks by setting ollama_base_url to internal addresses like cloud IMDS via PUT /api/v1/config/mem0/llm endpoint.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf",
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "mem0",
+  "published": "2026-07-07T22:16:54.503",
+  "references": [
+   "https://github.com/mem0ai/mem0",
+   "https://github.com/mem0ai/mem0/commit/a3154d59e52386d4e1189c1f5f44819868f76514",
+   "https://github.com/mem0ai/mem0/issues/6081",
+   "https://www.vulncheck.com/advisories/mem0-server-side-request-forgery-and-plaintext-api-key-exposure-via-unauthenticated-config-endpoints"
+  ],
+  "vendor": "mem0"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/web-infra-dev/midscene/commit/86f4118d1d847041c63d79e347e08c87c3f1a882"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-59804",
+  "description": "Midscene Bridge Server through 1.10.3, fixed in commit 86f4118, contains a missing authentication and CORS misconfiguration vulnerability that allows unauthenticated remote attackers to hijack active bridge sessions by opening a cross-origin WebSocket connection to the local Socket.IO server, which performs no Origin header validation and requires no authentication token. Attackers can connect from any web page visited by the victim to seize the single-client slot, intercept and inject automation commands, exfiltrate command-payload data, or unconditionally terminate the server by supplying the MIDSCENE_BRIDGE_SIGNAL_KILL query parameter.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "midscene",
+  "published": "2026-07-08T20:16:56.077",
+  "references": [
+   "https://github.com/web-infra-dev/midscene/commit/86f4118d1d847041c63d79e347e08c87c3f1a882",
+   "https://github.com/web-infra-dev/midscene/issues/2752",
+   "https://github.com/web-infra-dev/midscene/pull/2759",
+   "https://www.vulncheck.com/advisories/midscene-bridge-server-session-hijack-via-unauthenticated-websocket"
+  ],
+  "vendor": "web-infra-dev"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/openclaw/openclaw/commit/b623557a2ec7e271bda003eb3ac33fbb2e218505#diff-06572a96a58dc510037d5efa622f9bec8519bc1beab13c9f251e97e657a9d4edR44"
+  ],
+  "cpes": [
+   "cpe:2.3:a:openclaw:openclaw:*:*:*:*:*:*:*:*",
+   "cpe:2.3:a:openclaw:openclaw:*:*:*:*:*:node.js:*:*"
+  ],
+  "cve_id": "CVE-2026-6011",
+  "description": "A weakness has been identified in OpenClaw up to 2026.1.26. Affected by this issue is some unknown functionality of the file src/agents/tools/web-fetch.ts of the component assertPublicHostname Handler. Executing a manipulation can lead to server-side request forgery. The attack can be executed remotely. This attack is characterized by high complexity. The exploitation is known to be difficult. The exploit has been made available to the public and could be used for attacks. Upgrading to version 2026.1.29 can resolve this issue. This patch is called b623557a2ec7e271bda003eb3ac33fbb2e218505. Upgrading the affected component is advised.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "OpenClaw",
+  "published": "2026-04-10T05:16:06.757",
+  "references": [
+   "https://github.com/openclaw/openclaw/",
+   "https://github.com/openclaw/openclaw/commit/b623557a2ec7e271bda003eb3ac33fbb2e218505#diff-06572a96a58dc510037d5efa622f9bec8519bc1beab13c9f251e97e657a9d4edR44",
+   "https://github.com/openclaw/openclaw/releases/tag/v2026.1.29",
+   "https://github.com/zast-ai/vulnerability-reports/blob/main/openclaw/ssrf.md",
+   "https://vuldb.com/submit/795224",
+   "https://vuldb.com/vuln/356567",
+   "https://vuldb.com/vuln/356567/cti"
+  ],
+  "vendor": "n/a"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/crewAIInc/crewAI/commit/5d4851eac797cafc45b726f65747fe2c9520fc42"
+  ],
+  "cpes": [
+   "cpe:2.3:a:crewai:crewai:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-62240",
+  "description": "CrewAI before 1.15.1 contains a server-side request forgery vulnerability in the validate_url function that performs one-shot DNS resolution and blocklist checks before returning the original URL unchanged. Attackers can bypass the security filter by supplying URLs that redirect to internal addresses or use DNS rebinding techniques to access internal services and cloud metadata endpoints.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "crewAI",
+  "published": "2026-07-13T22:16:52.117",
+  "references": [
+   "https://github.com/crewAIInc/crewAI/commit/5d4851eac797cafc45b726f65747fe2c9520fc42",
+   "https://github.com/crewAIInc/crewAI/issues/6520",
+   "https://github.com/crewAIInc/crewAI/pull/6331",
+   "https://github.com/crewAIInc/crewAI/releases/tag/1.15.1",
+   "https://www.vulncheck.com/advisories/crewai-ssrf-filter-bypass-via-http-redirect-in-scrape-tools"
+  ],
+  "vendor": "crewAIInc"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/openssl/openssl/commit/0cc20b322639919aa423e90799d9a57c3b4b76ca",
+   "https://github.com/openssl/openssl/commit/6a0acc072b4d37a7cac1252a29c1ce1f00c5ec29",
+   "https://github.com/openssl/openssl/commit/7eb2e3ec9d1d4f35c8022fccd4b03398b3f33e21",
+   "https://github.com/openssl/openssl/commit/a7e5a6eea8fd3ccca6b6fbba031a5fbf8a3d93b4"
+  ],
+  "cpes": [
+   "cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-63073",
+  "description": "Issue summary: OpenSSL CMP response validation passed an unexpected response sender distinguished name directly as the format string to `ERR_raise_data()`. Impact summary: A malicious or intercepted CMP endpoint can crash a CMP client that enforces an expected sender or uses a pinned server certificate whose subject becomes the default expected sender. CWE: CWE-134 (Use of Externally-Controlled Format String) Description: When validating a received CMP message, ossl_cmp_msg_check_update() converts the peer-supplied sender distinguished name with X509_NAME_oneline() and passes it directly as the format argument to ERR_raise_data(). Percent characters survive the conversion, so a sender DN such as \"CN=%s%n\" reaches BIO_vsnprintf() as an attacker-controlled format string with no matching variadic arguments. This path is only reached when the caller configures an expected sender or pins a server certificate, which is the normal configuration for a CMP client validating server responses. Since the attacker controls the format string but none of the variadic arguments, such specifiers as %s and %n dereference or write through unrelated stack contents and crash the client. The reliable consequence is a denial of service, when the response comes from a malicious or intercepted CMP endpoint. There is no controlled memory write, arbitrary-address read, or reliable path to remote code execution. FIPS impact: no No FIPS modules are affected by this issue, as the CMP protocol implementation is outside the OpenSSL FIPS module boundary.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 28,
+  "product": "OpenSSL",
+  "published": "2026-08-25T13:19:26.147",
+  "references": [
+   "https://github.com/openssl/openssl/commit/0cc20b322639919aa423e90799d9a57c3b4b76ca",
+   "https://github.com/openssl/openssl/commit/6a0acc072b4d37a7cac1252a29c1ce1f00c5ec29",
+   "https://github.com/openssl/openssl/commit/7eb2e3ec9d1d4f35c8022fccd4b03398b3f33e21",
+   "https://github.com/openssl/openssl/commit/a7e5a6eea8fd3ccca6b6fbba031a5fbf8a3d93b4",
+   "https://openssl-library.org/news/secadv/20260825.txt"
+  ],
+  "vendor": "OpenSSL"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/hyperdxio/hyperdx/commit/1705b37ac68acc222cd038327ed79e167e256a1b"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-63730",
+  "description": "HyperDX before 2.31.0 contains a server-side request forgery vulnerability that allows authenticated team members to direct the server to make requests to arbitrary internal network destinations by supplying a caller-controlled URL to the webhook test endpoint. Attackers can bypass the insufficient hostname blacklist validation in the webhook handler to enumerate internal services, interact with internal containers, or access cloud instance metadata services including provider metadata endpoints.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "hyperdx",
+  "published": "2026-07-20T19:17:29.213",
+  "references": [
+   "https://github.com/hyperdxio/hyperdx/commit/1705b37ac68acc222cd038327ed79e167e256a1b",
+   "https://github.com/hyperdxio/hyperdx/issues/2588",
+   "https://github.com/hyperdxio/hyperdx/pull/2593",
+   "https://github.com/hyperdxio/hyperdx/releases/tag/%40hyperdx%2Fapp%402.31.0",
+   "https://www.vulncheck.com/advisories/hyperdx-ssrf-via-webhook-test-endpoint"
+  ],
+  "vendor": "hyperdxio"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/chatwoot/chatwoot/commit/8dd0d08322edafaec24624b72ed2f6045921cb7b"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-63765",
+  "description": "Chatwoot before 4.16.0 contains an authentication bypass vulnerability in the direct uploads controller that allows unauthenticated attackers to create arbitrary ActiveStorage blobs in any tenant account. Attackers can exploit missing authentication checks to resolve any account and conversation, then obtain signed PUT URLs to write arbitrary data to the application's storage backend.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "chatwoot",
+  "published": "2026-07-23T19:17:03.560",
+  "references": [
+   "https://github.com/chatwoot/chatwoot/commit/8dd0d08322edafaec24624b72ed2f6045921cb7b",
+   "https://github.com/chatwoot/chatwoot/issues/15072",
+   "https://github.com/chatwoot/chatwoot/pull/15039",
+   "https://github.com/chatwoot/chatwoot/releases/tag/v4.16.0",
+   "https://www.vulncheck.com/advisories/chatwoot-unauthenticated-activestorage-direct-upload-arbitrary-blob-creation"
+  ],
+  "vendor": "chatwoot"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/typecho/typecho/commit/96ccfdda4fc1e66ca04a003bf0c71d25864e6a0b"
+  ],
+  "cpes": [
+   "cpe:2.3:a:typecho:typecho:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-7025",
+  "description": "A vulnerability was found in Typecho up to 1.3.0. This vulnerability affects the function Service::sendPingHandle of the file var/Widget/Service.php of the component Ping Back Service Endpoint. The manipulation of the argument X-Pingback/link results in server-side request forgery. The attack may be launched remotely. The exploit has been made public and could be used. Upgrading to version 1.3.1-rc is able to resolve this issue. The patch is identified as 96ccfdda4fc1e66ca04a003bf0c71d25864e6a0b. Upgrading the affected component is advised.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "Typecho",
+  "published": "2026-04-26T08:16:00.227",
+  "references": [
+   "https://github.com/typecho/typecho/",
+   "https://github.com/typecho/typecho/commit/96ccfdda4fc1e66ca04a003bf0c71d25864e6a0b",
+   "https://github.com/typecho/typecho/releases/tag/v1.3.1-rc",
+   "https://vuldb.com/cve/CVE-2026-7025",
+   "https://vuldb.com/submit/797772",
+   "https://vuldb.com/vuln/359605",
+   "https://vuldb.com/vuln/359605/cti",
+   "https://wang1rrr.github.io/2026/03/04/CVE-Report-Typecho-v1-3-0-SSRF/"
+  ],
+  "vendor": "n/a"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/dubydu/sqlite-mcp/commit/a5580cb992f4f6c308c9ffe6442b2e76709db548"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-7206",
+  "description": "A security flaw has been discovered in dubydu sqlite-mcp up to 0.1.0. The affected element is the function extract_to_json of the file src/entry.py. Performing a manipulation of the argument output_filename results in sql injection. Remote exploitation of the attack is possible. The exploit has been released to the public and may be used for attacks. The patch is named a5580cb992f4f6c308c9ffe6442b2e76709db548. Applying a patch is the recommended action to fix this issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "sql_injection"
+  ],
+  "priority": 28,
+  "product": "sqlite-mcp",
+  "published": "2026-04-28T01:16:02.150",
+  "references": [
+   "https://github.com/dubydu/sqlite-mcp/",
+   "https://github.com/dubydu/sqlite-mcp/commit/a5580cb992f4f6c308c9ffe6442b2e76709db548",
+   "https://github.com/dubydu/sqlite-mcp/issues/1",
+   "https://github.com/dubydu/sqlite-mcp/pull/2",
+   "https://vuldb.com/submit/802081",
+   "https://vuldb.com/vuln/359806",
+   "https://vuldb.com/vuln/359806/cti"
+  ],
+  "vendor": "dubydu"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/vulnerability-lookup/vulnerability-lookup/commit/f3e0c6899c5b3823dcfd860fc6cb3edbedc9bf65"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-72761",
+  "description": "The webhook URL validator in `website/notifications/webhooks.py` uses `ip.is_global` to reject non-public addresses after DNS resolution. IPv6 transition addresses (NAT64 `64:ff9b::/96`, 6to4 `2002::/16`, Teredo `2001:0000::/32`) are classified as globally routable by IANA, so `is_global` returns `True` even when the embedded IPv4 targets a private, loopback, or cloud metadata destination. An attacker can register a webhook pointing at a hostname that resolves to a transition address to bypass the SSRF guard and exfiltrate vulnerability data to an internal endpoint. The vulnerability was introduced on a non-release version. The fix was already done on HEAD. It only affects organisation running the HEAD.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "vulnerability-lookup",
+  "published": "2026-08-10T15:17:44.783",
+  "references": [
+   "https://github.com/vulnerability-lookup/vulnerability-lookup/commit/f3e0c6899c5b3823dcfd860fc6cb3edbedc9bf65"
+  ],
+  "vendor": "vulnerability-lookup"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/laravel/socialite/commit/caf714f55d51ab0d914b40033d8b0f489d6219cc"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-73683",
+  "description": "Laravel Socialite's Facebook provider contains an authentication bypass vulnerability that allows unauthenticated attackers to replay captured OIDC id_tokens by exploiting the missing nonce claim validation in the getUserByOIDCToken() function within FacebookProvider.php. Attackers who obtain a valid, unexpired id_token issued for the same Facebook App ID can submit the captured token to the backend userFromToken() endpoint, bypassing authentication controls because signature, aud, and iss checks pass while no session-bound nonce comparison is performed, resulting in unauthorized access to victim accounts.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "Socialite",
+  "published": "2026-08-14T22:17:11.550",
+  "references": [
+   "https://github.com/laravel/socialite",
+   "https://github.com/laravel/socialite/commit/caf714f55d51ab0d914b40033d8b0f489d6219cc",
+   "https://github.com/laravel/socialite/pull/789",
+   "https://www.vulncheck.com/advisories/laravel-socialite-facebook-provider-authentication-bypass-via-nonce-replay"
+  ],
+  "vendor": "Laravel"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/interchange/interchange/commit/65b6ea9d3761dd1fd2071c962819562afa335e4e"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-75031",
+  "description": "In the interchange/interchange project, a critical remote code execution (RCE) vulnerability was found in the “quick question” admin feature. In default installations arbitrary Perl code can be injected and executed server-side by unauthenticated users. The Perl code normally runs within a Safe container which limits the scope of what it can do, unless the non-default AllowGlobal directive is configured for the catalog being accessed.CTOR]",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 28,
+  "product": "Interchange",
+  "published": "2026-09-18T16:17:09.043",
+  "references": [
+   "https://github.com/interchange/interchange/commit/65b6ea9d3761dd1fd2071c962819562afa335e4e",
+   "https://www.interchangecommerce.org/i/dev/news?mv_arg=00071"
+  ],
+  "vendor": "Interchange"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/HKUDS/OpenHarness/commit/438e37309778e19060dfe7b172eb142e543c4cd6"
+  ],
+  "cpes": [
+   "cpe:2.3:a:hkuds:openharness:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-7551",
+  "description": "HKUDS OpenHarness contains a remote code execution vulnerability in the /bridge slash command that allows remote senders accepted by configuration to execute arbitrary operating system commands. Attackers can invoke the /bridge spawn command with attacker-controlled command text that is forwarded to the bridge session manager and executed through the shared shell subprocess helper, allowing them to spawn shell sessions as the OpenHarness process user and access local files, credentials, workspace state, and repository contents.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 28,
+  "product": "OpenHarness",
+  "published": "2026-04-30T22:16:27.097",
+  "references": [
+   "https://github.com/HKUDS/OpenHarness/commit/438e37309778e19060dfe7b172eb142e543c4cd6",
+   "https://github.com/HKUDS/OpenHarness/pull/208",
+   "https://www.vulncheck.com/advisories/hkuds-openharness-remote-command-execution-via-bridge-slash-command"
+  ],
+  "vendor": "HKUDS"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/puemos/craftplan/commit/317acd584b68887f592dc3b97f47703dd63b1bf"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-76876",
+  "description": "Craftplan before 0.5.1 contains a broken access control vulnerability that allows unauthenticated attackers to read sensitive credentials by exploiting an unconditional authorization policy on the Settings resource. Attackers can send a GET request to the settings API endpoint with a valid record ID to retrieve decrypted SMTP passwords, email API keys, and email API secrets due to the read policy using an always-allow authorization check that bypasses all identity verification.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "craftplan",
+  "published": "2026-08-21T20:16:44.680",
+  "references": [
+   "https://github.com/puemos/craftplan/commit/317acd584b68887f592dc3b97f47703dd63b1bf",
+   "https://github.com/puemos/craftplan/releases/tag/v0.5.1",
+   "https://www.vulncheck.com/advisories/craftplan-broken-access-control-information-disclosure-via-settings-api"
+  ],
+  "vendor": "puemos"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/CVHub520/X-AnyLabeling/commit/52f7c30333f3f99711f09334d740212aa30b9958"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-79785",
+  "description": "X-AnyLabeling's model downloader disabled TLS certificate verification. download_with_retry in anylabeling/services/auto_labeling/model.py built a context with ssl._create_unverified_context() and passed it to urllib.request.urlopen, so neither the certificate chain nor the hostname was checked on any model download, and models are fetched over HTTPS from the project's release host. Any party positioned to intercept that connection could therefore answer it with content of their own choosing. The response is written to a .part file and moved into place with os.replace, and the only post-download check, safe_check_model, validates the file's format rather than its provenance: no hash or signature is compared against an expected value. For an ONNX target the substituted file passes onnx.checker.check_model and is then used for inference, so the attacker chooses the model that produces the application's annotations. For a .pth or .pt target, which the shipped SAM2 video, YOLOE, UPN and open_vision configurations use, the check worker calls torch.load without weights_only, so a substituted file is unpickled and executes code of the attacker's choosing on PyTorch releases predating the weights_only default.",
+  "ecosystem_hint": "pypi",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "deserialization"
+  ],
+  "priority": 24,
+  "product": "X-AnyLabeling",
+  "published": "2026-08-25T16:17:30.690",
+  "references": [
+   "https://github.com/CVHub520/X-AnyLabeling",
+   "https://github.com/CVHub520/X-AnyLabeling/blob/v4.0.0-beta.8/anylabeling/services/auto_labeling/model.py",
+   "https://github.com/CVHub520/X-AnyLabeling/commit/52f7c30333f3f99711f09334d740212aa30b9958",
+   "https://github.com/CVHub520/X-AnyLabeling/releases/tag/v4.0.0-beta.9",
+   "https://pypi.org/project/x-anylabeling-cvhub/",
+   "https://www.vulncheck.com/advisories/x-anylabeling-before-4.0.0-beta.9-improper-certificate-validation-in-model-downloads"
+  ],
+  "vendor": "CVHub520"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/8421bit/MiniClaw/commit/e8bd4e17e9428260f2161378356affc5ce90d6ed"
+  ],
+  "cpes": [
+   "cpe:2.3:a:8421bit:miniclaw:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-8113",
+  "description": "A vulnerability was determined in 8421bit MiniClaw up to 43905b934cf76489ab28e4d17da28ee97970f91f. Affected by this vulnerability is the function isPathInside of the file src/kernel.ts of the component executeSkillScript. Executing a manipulation can lead to path traversal. It is possible to launch the attack remotely. The exploit has been publicly disclosed and may be utilized. This product takes the approach of rolling releases to provide continious delivery. Therefore, version details for affected and updated releases are not available. This patch is called e8bd4e17e9428260f2161378356affc5ce90d6ed. It is advisable to implement a patch to correct this issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal"
+  ],
+  "priority": 26,
+  "product": "MiniClaw",
+  "published": "2026-05-07T22:16:37.680",
+  "references": [
+   "https://github.com/8421bit/MiniClaw/",
+   "https://github.com/8421bit/MiniClaw/commit/e8bd4e17e9428260f2161378356affc5ce90d6ed",
+   "https://github.com/8421bit/MiniClaw/issues/5",
+   "https://github.com/8421bit/MiniClaw/pull/8",
+   "https://vuldb.com/submit/808167",
+   "https://vuldb.com/vuln/361901",
+   "https://vuldb.com/vuln/361901/cti"
+  ],
+  "vendor": "8421bit"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/tw93/Pake/commit/a5463a84d6e36705ee0dd1886cf0e4b5a75b0ab4"
+  ],
+  "cpes": [
+   "cpe:2.3:a:faberon:pake:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-82635",
+  "description": "Pake before 3.13.1 joins the JavaScript-supplied filename for the download_file Tauri command onto the user's Downloads directory with no sanitization. A filename containing path traversal sequences (for example ../Library/LaunchAgents/com.evil.plist) or an absolute path resolves outside ~/Downloads. The command then fetches attacker-controlled content from the supplied URL (via Rust HTTP, not the browser) and writes it to that path. A script that can invoke the command can overwrite user-writable files and install persistence (macOS LaunchAgents, Linux autostart, Windows Startup), leading to code execution in the user account. All desktop apps generated from an affected Pake tree expose the same command.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal"
+  ],
+  "priority": 26,
+  "product": "Pake",
+  "published": "2026-08-30T13:16:56.923",
+  "references": [
+   "https://github.com/tw93/Pake",
+   "https://github.com/tw93/Pake/commit/a5463a84d6e36705ee0dd1886cf0e4b5a75b0ab4",
+   "https://github.com/tw93/Pake/releases/tag/V3.13.1"
+  ],
+  "vendor": "tw93"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/MISP/MISP/commit/e06f69858"
+  ],
+  "cpes": [
+   "cpe:2.3:a:misp-project:misp:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-85221",
+  "description": "MISP contains an improper TLS certificate validation vulnerability in CurlClient. The CurlClient::$verifyPeer property was not explicitly initialized and therefore defaulted to null. When passed to cURL, this value effectively disabled TLS peer verification unless the calling code explicitly enabled it. As a result, HTTPS connections made through affected CurlClient instances could accept certificates that were not issued by a trusted certificate authority. An attacker capable of intercepting or manipulating network traffic between a MISP instance and a remote HTTPS service could impersonate the remote endpoint and perform a man-in-the-middle attack. Successful exploitation could allow an attacker to observe sensitive information transmitted by MISP, including authentication material or exchanged threat intelligence, and to modify responses returned to the MISP instance. The impact depends on the functionality using CurlClient and the data exchanged with the remote service. The patch enables TLS peer verification by default while preserving explicit support for configured self-signed certificates. It also corrects the self-signed certificate handling in SyncTool so that peer verification is disabled only when no pinned CA certificate is configured.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "misp",
+  "published": "2026-09-03T15:17:41.047",
+  "references": [
+   "https://github.com/MISP/MISP/commit/e06f69858"
+  ],
+  "vendor": "misp"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/owen2345/camaleon-cms/commit/3c46b6e512518ded476226162305c8eae00aac3f"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-86100",
+  "description": "Camaleon CMS versions 2.7.5 through 2.9.1 fail to validate redirect targets when fetching remote files in the Upload from URL media feature. Authenticated attackers can supply URLs that pass initial validation but redirect to internal network addresses, allowing server-side request forgery to internal services.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "CamaleonCMS",
+  "published": "2026-09-05T00:17:20.810",
+  "references": [
+   "https://github.com/owen2345/camaleon-cms",
+   "https://github.com/owen2345/camaleon-cms/blob/2.9.1/app/helpers/camaleon_cms/uploader_helper.rb",
+   "https://github.com/owen2345/camaleon-cms/commit/3c46b6e512518ded476226162305c8eae00aac3f",
+   "https://github.com/owen2345/camaleon-cms/pull/1133",
+   "https://github.com/owen2345/camaleon-cms/releases/tag/2.9.2",
+   "https://www.vulncheck.com/advisories/camaleon-cms-2.7.5-through-2.9.1-ssrf-via-http-redirect-in-upload-from-url"
+  ],
+  "vendor": "owen2345"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/openclaw/crabbox/commit/b657323f1d1c954cefc8444571fa6c45a8896e7f"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-8621",
+  "description": "Crabbox prior to v0.12.0 contains an authentication bypass vulnerability that allows non-admin shared-token callers to impersonate other owners or organizations by spoofing identity headers. Attackers can inject malicious X-Crabbox-Owner and X-Crabbox-Org headers in requests authenticated with a shared token to bypass authorization checks and access owner/org-scoped lease operations belonging to victim accounts.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "crabbox",
+  "published": "2026-05-14T19:16:39.517",
+  "references": [
+   "https://github.com/openclaw/crabbox/commit/b657323f1d1c954cefc8444571fa6c45a8896e7f",
+   "https://github.com/openclaw/crabbox/pull/70",
+   "https://github.com/openclaw/crabbox/releases/tag/v0.12.0",
+   "https://www.vulncheck.com/advisories/crabbox-authentication-bypass-via-header-spoofing"
+  ],
+  "vendor": "openclaw"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/jaychouchannel/Tourism-Management-System/commit/d44ec3aa0bd2a72c8800e3befb0a9a96a6491b86"
+  ],
+  "cpes": [
+   "cpe:2.3:a:jaychouchannel:tourism-management-system:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-86284",
+  "description": "A security vulnerability has been detected in jaychouchannel Tourism-Management-System up to 8122bf020d91199eddfff3ee02d1632a70a9a132. Affected by this vulnerability is the function getOption of the file travel/src/main/java/com/controller/CommonController.java. The manipulation of the argument tableName/columnName leads to information disclosure. The attack may be initiated remotely. The exploit has been disclosed publicly and may be used. This product uses a rolling release model to deliver continuous updates. As a result, specific version information for affected or updated releases is not available. The identifier of the patch is d44ec3aa0bd2a72c8800e3befb0a9a96a6491b86. To fix this issue, it is recommended to deploy a patch.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "Tourism-Management-System",
+  "published": "2026-09-07T08:17:14.820",
+  "references": [
+   "https://github.com/jaychouchannel/Tourism-Management-System/",
+   "https://github.com/jaychouchannel/Tourism-Management-System/commit/d44ec3aa0bd2a72c8800e3befb0a9a96a6491b86",
+   "https://github.com/jaychouchannel/Tourism-Management-System/pull/14",
+   "https://github.com/jaychouchannel/Tourism_Management_System/issues/8",
+   "https://vuldb.com/cve/CVE-2026-86284",
+   "https://vuldb.com/submit/905644",
+   "https://vuldb.com/vuln/399444",
+   "https://vuldb.com/vuln/399444/cti"
+  ],
+  "vendor": "jaychouchannel"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/FlowiseAI/Flowise/commit/700137738bcaebefd4709021f6d6b0abcd7df0ac"
+  ],
+  "cpes": [
+   "cpe:2.3:a:flowiseai:flowise:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-90580",
+  "description": "A vulnerability was found in FlowiseAI Flowise up to 3.0.2. This vulnerability affects the function axios.post of the file packages/server/src/controllers/evaluations/index.ts of the component Evaluations Endpoint. The manipulation of the argument Host/X-Forwarded-Proto results in server-side request forgery. The attack may be launched remotely. The exploit has been made public and could be used. Upgrading to version 3.1.3 is able to resolve this issue. The patch is identified as 700137738bcaebefd4709021f6d6b0abcd7df0ac. It is recommended to upgrade the affected component. This vulnerability only affects products that are no longer supported by the maintainer.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "Flowise",
+  "published": "2026-09-13T20:16:51.317",
+  "references": [
+   "https://github.com/FlowiseAI/Flowise/",
+   "https://github.com/FlowiseAI/Flowise/commit/700137738bcaebefd4709021f6d6b0abcd7df0ac",
+   "https://github.com/FlowiseAI/Flowise/issues/6687",
+   "https://github.com/FlowiseAI/Flowise/releases/tag/flowise%403.1.3",
+   "https://vuldb.com/cve/CVE-2026-90580",
+   "https://vuldb.com/submit/913327",
+   "https://vuldb.com/vuln/403165",
+   "https://vuldb.com/vuln/403165/cti"
+  ],
+  "vendor": "FlowiseAI"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/wandb/wandb/commit/e52558f3a6a94ea816af74969a13a35e5904cad6"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-91771",
+  "description": "Weights & Biases wandb before 0.29.0 fails to validate the file name from server responses in the File.download function, allowing path traversal attacks. Attackers controlling the backend can supply file names with directory traversal sequences to write files outside the intended download directory, potentially enabling code execution through modification of shell startup files or Python import paths.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "path_traversal"
+  ],
+  "priority": 26,
+  "product": "wandb",
+  "published": "2026-09-15T02:16:49.680",
+  "references": [
+   "https://github.com/wandb/wandb",
+   "https://github.com/wandb/wandb/blob/v0.27.2/wandb/apis/public/files.py#L319-L347",
+   "https://github.com/wandb/wandb/commit/e52558f3a6a94ea816af74969a13a35e5904cad6",
+   "https://github.com/wandb/wandb/issues/12592",
+   "https://github.com/wandb/wandb/releases/tag/v0.29.0",
+   "https://www.vulncheck.com/advisories/weights-biases-wandb-before-0.29.0-path-traversal-via-file-download"
+  ],
+  "vendor": "wandb"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/plank/laravel-mediable/commit/8ddb0e5b300084e91ad2cb18a6e7bc768bb7b008"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-93352",
+  "description": "Laravel-Mediable 7.0.0 before 7.0.2 contains an incomplete patch for CVE-2026-49972 in which the .pht extension is absent from the forbidden_extensions blocklist in config/mediable.php. The blocklist introduced to address CVE-2026-49972 includes phpt but omits pht, which Apache executes as PHP via the default FilesMatch directive on Debian and Ubuntu systems. An attacker can upload a .pht file that passes all validation in MediaUploader::verifyExtension() and File::sanitizeFileName() because pht is not present in the blocklist, causing the file to be written to disk and executed as PHP when requested, enabling remote code execution with the privileges of the web server process.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 28,
+  "product": "laravel-mediable",
+  "published": "2026-09-23T22:16:59.523",
+  "references": [
+   "https://github.com/plank/laravel-mediable/commit/8ddb0e5b300084e91ad2cb18a6e7bc768bb7b008",
+   "https://github.com/plank/laravel-mediable/pull/396",
+   "https://github.com/plank/laravel-mediable/releases/tag/7.0.2",
+   "https://www.vulncheck.com/advisories/laravel-mediable-rce-via-pht-file-upload"
+  ],
+  "vendor": "plank"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/SveltyCMS/SveltyCMS/commit/05b4f9efeb79e9d72a693232334d7529687f896f"
+  ],
+  "cpes": [
+   "cpe:2.3:a:sveltycms:sveltycms:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-93504",
+  "description": "A vulnerability has been found in SveltyCMS 0.0.6. This affects an unknown part of the file src/routes/api/[...path]/+server.ts of the component User Attribute Update Endpoint. Such manipulation leads to improper access controls. It is possible to launch the attack remotely. The name of the patch is 05b4f9efeb79e9d72a693232334d7529687f896f. It is advisable to implement a patch to correct this issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "SveltyCMS",
+  "published": "2026-09-18T14:19:08.027",
+  "references": [
+   "https://github.com/SveltyCMS/SveltyCMS/",
+   "https://github.com/SveltyCMS/SveltyCMS/commit/05b4f9efeb79e9d72a693232334d7529687f896f",
+   "https://vuldb.com/cve/CVE-2026-93504",
+   "https://vuldb.com/submit/942849",
+   "https://vuldb.com/vuln/407421",
+   "https://vuldb.com/vuln/407421/cti"
+  ],
+  "vendor": "n/a"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/aiyiyi121/sxdevops/commit/2b4bf8585c3e731e7a8af30801ea46680bc783f9"
+  ],
+  "cpes": [
+   "cpe:2.3:a:aiyiyi121:sxdevops:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-93971",
+  "description": "A weakness has been identified in aiyiyi121 SxDevOps 1.0/1.1. Impacted is an unknown function of the file backend/sxdevops/settings.py. This manipulation causes information disclosure. It is possible to initiate the attack remotely. Patch name: 2b4bf8585c3e731e7a8af30801ea46680bc783f9. It is suggested to install a patch to address this issue. The vendor was contacted early, responded in a very professional manner and quickly released a fixed version of the affected product.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "SxDevOps",
+  "published": "2026-09-20T08:16:51.257",
+  "references": [
+   "https://github.com/aiyiyi121/sxdevops/",
+   "https://github.com/aiyiyi121/sxdevops/commit/2b4bf8585c3e731e7a8af30801ea46680bc783f9",
+   "https://github.com/aiyiyi121/sxdevops/issues/16",
+   "https://vuldb.com/cve/CVE-2026-93971",
+   "https://vuldb.com/submit/944386",
+   "https://vuldb.com/vuln/407930",
+   "https://vuldb.com/vuln/407930/cti"
+  ],
+  "vendor": "aiyiyi121"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/MacWarrior/clipbucket-v5/commit/7fd0af6f8b5826c2d6ef0976dbb1867f5c36b707"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-96272",
+  "description": "ClipBucket v5 before 5.5.3-#182 contains a blind SQL injection vulnerability in the photo search endpoint where the query parameter is passed unsanitized into SQL WHERE and ORDER BY clauses. Unauthenticated attackers can exploit time-based blind SQL injection techniques to extract user credentials, email addresses, and administrator password hashes for account takeover.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "sql_injection"
+  ],
+  "priority": 28,
+  "product": "clipbucket-v5",
+  "published": "2026-09-23T01:16:32.633",
+  "references": [
+   "https://github.com/MacWarrior/clipbucket-v5",
+   "https://github.com/MacWarrior/clipbucket-v5/blob/57b0235f2eae390f4946c042bf81c182a9f82782/upload/includes/classes/photos.class.php#L408-L413",
+   "https://github.com/MacWarrior/clipbucket-v5/commit/7fd0af6f8b5826c2d6ef0976dbb1867f5c36b707",
+   "https://github.com/MacWarrior/clipbucket-v5/pull/874",
+   "https://hackmd.io/@leediay/sqli-photo-seach-clipbucketv5",
+   "https://www.vulncheck.com/advisories/clipbucket-v5-before-5.5.3-182-sql-injection-via-search-result-php"
+  ],
+  "vendor": "MacWarrior"
+ }
+]
