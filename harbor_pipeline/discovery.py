@@ -226,6 +226,11 @@ def collect(settings: SourceSettings, run_dir: Path, cve_id: str) -> tuple[dict,
                 if version:
                     _fetch_checksum(collector, ecosystem, package, version, notes)
 
+    if not fixed_ref and fix_commit:
+        # The advisory may name a fix commit without a published release.
+        # For a source build the commit is a perfectly precise fixed ref.
+        fixed_ref = fix_commit
+        notes.append("using the upstream fix commit as the fixed ref")
     if not fixed_ref:
         notes.append("no fixed release could be derived from OSV or the GitHub advisory")
     if not vulnerable_ref:
