@@ -15,7 +15,7 @@ from harbor_pipeline.cves import get_optional
 from harbor_pipeline.discovery import Discovery
 from harbor_pipeline.generator import render_task
 from harbor_pipeline.pipeline import CvePipeline
-from harbor_pipeline.scenario import _harden_apt
+from harbor_pipeline.scenario import _harden_apt, _harden_go_proxy
 from harbor_pipeline.providers.fixture import FixtureProvider
 from harbor_pipeline.spec import freeze
 from harbor_pipeline.util import PipelineError, digest
@@ -741,6 +741,18 @@ def test_harden_apt_wraps_model_installs_with_retry():
     assert _harden_apt("FROM python:3.12-slim\nRUN pip install x\n").startswith(
         "FROM python:3.12-slim\nRUN"
     )
+
+
+def test_harden_go_proxy_sets_every_build_stage():
+    body = (
+        "FROM golang:1.22 AS build\n"
+        "RUN go build ./cmd/app\n"
+        "FROM debian:bookworm-slim\n"
+        "COPY --from=build /out/app /opt/app/app\n"
+    )
+    hardened = _harden_go_proxy(body)
+    assert hardened.count("ENV GOPROXY=https://goproxy.cn,direct") == 2
+    assert _harden_go_proxy(hardened) == hardened
 
 
 def test_build_spec_grade_follows_assertion_status(tmp_path: Path):

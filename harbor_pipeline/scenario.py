@@ -427,7 +427,9 @@ def render_synthesis(ctx: ScenarioContext, synthesis) -> dict[str, str]:
         for name, body in (target.get("fixed_overrides") or {}).items():
             put(name, body)
 
-    dockerfile = _harden_apt(files["environment/target/Dockerfile"]).rstrip() + "\n\n"
+    dockerfile = _harden_go_proxy(
+        _harden_apt(files["environment/target/Dockerfile"])
+    ).rstrip() + "\n\n"
     files["environment/target/Dockerfile"] = dockerfile + _SYNTHESIS_LAYER
     files["environment/target/entrypoint.sh"] = (
         _FAULT_ENTRYPOINT if ctx.fault
@@ -505,6 +507,28 @@ def _harden_apt(dockerfile: str) -> str:
         hardened.append(line)
         if line.strip().upper().startswith("FROM "):
             hardened.extend(_APT_WRAPPER.splitlines())
+    return "\n".join(hardened) + "\n"
+
+
+_GO_PROXY_ENV = "ENV GOPROXY=https://goproxy.cn,direct"
+
+
+def _harden_go_proxy(dockerfile: str) -> str:
+    """Set GOPROXY in every build stage.
+
+    proxy.golang.org and sum.golang.org are unreachable from this network, so
+    a Go build that runs in an earlier builder stage would fail before the
+    framework's final layer. Insert the setting after each FROM; a later
+    author-provided ENV can still override it.
+    """
+    if _GO_PROXY_ENV in dockerfile:
+        return dockerfile
+    lines = dockerfile.splitlines()
+    hardened: list[str] = []
+    for line in lines:
+        hardened.append(line)
+        if line.strip().upper().startswith("FROM "):
+            hardened.append(_GO_PROXY_ENV)
     return "\n".join(hardened) + "\n"
 
 
