@@ -534,11 +534,22 @@ def _fetch_fix_commit(
         if clean not in candidates:
             candidates.append(clean)
     for url in candidates[:3]:
-        entry = collector.add(
-            url, "upstream_commit", "Upstream fix commit referenced by the CVE records"
-        )
-        if entry["status"] != "ok":
-            notes.append(f"fix commit fetch failed for {url}: {entry.get('error')}")
+        attempts = [url]
+        api_url = _github_api_commit(url)
+        if api_url and api_url not in attempts:
+            attempts.append(api_url)
+        entry = None
+        for attempt in attempts:
+            fetched = collector.add(
+                attempt,
+                "upstream_commit",
+                "Upstream fix commit referenced by the CVE records",
+            )
+            if fetched["status"] == "ok":
+                entry = fetched
+                break
+            notes.append(f"fix commit fetch failed for {attempt}: {fetched.get('error')}")
+        if entry is None:
             continue
         text = _local_text(entry, collector.run_dir)
         sha = _commit_sha(text, url)
@@ -547,6 +558,18 @@ def _fetch_fix_commit(
             continue
         return sha, entry["id"]
     return None, None
+
+
+def _github_api_commit(url: str) -> str | None:
+    """Map a github.com commit page/patch to the API commit endpoint."""
+    match = re.match(
+        r"https?://github\.com/([^/]+)/([^/]+)/commit/([0-9a-f]{7,40})",
+        url,
+    )
+    if not match:
+        return None
+    owner, repo, sha = match.groups()
+    return f"https://api.github.com/repos/{owner}/{repo}/commits/{sha}"
 
 
 def _commit_sha(text: str, url: str) -> str | None:

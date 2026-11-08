@@ -221,9 +221,15 @@ def _request_headers(settings: SourceSettings, url: str) -> dict[str, str]:
         "User-Agent": "harbor-cve-pipeline/0.1 (source collector)",
         "Accept": "*/*",
     }
-    host = (urllib.parse.urlsplit(url).hostname or "").casefold()
-    if host == "api.github.com" and settings.github_token:
-        headers["Authorization"] = f"Bearer {settings.github_token}"
+    parsed = urllib.parse.urlsplit(url)
+    host = (parsed.hostname or "").casefold()
+    if host == "api.github.com":
+        # The web .patch endpoint is blocked by some networks while the API
+        # remains reachable. Ask the commit endpoint for patch media.
+        if "/commits/" in parsed.path:
+            headers["Accept"] = "application/vnd.github.patch"
+        if settings.github_token:
+            headers["Authorization"] = f"Bearer {settings.github_token}"
         headers["X-GitHub-Api-Version"] = "2022-11-28"
     if host == "services.nvd.nist.gov" and settings.nvd_api_key:
         headers["apiKey"] = settings.nvd_api_key

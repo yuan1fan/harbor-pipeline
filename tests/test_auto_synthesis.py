@@ -851,6 +851,16 @@ def test_commit_sha_reads_patch_header():
     assert discovery_mod._commit_sha(text, "https://example.invalid/x.patch") == COMMIT
 
 
+def test_github_commit_falls_back_to_api_patch():
+    assert (
+        discovery_mod._github_api_commit(
+            f"https://github.com/owner/repo/commit/{COMMIT}.patch"
+        )
+        == f"https://api.github.com/repos/owner/repo/commits/{COMMIT}"
+    )
+    assert discovery_mod._github_api_commit("https://example.invalid/x.patch") is None
+
+
 def test_normalize_rejects_poc_runtime_missing_from_verifier(tmp_path: Path):
     evidence = _write_evidence(tmp_path)
     body = _bundle()
