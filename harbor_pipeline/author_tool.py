@@ -203,7 +203,15 @@ def _spec_for(ctx: ToolContext, bundle: dict) -> dict:
         artifact_identity_value=identity,
         policy_version=ctx.policy.policy_version,
     )
-    spec = freeze(raw, ctx.policy.policy_version)
+    # A stable timestamp keeps the frozen digest identical across the separate
+    # build/probe/submit helper processes. auth_material derives credentials
+    # from that digest, so using utc_now() here made the target and verifier
+    # disagree on APP_PASS/AUTH_PASSWORD.
+    spec = freeze(
+        raw,
+        ctx.policy.policy_version,
+        frozen_at="2000-01-01T00:00:00+00:00",
+    )
     issues = check_evidence_links(spec, ctx.evidence, run_dir=ctx.run_dir) + check_spec_consistency(spec)
     if issues:
         raise PipelineError("; ".join(issues))

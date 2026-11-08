@@ -20,13 +20,19 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def freeze(raw: dict, policy_version: str) -> dict:
-    """Validate a raw spec, attach freeze metadata, and compute its digest."""
+def freeze(raw: dict, policy_version: str, *, frozen_at: str | None = None) -> dict:
+    """Validate a raw spec, attach freeze metadata, and compute its digest.
+
+    ``frozen_at`` is injectable because the author helper re-freezes the same
+    bundle for build and probe in separate processes. Auth material is derived
+    from the frozen digest, so a wall-clock timestamp would give the target
+    and verifier different credentials.
+    """
     spec = copy.deepcopy(raw)
     for key in ("frozen_digest", "frozen_at", "policy_version", "schema_version"):
         spec.pop(key, None)
     spec["schema_version"] = SCHEMA_VERSION
-    spec["frozen_at"] = utc_now()
+    spec["frozen_at"] = frozen_at or utc_now()
     spec["policy_version"] = policy_version
     spec["frozen_digest"] = freeze_digest(spec)
     validate("cve-spec", spec)
