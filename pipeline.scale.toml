@@ -38,7 +38,7 @@ require_harbor_lint = true
 
 [models.default]
 provider = "claude-cli"
-model = "deepseek-flash-cyber"
+model = "deepseek-flash[1m]"
 # 600s was tried overnight: the repair call still returned nothing, and the
 # longer ceiling only doubled how long a stuck repair blocks its candidate.
 timeout_sec = 300
@@ -60,21 +60,21 @@ max_budget_usd = 20.0
 
 [models.solver]
 provider = "claude-code"
-model = "deepseek-flash-cyber"
+model = "deepseek-flash[1m]"
 max_turns = 60
 max_budget_usd = 5.0
 timeout_sec = 1800
 
 [models.reviewer]
 provider = "claude-cli"
-model = "deepseek-flash-cyber"
+model = "deepseek-flash[1m]"
 max_output_tokens = 12000
 timeout_sec = 600
 
 # Legacy completion roles. They are only used when authoring = "legacy".
 [models.repairer]
 provider = "anthropic"
-model = "deepseek-flash-cyber"
+model = "deepseek-flash[1m]"
 max_output_tokens = 32000
 api_base = "${ANTHROPIC_BASE_URL}"
 api_version = "2023-06-01"
@@ -83,7 +83,7 @@ api_version = "2023-06-01"
 # requesting tools even when they are disabled, which corrupts JSON output.
 [models.synthesizer]
 provider = "anthropic"
-model = "deepseek-flash-cyber"
+model = "deepseek-flash[1m]"
 max_output_tokens = 32000
 api_base = "${ANTHROPIC_BASE_URL}"
 api_version = "2023-06-01"
