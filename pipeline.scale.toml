@@ -6,6 +6,7 @@ workers = 1
 # workers * trial_workers * 2, so raise it only with host capacity.
 trial_workers = 1
 prune_images = true
+build_cache_keep_gb = 20
 max_repairs = 6
 # Authoring is one native Claude Code session per candidate. ``legacy`` keeps
 # the old draft + JSON repair path for a fallback during the transition.

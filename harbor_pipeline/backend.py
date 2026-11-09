@@ -776,6 +776,36 @@ def prune_task_images(tag_base: str) -> list[str]:
     return removed
 
 
+def prune_build_cache(keep_gb: int = 20) -> dict:
+    """Cap BuildKit cache and drop dangling images after a finished task.
+
+    Removing per-candidate tags alone leaves the shared build cache and old
+    layers behind; a long campaign can fill the Docker VHDX even though each
+    candidate's images were pruned. This is best effort and never fails a
+    candidate.
+    """
+    docker = shutil.which("docker")
+    if not docker:
+        return {}
+    result = {}
+    for name, command in (
+        ("builder", [docker, "builder", "prune", "-f", "--keep-storage", f"{max(1, keep_gb)}GB"]),
+        ("images", [docker, "image", "prune", "-f"]),
+    ):
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=180,
+                **no_window_kwargs(),
+            )
+            result[name] = completed.returncode
+        except (OSError, subprocess.SubprocessError):
+            result[name] = -1
+    return result
+
+
 def write_image_set(path: Path, image_set: dict) -> Path:
     write_json(path, image_set)
     return path

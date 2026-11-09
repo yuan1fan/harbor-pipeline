@@ -18,7 +18,7 @@ from statistics import median
 from typing import Iterable
 
 from . import SCHEMA_VERSION
-from .backend import prune_task_images
+from .backend import prune_build_cache, prune_task_images
 from .budget import Ledger
 from .config import Config
 from .contracts import MAX_MATRIX_REPEATS, load_experiments, load_policy
@@ -307,6 +307,9 @@ def run_batch(
                     }
                 if cleanup and payload.get("state") in {"RELEASED", "QUARANTINED", "UNSUPPORTED"}:
                     payload["pruned_images"] = _prune_candidate_images(root, candidate.cve_id)
+                    payload["pruned_build_cache"] = prune_build_cache(
+                        config.pipeline.build_cache_keep_gb
+                    )
                 results[candidate.cve_id] = payload
                 write_json(reports_dir / f"{candidate.cve_id}.json", payload)
 

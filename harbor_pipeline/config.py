@@ -20,6 +20,9 @@ class Settings:
     # Remove a candidate's build images once it reaches a terminal state.
     # Enable for campaign runs; keep it off when iterating on a single task.
     prune_images: bool = False
+    # BuildKit cache is the other long-run disk consumer. After each finished
+    # candidate, keep at most this many GB of build cache.
+    build_cache_keep_gb: int = 20
     archive_images: bool = False
     max_repairs: int = 2
     trials: int = 5
