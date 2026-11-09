@@ -1242,16 +1242,16 @@ def test_prepare_benchmark_task_changes_only_the_agent_dockerfile(tmp_path: Path
     assert (source / "environment" / "Dockerfile").read_text().startswith("FROM python")
 
 
-def test_shipped_model_configs_use_deepseek_flash_cyber(monkeypatch):
-    """Every configurable model entry point uses the requested model."""
+def test_shipped_model_configs_use_the_requested_model(monkeypatch):
+    """The shipped author/solver/reviewer models are aligned."""
     import tomllib
     from harbor_pipeline.config import load_config
 
     root = Path(__file__).resolve().parents[1]
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://example.invalid")
     config = load_config(root / "pipeline.toml")
-    assert config.model_for("default").model == "deepseek-flash-cyber"
-    assert config.model_for("repairer").model == "deepseek-flash-cyber"
+    assert config.model_for("default").model == "deepseek-flash[1m]"
+    assert config.model_for("repairer").model == "deepseek-flash[1m]"
 
     api_config = load_config(root / "pipeline.api.toml")
     assert api_config.model_for("default").model == "deepseek-flash-cyber"
