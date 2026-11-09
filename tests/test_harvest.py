@@ -65,14 +65,15 @@ def test_nvd_candidate_keeps_commit_and_advisory_priority():
     assert candidate.priority < 20
 
 
-def test_nvd_candidate_rejects_xss_only():
+def test_nvd_candidate_keeps_xss_for_admin_bot_tasks():
     entry = _nvd_entry(descriptions=[{
         "lang": "en",
         "value": "A reflected cross-site scripting issue exists in the search parameter.",
     }])
     candidate, reason = _candidate_from_nvd(entry, 2026)
-    assert candidate is None
-    assert reason == "no supported primitive"
+    assert reason == ""
+    assert candidate is not None
+    assert "xss" in candidate.primitives
 
 
 def test_nvd_candidate_rejects_rejected_record():

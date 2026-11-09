@@ -11,6 +11,7 @@ task, the instruction and the verifier always agree.
 from __future__ import annotations
 
 import hashlib
+import os
 
 # The framework-owned token. It is always created, even when the goal is not a
 # token read, so the target contract stays uniform and a PoC cannot satisfy a
@@ -18,6 +19,14 @@ import hashlib
 SECRET_PATH = "/opt/app/secret/token"
 SECRET_MOUNT = "/oracle"
 SECRET_NAME_FILE = "/oracle/expected-token"
+
+# Real browser for XSS goals. The PoC only asks this bot to visit a URL; the
+# per-instance token is a non-HttpOnly cookie the payload can read.
+BOT_IMAGE = os.environ.get(
+    "HARBOR_BOT_IMAGE", "mcr.microsoft.com/playwright/python:v1.48.0-jammy"
+)
+BOT_COOKIE_NAME = "harbor_secret"
+BOT_PORT = 8090
 
 # Shared marker volume for the file-write family. Only the target and the
 # independent observer mount it; the verifier main (where the PoC runs) does

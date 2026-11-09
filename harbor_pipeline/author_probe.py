@@ -22,6 +22,9 @@ from typing import Any
 
 from .backend import _kill_tree, build_image, docker_binary, inspect_image
 from .goals import (
+    BOT_COOKIE_NAME,
+    BOT_IMAGE,
+    BOT_PORT,
     LISTING_MOUNT,
     MARKER_DIR,
     MARKER_PATH,
@@ -141,6 +144,8 @@ def compose_text(
     family = goal_family(spec)
     marker = family == "file_write"
     listing = family == "directory_listing"
+    primitive = str((spec.get("task_goal") or {}).get("primitive") or "")
+    xss = family == "secret_read" and primitive == "xss"
     env_block = ""
     environment = target_environment(spec)
     if environment:
@@ -189,6 +194,35 @@ def compose_text(
         reference_mounts.append("ref-oracle-data:/oracle")
         main_mounts.extend(("oracle-data:/oracle", "ref-oracle-data:/oracle-ref"))
         volume_names.extend(("oracle-data", "ref-oracle-data"))
+    bots = ""
+    if xss:
+        def bot_service(name: str, target: str, volume: str) -> str:
+            return f"""  {name}:
+    image: {BOT_IMAGE}
+    command: ["python", "/bot.py"]
+    mem_limit: 1g
+    pids_limit: 512
+    depends_on:
+      {target}:
+        condition: service_healthy
+    environment:
+      BOT_TARGET_URL: "http://{target}:8080"
+      BOT_SECRET_FILE: "/oracle/expected-token"
+      BOT_COOKIE_NAME: "{BOT_COOKIE_NAME}"
+      BOT_PORT: "{BOT_PORT}"
+    volumes:
+      - {volume}:/oracle:ro
+      - {_posix(tests_dir / "bot.py")}:/bot.py:ro
+    expose:
+      - "{BOT_PORT}"
+
+"""
+        bots = bot_service("bot", "target", "oracle-data")
+        bots += bot_service("bot-reference", "target-reference", "ref-oracle-data")
+        main_depends += "      bot:\n        condition: service_started\n"
+        main_depends += (
+            "      bot-reference:\n        condition: service_started\n"
+        )
     target_volumes = ""
     if target_mounts:
         lines = "\n".join(f"      - {mount}" for mount in target_mounts)
@@ -210,18 +244,26 @@ def compose_text(
     if volume_names:
         lines = "\n".join(f"  {name}:" for name in volume_names)
         volumes_block = f"\nvolumes:\n{lines}\n"
+    main_env_lines = [
+        '      TARGET_HOST: "target"',
+        '      TARGET_PORT: "8080"',
+        '      VERIFY_REFERENCE_HOST: "target-reference"',
+        '      VERIFY_REFERENCE_LISTING_FILE: "/listing-ref/expected"',
+        '      VERIFY_REFERENCE_SECRET_FILE: "/oracle-ref/expected-token"',
+        '      VERIFY_REFERENCE_OBSERVER_URL: "http://observer-reference:8081"',
+    ]
+    if xss:
+        main_env_lines.append(f'      BOT_URL: "http://bot:{BOT_PORT}"')
+        main_env_lines.append(
+            f'      VERIFY_REFERENCE_BOT_URL: "http://bot-reference:{BOT_PORT}"'
+        )
     return f"""\
 services:
   main:
     image: {verifier_image}
     depends_on:
 {main_depends}{main_volume_block}    environment:
-      TARGET_HOST: "target"
-      TARGET_PORT: "8080"
-      VERIFY_REFERENCE_HOST: "target-reference"
-      VERIFY_REFERENCE_LISTING_FILE: "/listing-ref/expected"
-      VERIFY_REFERENCE_SECRET_FILE: "/oracle-ref/expected-token"
-      VERIFY_REFERENCE_OBSERVER_URL: "http://observer-reference:8081"
+{chr(10).join(main_env_lines)}
     expose:
       - "8099"
     command: ["/tests/test.sh"]
@@ -245,7 +287,7 @@ services:
       timeout: 5s
       retries: 30
       start_period: 5s
-{observers}{volumes_block}
+{observers}{bots}{volumes_block}
 networks:
   default:
     internal: true

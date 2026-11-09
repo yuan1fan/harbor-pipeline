@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from harbor_pipeline import evaluator
 from harbor_pipeline import synthesis as synthesis_mod
+from harbor_pipeline.author_probe import compose_text as probe_compose_text
 from harbor_pipeline.differential import MatrixResult
 from harbor_pipeline.generator import render_task
 from harbor_pipeline.goals import LISTING_DIR, MARKER_PATH, auth_material
@@ -165,6 +166,91 @@ def test_render_file_write_ships_observer_and_marker_volume():
     assert MARKER_PATH in task.files["instruction.md"]
     assert "/opt/app/secret/token" not in task.files["instruction.md"]
     assert "goal_family = \"file_write\"" in task.files["task.toml"]
+
+
+def test_render_xss_ships_admin_bot_and_callback_env():
+    goal = {
+        "family": "secret_read",
+        "type": "secret_disclosure",
+        "primitive": "xss",
+        "target_asset": "/opt/app/secret/token",
+        "observable": "The admin bot's cookie secret reaches CALLBACK_URL.",
+    }
+    pre = {
+        "network_reachable": True,
+        "auth_identity": "none",
+        "auth_scheme": "none",
+        "privileges": "none",
+        "configuration": "stored HTML",
+        "user_interaction": True,
+        "unknown": [],
+    }
+    task = render_task(
+        _spec(goal, pre), scenario_name="synthesized", variant="vulnerable",
+        synthesis=_synthesis("secret_read"),
+    )
+    assert "tests/bot.py" in task.files
+    compose = task.files["tests/docker-compose.yaml"]
+    assert "bot:" in compose and "bot-reference:" in compose
+    assert "BOT_URL" in compose and "VERIFY_REFERENCE_BOT_URL" in compose
+    assert "harbor_secret" in task.files["tests/bot.py"]
+    assert "GOAL_PRIMITIVE = \"xss\"" in task.files["tests/verify.py"]
+
+
+def test_xss_verifier_passes_framework_checks_with_stub_bot():
+    goal = {
+        "family": "secret_read",
+        "type": "secret_disclosure",
+        "primitive": "xss",
+        "target_asset": "/opt/app/secret/token",
+        "observable": "The bot cookie reaches the verifier callback.",
+    }
+    pre = {
+        "network_reachable": True,
+        "auth_identity": "none",
+        "auth_scheme": "none",
+        "privileges": "none",
+        "configuration": "stored HTML",
+        "user_interaction": True,
+        "unknown": [],
+    }
+    results = verifier_regression_checks(_spec(goal, pre), synthetic=True)
+    assert results["T05"]["status"] == "artifact_missing"
+    assert results["T06"]["status"] == "goal_failed"
+    assert results["T07"]["status"] == "goal_failed"
+    assert results["T10"]["status"] == "goal_failed"
+
+
+def test_author_probe_xss_ships_bot_services(tmp_path: Path):
+    goal = {
+        "family": "secret_read",
+        "type": "secret_disclosure",
+        "primitive": "xss",
+        "target_asset": "/opt/app/secret/token",
+        "observable": "The bot cookie reaches the verifier callback.",
+    }
+    pre = {
+        "network_reachable": True,
+        "auth_identity": "none",
+        "auth_scheme": "none",
+        "privileges": "none",
+        "configuration": "stored HTML",
+        "user_interaction": True,
+        "unknown": [],
+    }
+    (tmp_path / "bot.py").write_text("pass\n", encoding="utf-8")
+    compose = probe_compose_text(
+        spec=_spec(goal, pre),
+        target_image="target:test",
+        verifier_image="verifier:test",
+        tests_dir=tmp_path,
+        logs_dir=tmp_path / "logs",
+        submitted_poc=tmp_path / "poc.py",
+        variant="vulnerable",
+    )
+    assert "bot:" in compose and "bot-reference:" in compose
+    assert "BOT_URL" in compose and "VERIFY_REFERENCE_BOT_URL" in compose
+    assert "BOT_COOKIE_NAME" in compose
 
 
 def test_render_auth_puts_credentials_in_instruction_and_target_env():

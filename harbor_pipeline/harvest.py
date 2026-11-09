@@ -94,10 +94,11 @@ _SECRET_PRIMITIVES: dict[str, re.Pattern[str]] = {
         r"(token|credential|secret)|leak .*(token|credential|secret)",
         re.IGNORECASE,
     ),
+    "xss": re.compile(r"cross-site scripting|\bxss\b", re.IGNORECASE),
 }
 _NON_DISCLOSURE_RE = re.compile(
-    r"cross-site scripting|\bxss\b|cross-site request forgery|\bcsrf\b|"
-    r"open redirect|denial of service|\bdos\b|clickjacking",
+    r"cross-site request forgery|\bcsrf\b|open redirect|denial of service|"
+    r"\bdos\b|clickjacking",
     re.IGNORECASE,
 )
 _ECOSYSTEM_HOSTS = {

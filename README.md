@@ -194,12 +194,14 @@ agent 只能通过 `harbor-author` 接触外部世界：
 - **排除基础设施故障**：攻击前不健康、参考解无法触发、攻击后业务恢复、或 fixed 同样不可用，都不能算题目成功；T12 故障注入仍用于区分 harness 故障。
 - **状态**：已实现（2026-11-06），复用独立 target 实例与 `run_attack` 的健康采样流程。
 
-### 4.6 XSS / Admin Bot（规划中）
+### 4.6 XSS / Admin Bot（`secret_read`，已实现）
 
-- **目标**：注入的脚本在 admin bot 的会话中被执行，并取得 admin session / 受保护数据。
-- **observable**：优先使用 bot 回传的 admin-only 数据，此时归入 `secret_read`；如果以后确实只能证明“脚本执行”而不能取得数据，再单独增加具体目标，不把通用 callback 当作目标。
-- **验证指标**：bot 不访问攻击者可控的外部站点；无注入时不得触发；fixed 版本不执行。
-- **状态**：尚未实现。XSS/RCE/认证绕过只要最终能取得 secret，就继续走 `secret_read`。
+- **目标**：注入的脚本在 admin bot 的会话中执行，并把 bot 的 cookie secret 回传给 verifier。
+- **bot**：使用公开的 Playwright 镜像（默认 `mcr.microsoft.com/playwright/python:v1.48.0-jammy`，可用 `HARBOR_BOT_IMAGE` 覆盖）。bot 从 `/oracle/expected-token` 读取本次 token，写入非 HttpOnly 的 `harbor_secret` cookie，只访问 target host。
+- **PoC 契约**：PoC `POST $BOT_URL/visit`，body 为 `{"url": "http://target:8080/..."}`；payload 读取 `document.cookie` 并发送到 `CALLBACK_URL`。verifier 只接受来自 bot 容器、且包含当前 token 的 callback。
+- **隔离**：reference 和 submitted 各有独立 bot 与 oracle volume；fixed 侧使用 `bot-fixed`。PoC 无法直接读取 bot 的 secret。
+- **SQLi**：`sql_injection` 同样归入 `secret_read`。target 启动时把 token 导入自身数据库，漏洞查询返回/盲注提取 token；无需浏览器。
+- **状态**：已实现（2026-11-08）。XSS/RCE/认证绕过只要最终能取得 secret，继续走 `secret_read`；不能取得 secret 的纯客户端 XSS 仍会 decline。
 
 > Windows 容器 / 仅客户端漏洞 / 安装期 UI 交互类 CVE 暂不支持。
 

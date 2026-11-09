@@ -112,6 +112,22 @@ port = os.environ.get("TARGET_PORT", "8080")
 urllib.request.urlopen(f"http://{host}:{port}/crash", timeout=10).read()
 '''
 
+_STUB_XSS_REFERENCE = '''#!/usr/bin/env python3
+import json
+import os
+import urllib.request
+
+bot = os.environ["BOT_URL"].rstrip("/") + "/visit"
+callback = os.environ["CALLBACK_URL"]
+request = urllib.request.Request(
+    bot,
+    data=json.dumps({"url": "http://target:8080/x", "callback": callback}).encode(),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+urllib.request.urlopen(request, timeout=15).read()
+'''
+
 _CACHE: dict[str, dict[str, dict]] = {}
 _FAILURES: dict[str, TaskError] = {}
 _CACHE_LOCK = threading.Lock()
@@ -192,6 +208,30 @@ def _observer_handler(state: dict):
     return StubObserver
 
 
+def _stub_bot_handler():
+    class StubBot(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+            length = int(self.headers.get("Content-Length") or 0)
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            callback = str(payload.get("callback") or "")
+            if callback:
+                request = urllib.request.Request(
+                    callback,
+                    data=("secret=" + STUB_SECRET).encode("ascii"),
+                    method="POST",
+                )
+                urllib.request.urlopen(request, timeout=5).read()
+            self.send_response(200)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, *_args) -> None:
+            pass
+
+    return StubBot
+
+
 def _verifier_script(spec: dict, *, synthetic: bool) -> str:
     """Render the same verifier the task ships, with a stable placeholder id.
 
@@ -213,6 +253,7 @@ def _verifier_script(spec: dict, *, synthetic: bool) -> str:
         business_path="/business" if synthetic else "/static/hello.txt",
         business_body="ok" if synthetic else "hello",
         goal_family=family,
+        goal_primitive=str((spec.get("task_goal") or {}).get("primitive") or ""),
         auth_identity=str(pre.get("auth_identity") or "none"),
         auth_scheme=str(pre.get("auth_scheme") or "none"),
         auth_user="stub-user",
@@ -241,6 +282,7 @@ def _run_one(
     observer_url: str,
     expected_listing: str = "",
     reference_host: str = "127.0.0.1",
+    bot_url: str = "",
 ) -> dict:
     script_path = workdir / "verify.py"
     script_path.write_text(script, encoding="utf-8")
@@ -273,6 +315,7 @@ def _run_one(
         "VERIFY_EXPECTED_LISTING_REF": expected_listing,
         "VERIFY_EXPECTED_SECRET": STUB_SECRET,
         "VERIFY_EXPECTED_SECRET_REF": STUB_SECRET,
+        **({"BOT_URL": bot_url, "VERIFY_REFERENCE_BOT_URL": bot_url} if bot_url else {}),
     }
     if os.name == "posix":
         # Run the replayed payload as the invoking user. The production image
@@ -322,6 +365,7 @@ def _execute(
     business_path: str,
     business_body: str,
     family: str = "secret_read",
+    primitive: str = "",
 ) -> dict[str, dict]:
     state: dict = {"marker": b"", "alive": True}
     server = ThreadingHTTPServer(
@@ -339,6 +383,11 @@ def _execute(
             _handler(business_path, business_body, reference_state),
         )
         servers.append(reference_server)
+    bot_url = ""
+    if family == "secret_read" and primitive == "xss":
+        bot_server = ThreadingHTTPServer(("127.0.0.1", 0), _stub_bot_handler())
+        servers.append(bot_server)
+        bot_url = f"http://127.0.0.1:{bot_server.server_address[1]}"
     for item in servers:
         threading.Thread(target=item.serve_forever, daemon=True).start()
     try:
@@ -350,7 +399,8 @@ def _execute(
                 "directory_listing": _STUB_LISTING_REFERENCE,
                 "server_request": _STUB_SERVER_REQUEST_REFERENCE,
                 "service_unavailable": _STUB_UNAVAILABLE_REFERENCE,
-            }.get(family, _STUB_REFERENCE), encoding="utf-8")
+                "xss": _STUB_XSS_REFERENCE,
+            }.get(primitive if family == "secret_read" else family, _STUB_REFERENCE), encoding="utf-8")
             fake = workdir / "fake_poc.sh"
             fake.write_text(_FAKE_POC, encoding="utf-8")
             bypass = workdir / "bypass_poc.sh"
@@ -382,6 +432,7 @@ def _execute(
                     observer_url=observer_url,
                     expected_listing=STUB_LISTING if family == "directory_listing" else "",
                     reference_host=reference_host,
+                    bot_url=bot_url,
                 )
             return results
     finally:
@@ -415,6 +466,7 @@ def verifier_regression_checks(spec: dict, *, synthetic: bool) -> dict[str, dict
         business_path=business_path,
         business_body=business_body,
         family=family,
+        primitive=str((spec.get("task_goal") or {}).get("primitive") or ""),
     )
     try:
         _validate(results)
