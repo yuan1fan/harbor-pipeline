@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .errors import TaskError
+from .resources import limited
 from .util import PipelineError, no_window_kwargs, read_json, write_json
 
 _CACHE_RE = re.compile(r"(?im)^\s*(?:=>\s*)?CACHED\s*$")
@@ -31,6 +32,11 @@ _TRANSIENT_BUILD = re.compile(
     r"Temporary failure|502 Bad Gateway|503 Service Unavailable|"
     r"Could not resolve host|Connection reset by peer|"
     r"failed to fetch|network is unreachable"
+)
+_DOCKER_CONNECTION_ERROR = re.compile(
+    r"(?i)error during connect|cannot connect to the docker daemon|"
+    r"is the docker daemon running|"
+    r"failed to receive status: rpc error: code = Unavailable"
 )
 
 
@@ -69,6 +75,19 @@ def docker_binary() -> str:
     return resolved
 
 
+def daemon_available(docker: str) -> bool:
+    """Distinguish a stalled/offline engine from a slow candidate build."""
+    try:
+        result = subprocess.run(
+            [docker, "info", "--format", "{{.ServerVersion}}"],
+            capture_output=True, text=True, errors="replace", timeout=10,
+            **no_window_kwargs(),
+        )
+        return result.returncode == 0 and bool(result.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def _kill_tree(proc: subprocess.Popen) -> None:
     """Kill the docker CLI and every child that inherited its pipes.
 
@@ -81,7 +100,7 @@ def _kill_tree(proc: subprocess.Popen) -> None:
         if os.name == "nt":
             subprocess.run(
                 ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, errors="replace", timeout=30,
                 **no_window_kwargs(),
             )
         else:
@@ -97,42 +116,45 @@ def _kill_tree(proc: subprocess.Popen) -> None:
 
 
 def _run(command: list[str], *, timeout: int, log_path: Path) -> subprocess.CompletedProcess:
+    """Stream build output to disk; keep only a bounded diagnostic tail in RAM."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    proc = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        errors="replace",
-        **no_window_kwargs(),
-    )
-    try:
-        stdout, stderr = proc.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        _kill_tree(proc)
-        # Never wait indefinitely for inherited pipes. If the tree did not
-        # close them, keep the timeout verdict and let the caller fail the
-        # candidate instead of hanging the whole batch.
+    timed_out = False
+    with log_path.open("wb") as handle:
+        handle.write((f"$ {' '.join(command)}\n\n").encode("utf-8"))
+        handle.flush()
+        proc = subprocess.Popen(
+            command, stdout=handle, stderr=subprocess.STDOUT, **no_window_kwargs(),
+        )
         try:
-            stdout, stderr = proc.communicate(timeout=15)
+            proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            stdout, stderr = "", ""
-        log_path.write_text(
-            f"$ {' '.join(command)}\n\n{stdout or ''}\n{stderr or ''}\nTIMEOUT\n",
-            encoding="utf-8",
-        )
+            timed_out = True
+            _kill_tree(proc)
+            try:
+                proc.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                pass
+            handle.write(b"\nTIMEOUT\n")
+            handle.flush()
+        finally:
+            if proc.poll() is None:
+                _kill_tree(proc)
+    if timed_out:
+        available = daemon_available(command[0])
         raise TaskError(
-            "build_error", f"Build exceeded {timeout}s: {' '.join(command[:4])}"
+            "build_error" if available else "infra_error",
+            f"Build exceeded {timeout}s: {' '.join(command[:4])}"
+            + ("; Docker daemon is unavailable" if not available else ""),
+            detail={"log": str(log_path), "daemon_available": available},
         )
-    log_path.write_text(
-        f"$ {' '.join(command)}\n\n{stdout or ''}\n{stderr or ''}\n",
-        encoding="utf-8",
-    )
-    return subprocess.CompletedProcess(
-        command, proc.returncode, stdout, stderr
-    )
+    with log_path.open("rb") as handle:
+        handle.seek(0, 2)
+        handle.seek(max(0, handle.tell() - 100_000))
+        tail = handle.read().decode("utf-8", errors="replace")
+    return subprocess.CompletedProcess(command, proc.returncode, tail, "")
 
 
+@limited("inspect")
 def run_in_image(
     image_ref: str,
     command: str,
@@ -331,6 +353,7 @@ def _pom_dependencies(path: Path) -> dict[str, str]:
     return lock
 
 
+@limited("build")
 def build_image(
     *,
     name: str,
@@ -350,6 +373,11 @@ def build_image(
     if not dockerfile.is_file():
         raise TaskError("build_error", f"Missing Dockerfile {dockerfile}")
     docker = docker_binary()
+    if not daemon_available(docker):
+        raise TaskError(
+            "infra_error", f"Docker daemon is unavailable before building {name}",
+            detail={"log": str(log_path), "daemon_available": False},
+        )
     iid_file = log_path.with_name(log_path.name + ".iid")
     iid_file.parent.mkdir(parents=True, exist_ok=True)
     command = [
@@ -362,6 +390,9 @@ def build_image(
         "-f",
         str(dockerfile),
     ]
+    from .storage import image_labels
+    for key, value in image_labels(context).items():
+        command.extend(["--label", f"{key}={value}"])
     if name == "target" and product_ref:
         # The framework appends this label to every synthesized target. It is
         # the only identity evidence for a Go/Rust binary whose main module is
@@ -380,6 +411,11 @@ def build_image(
         if completed.returncode == 0:
             break
         output = (completed.stderr or "") + (completed.stdout or "")
+        if _DOCKER_CONNECTION_ERROR.search(output):
+            raise TaskError(
+                "infra_error", f"Docker engine connection failed while building {name}",
+                detail={"log": str(log_path)},
+            )
         if attempt == 0 and _TRANSIENT_BUILD.search(output):
             time.sleep(5)
             continue
@@ -403,6 +439,13 @@ def build_image(
             log_path=log_path.with_suffix(".identity.json"),
         )
         identity["source_ref"] = image_label(digest, "org.harbor.source-ref")
+    from .resources import policy as resource_policy
+    if resource_policy().get("prune_images"):
+        from .storage import cleanup_replaced_images
+        try:
+            cleanup_replaced_images(context)
+        except (OSError, ValueError, PipelineError, subprocess.SubprocessError):
+            pass  # Terminal cleanup retries; never invalidate a successful build.
     return ImageBuild(
         name=name,
         context=context,
@@ -512,6 +555,17 @@ def build_task_images(
             timeout_sec=timeout_sec,
             no_cache=no_cache,
         )
+    bot_context = task_dir / "tests" / "bot"
+    if (bot_context / "Dockerfile").is_file():
+        from .author_probe import ensure_bot_image
+        from .goals import BOT_IMAGE
+        ensure_bot_image(probe_root=log_dir / "base-images", log_dir=log_dir, timeout_sec=timeout_sec)
+        identity, architecture = inspect_image(BOT_IMAGE, dockerfile=bot_context / "Dockerfile")
+        builds["bot"] = ImageBuild(
+            name="bot", context=bot_context, dockerfile=bot_context / "Dockerfile",
+            image_ref=BOT_IMAGE, image_digest=identity, architecture=architecture,
+            duration_sec=0.0, log_path=log_dir / "base-bot.log", cached=True,
+        )
     return {
         "tag_base": tag_base,
         "harbor_version": harbor_version,
@@ -536,6 +590,7 @@ def _container_logs(docker: str, name: str) -> str:
     return text or "<empty container log>"
 
 
+@limited("target-health")
 def preflight_target(
     image_ref: str,
     *,
@@ -765,7 +820,7 @@ def prune_task_images(tag_base: str) -> list[str]:
     removed: list[str] = []
     for ref in removable:
         result = subprocess.run(
-            [docker, "image", "rm", "-f", ref],
+            [docker, "image", "rm", ref],
             capture_output=True,
             text=True,
             timeout=300,
@@ -777,7 +832,7 @@ def prune_task_images(tag_base: str) -> list[str]:
 
 
 def prune_build_cache(keep_gb: int = 20) -> dict:
-    """Cap BuildKit cache and drop dangling images after a finished task.
+    """Cap BuildKit cache after a finished task.
 
     Removing per-candidate tags alone leaves the shared build cache and old
     layers behind; a long campaign can fill the Docker VHDX even though each
@@ -790,7 +845,6 @@ def prune_build_cache(keep_gb: int = 20) -> dict:
     result = {}
     for name, command in (
         ("builder", [docker, "builder", "prune", "-f", "--keep-storage", f"{max(1, keep_gb)}GB"]),
-        ("images", [docker, "image", "prune", "-f"]),
     ):
         try:
             completed = subprocess.run(
