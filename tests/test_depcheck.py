@@ -207,3 +207,18 @@ def test_wheel_pythons_lists_the_published_tags():
         "onnx-1.3.0.tar.gz",
     ]
     assert depcheck._wheel_pythons(files) == ["2.7", "3.5", "3.6"]
+
+
+def test_untagged_go_module_is_not_reported_as_unpublished(monkeypatch):
+    monkeypatch.setattr(
+        depcheck, "lookup",
+        lambda *args: {"versions": ["v0.0.0-20260101120000-abcdef123456"]},
+    )
+    monkeypatch.setattr(depcheck, "version_exists", lambda *args: True)
+    bundle = _bundle(
+        ecosystem="go",
+        name="example.com/mod/subpkg",
+        base="golang:1.25-bookworm",
+        files={"go.mod": "module x\n\ngo 1.25\n\nrequire example.com/mod/subpkg v{{REF}}\n"},
+    )
+    assert depcheck.check_bundle(bundle, SourceSettings()) == []

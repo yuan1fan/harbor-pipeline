@@ -48,7 +48,16 @@ def _parse(ecosystem: str, name: str, settings: SourceSettings) -> list[str]:
         return list((data.get("versions") or {}).keys())
     if ecosystem == "go":
         result = fetch(f"https://proxy.golang.org/{name}/@v/list", settings)
-        return [line.strip() for line in result.body.decode().splitlines() if line.strip()]
+        versions = [line.strip() for line in result.body.decode().splitlines() if line.strip()]
+        if not versions:
+            # The proxy's list excludes untagged pseudo-versions. A module
+            # that is only published as a commit must still count as real.
+            latest = fetch(f"https://proxy.golang.org/{name}/@latest", settings)
+            data = json.loads(latest.body.decode("utf-8"))
+            version = str((data or {}).get("Version") or "").strip()
+            if version:
+                versions = [version]
+        return versions
     if ecosystem == "maven":
         group, _, artifact = name.partition(":")
         if not group or not artifact:

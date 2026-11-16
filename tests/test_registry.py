@@ -74,3 +74,18 @@ def test_build_context_includes_log_and_real_versions(tmp_path, monkeypatch):
     assert "foo" in context and "9.9.9" in context
     assert "1.2.0" in context
     assert "do not guess" in context
+
+
+def test_go_lookup_accepts_a_pseudo_version_when_the_list_is_empty(monkeypatch):
+    calls = []
+
+    def fetch(url, _settings, max_redirects=3):
+        calls.append(url)
+        if url.endswith("/@v/list"):
+            return SimpleNamespace(body=b"")
+        return SimpleNamespace(body=json.dumps({"Version": "v0.0.0-20260101120000-abcdef123456"}).encode())
+
+    monkeypatch.setattr(registry, "fetch", fetch)
+    result = registry.lookup("go", "example.com/mod/subpkg", SourceSettings())
+    assert result["versions"] == ["v0.0.0-20260101120000-abcdef123456"]
+    assert calls[-1].endswith("/@latest")
