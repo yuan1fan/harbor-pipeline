@@ -1714,3 +1714,28 @@ def test_reload_matrix_folds_derived_health_records():
     matrix = _reload_matrix(data)
     assert [r["experiment_id"] for r in matrix.records] == ["T03", "T01"]
     assert matrix.expectation("T03").met is True
+
+
+def test_transient_dns_source_error_backs_off_instead_of_burning_the_candidate(
+    tmp_path: Path, monkeypatch,
+):
+    config = Config(pipeline=Settings(output_dir=str(tmp_path), max_repairs=1))
+    pipeline = CvePipeline(
+        config=config, cve_id="CVE-2024-23334", run_id="retry-dns"
+    )
+    store = JobStore(tmp_path, "retry-dns", "CVE-2024-23334")
+    job = store.create()
+    store.fail(
+        job,
+        TaskError(
+            "source_error",
+            "Cannot fetch the official CVE record for CVE-2024-23334: "
+            "Refusing non-public address 198.18.2.216 for cveawg.mitre.org",
+        ),
+    )
+    sleeps: list[int] = []
+    monkeypatch.setattr("harbor_pipeline.pipeline.time.sleep", lambda seconds: sleeps.append(seconds))
+    retried = pipeline._prepare_retry(store.load())
+    assert retried.state == "REPAIRING"
+    assert retried.attempts["retry"] == 1
+    assert sleeps == [15]

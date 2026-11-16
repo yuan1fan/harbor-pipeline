@@ -2835,6 +2835,14 @@ class CvePipeline:
                 "502",
                 "503",
                 "504",
+                # A local resolver/proxy can briefly map public CVE hosts to
+                # a benchmark-range fake IP. That is an outage, not a bad CVE.
+                "refusing non-public address",
+                "non-public address",
+                "name or service not known",
+                "temporary failure in name resolution",
+                "eai_again",
+                "dns",
             )
         )
         retry_limit = self.config.pipeline.max_repairs
