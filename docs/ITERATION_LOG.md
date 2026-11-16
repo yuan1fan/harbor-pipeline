@@ -188,3 +188,9 @@
 - 修改：记录本文件。
 - 测试/结果：`master`/`origin/master` 指向本轮提交；工作区仅保留 3 个 triage JSON；无 `harbor_pipeline`/batch 进程；5 个未终态候选未继续运行。
 
+
+## 第 101 轮：Go 目标与错误 ecosystem 元数据
+
+- 观察：`CVE-2026-25539` 的 author bundle 把 `product.ecosystem` 写成 `pypi`，但 `target.base_image=golang:1.25-bookworm`，目标文件包含 `main.go`；原 gate 去查 PyPI，得到误导性的 “not published”。
+- 修改：当目标镜像为 `golang:*`、目标文件包含 `.go`/`go.mod`、且 product name 含 `/` 时，用 Go registry 进行检查；不修改 spec 的其他字段。这是基于目标语言的事实推断，不扩大目标类型。
+- 测试/结果：新增 depcheck 回归；真实 `CVE-2026-25539/author/bundle.json` 现在 `check_bundle(...) == []`。全量非容器测试 391 collected，5 个容器用例 skipped，exit 0。
