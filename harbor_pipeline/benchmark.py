@@ -206,7 +206,8 @@ def _trial_record(trial: TrialOutcome) -> dict:
     failure = None
     if trial.exception is not None:
         failure = str(
-            trial.exception.get("type")
+            trial.exception.get("exception_type")
+            or trial.exception.get("type")
             or trial.exception.get("name")
             or "agent_exception"
         )

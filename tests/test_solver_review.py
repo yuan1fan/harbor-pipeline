@@ -228,3 +228,29 @@ def test_solver_review_attaches_provenance(monkeypatch):
     assert result["review"]["verdict"] == "release"
     assert result["task_digest"] == task.task_digest
     assert result["instruction_sha256"] == digest(task.files["instruction.md"])
+
+
+def test_native_reviewer_reported_usd_is_charged_to_batch_ledger(tmp_path, monkeypatch):
+    from harbor_pipeline.budget import Ledger
+    task = render_task(_spec(), scenario_name="synthesized", variant="vulnerable", synthesis=_white_box())
+    config = _config()
+    pipeline = CvePipeline(config=config, cve_id=CVE, run_id="review-cost", scenario="auto", output_root=tmp_path)
+    pipeline.store.create()
+    pipeline.store.write_artifact("image-set.json", {})
+    pipeline.store.write_artifact("evidence-index.json", {"sources": []})
+    monkeypatch.setattr(pipeline, "_solver_task", lambda *_args: (task, tmp_path / "solver-task"))
+    ledger = Ledger.load_or_create(tmp_path / "ledger.json", limits={"calls": 2, "tokens": 100_000, "usd": 1.0})
+    monkeypatch.setattr(pipeline, "_ledger", lambda: ledger)
+    monkeypatch.setattr(solver_review, "run_solver", lambda *a, **kw: {"trials": [], "successes": 1})
+    # Actual saved usage from CVE-2026-21894's reviewer checkpoint.
+    usage = {"input_tokens": 60493, "output_tokens": 13876, "usd": 0.649365}
+    monkeypatch.setattr(solver_review, "solver_review", lambda *a, **kw: {
+        "review_protocol": 2, "task_digest": task.task_digest,
+        "instruction_sha256": digest(task.files["instruction.md"]), "usage": usage,
+        "review": {"verdict": "release", "score": 4, "fidelity": "supported"},
+    })
+    pipeline.solver_review(_spec())
+    used = ledger.snapshot()["used"]
+    assert used["usd"] == usage["usd"]
+    assert used["tokens"] == 74369
+    assert used["calls"] == 1

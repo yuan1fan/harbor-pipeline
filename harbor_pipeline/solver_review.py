@@ -20,6 +20,7 @@ from typing import Any
 
 from .benchmark import measure_model_baseline
 from .config import Config
+from .errors import TaskError
 from .generator import GeneratedTask
 from .harbor_adapter import HarborAdapter
 from .providers import build_provider
@@ -64,6 +65,46 @@ REVIEW_SCHEMA: dict[str, Any] = {
         "reason": {"type": "string", "minLength": 10, "maxLength": 2000},
     },
 }
+
+
+def require_valid_solver(solver: dict) -> None:
+    """An authentication/setup failure is not evidence about task fairness."""
+    for trial in solver.get("trials") or []:
+        exception = trial.get("exception") or {}
+        if exception or ("reward" in trial and trial["reward"] is None):
+            name = str(exception.get("exception_type") or exception.get("type")
+                       or exception.get("name") or trial.get("failure_type") or "missing_reward")
+            raise TaskError(
+                "infra_error", f"Solver trial has no valid assessment: {name}; retry the solver before reviewing the task",
+                detail={"solver_failure_type": name, "solver_trial_dir": trial.get("trial_dir")},
+            )
+
+
+def build_evidence_context(spec: dict, image_set: dict, evidence: dict, run_dir: Path) -> str:
+    """Keep the cited fix inside the reviewer's bounded evidence window.
+
+    Full npm dependency inventories can exceed 400k characters. They used to
+    precede the actual sources and consume the entire 90k review input window.
+    """
+    from .evaluator import _locked_dependency
+    from .synthesis import _evidence_excerpts
+
+    runtime = {}
+    product = (spec.get("product") or {}).get("name")
+    for variant, built in (image_set.get("variants") or {"vulnerable": image_set}).items():
+        identity = built.get("runtime_identity") or {}
+        dependencies = identity.get("dependencies") or built.get("dependencies") or {}
+        name, version = _locked_dependency(dependencies, product)
+        runtime[variant] = {
+            "target_digest": built.get("target_digest"),
+            "runtime_identity": {key: identity.get(key) for key in ("image", "verified", "source_ref", "method")},
+            "product_dependency": {"name": name, "version": version},
+            "dependency_count": len(dependencies),
+        }
+    fix_id = (spec.get("fix_basis") or {}).get("source_id")
+    ordered = sorted(evidence.get("sources") or [], key=lambda source: source.get("id") != fix_id)
+    excerpts = _evidence_excerpts({**evidence, "sources": ordered}, run_dir, limit=60_000)
+    return json.dumps({"spec": spec, "runtime_images": runtime}, ensure_ascii=False, sort_keys=True) + "\n" + excerpts
 
 
 def run_solver(
@@ -218,6 +259,7 @@ def review_task(
     usage_out: dict | None = None,
 ) -> dict:
     """Ask a text model to judge fairness after seeing the intended solution."""
+    require_valid_solver(solver)
     provider = build_provider(config, role)
     settings = config.model_for(role)
     presentation = dict(presentation or {})
