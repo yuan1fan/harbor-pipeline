@@ -190,7 +190,9 @@ def test_render_xss_ships_admin_bot_and_callback_env():
         synthesis=_synthesis("secret_read"),
     )
     assert "tests/bot.py" in task.files
+    assert "playwright==1.48.0" in task.files["tests/bot/Dockerfile"]
     compose = task.files["tests/docker-compose.yaml"]
+    assert "context: ./bot" in compose
     assert "bot:" in compose and "bot-reference:" in compose
     assert "BOT_URL" in compose and "VERIFY_REFERENCE_BOT_URL" in compose
     assert "harbor_secret" in task.files["tests/bot.py"]

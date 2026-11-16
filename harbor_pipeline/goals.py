@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from pathlib import Path
 
 # The framework-owned token. It is always created, even when the goal is not a
 # token read, so the target contract stays uniform and a PoC cannot satisfy a
@@ -22,9 +23,10 @@ SECRET_NAME_FILE = "/oracle/expected-token"
 
 # Real browser for XSS goals. The PoC only asks this bot to visit a URL; the
 # per-instance token is a non-HttpOnly cookie the payload can read.
-BOT_IMAGE = os.environ.get(
-    "HARBOR_BOT_IMAGE", "mcr.microsoft.com/playwright/python:v1.48.0-jammy"
-)
+DEFAULT_BOT_IMAGE = "harbor-pipeline/base-bot:" + hashlib.sha256(
+    (Path(__file__).parent / "assets/base_bot.Dockerfile").read_bytes()
+).hexdigest()[:12]
+BOT_IMAGE = os.environ.get("HARBOR_BOT_IMAGE", DEFAULT_BOT_IMAGE)
 BOT_COOKIE_NAME = "harbor_secret"
 BOT_PORT = 8090
 

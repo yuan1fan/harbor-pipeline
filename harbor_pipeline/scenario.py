@@ -11,6 +11,7 @@ Dockerfiles or verifier logic at runtime.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from dataclasses import dataclass
 from string import Template
 from typing import Protocol
@@ -18,6 +19,7 @@ from typing import Protocol
 from .goals import (
     BOT_COOKIE_NAME,
     BOT_IMAGE,
+    DEFAULT_BOT_IMAGE,
     BOT_PORT,
     LISTING_DIR,
     LISTING_MOUNT,
@@ -481,6 +483,9 @@ def render_synthesis(ctx: ScenarioContext, synthesis) -> dict[str, str]:
         rendered["tests/observer.py"] = _OBSERVER
     if xss_family:
         rendered["tests/bot.py"] = _BOT
+        rendered["tests/bot/Dockerfile"] = (
+            Path(__file__).parent / "assets/base_bot.Dockerfile"
+        ).read_text(encoding="utf-8")
     return rendered
 
 
@@ -901,9 +906,10 @@ def _verifier_compose(
     bots = ""
     if xss:
         def bot_service(name: str, target: str, volume: str) -> str:
+            build = "    build:\n      context: ./bot\n" if not image and BOT_IMAGE == DEFAULT_BOT_IMAGE else ""
             return f"""  {name}:
     image: {BOT_IMAGE}
-    command: ["python", "/bot.py"]
+{build}    command: ["python", "/bot.py"]
     mem_limit: 1g
     pids_limit: 512
     depends_on:

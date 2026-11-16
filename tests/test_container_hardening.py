@@ -7,16 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from harbor_pipeline.scenario import ScenarioContext, _TEST_SH, _synthesis_entrypoint, _verify_script
+from harbor_pipeline.scenario import ScenarioContext, _BOT, _TEST_SH, _synthesis_entrypoint, _verify_script
 
 pytestmark = pytest.mark.skipif(os.environ.get("HARBOR_RUN_DOCKER_TESTS") != "1", reason="set HARBOR_RUN_DOCKER_TESTS=1 for container regression tests")
 
 
-def container(script):
+def container(script, *, image="python:3.12-slim-bookworm", memory="256m"):
     name = "harbor-hardening-test-" + uuid.uuid4().hex[:12]
     try:
         result = subprocess.run(["docker", "run", "--rm", "--name", name, "--network", "none",
-            "--memory", "256m", "--cpus", "1", "-i", "python:3.12-slim-bookworm", "python", "-"],
+            "--memory", memory, "--cpus", "1", "-i", image, "python", "-"],
             input=script, capture_output=True, text=True, timeout=90)
         assert result.returncode == 0, result.stderr
         return json.loads(result.stdout)
@@ -28,6 +28,56 @@ def context(**kw):
     return ScenarioContext(cve_id="CVE-0000-0000", product="demo", variant="vulnerable",
         probe="reference", version="1", secret_path="/opt/app/secret/token",
         spec_digest="a" * 64, attribution_grade="A", **kw)
+
+
+def test_real_xss_bot_visits_page_and_runs_cookie_callback(tmp_path):
+    """Replay CVE-2026-15920's bot startup stage without authoring a CVE."""
+    from harbor_pipeline.author_probe import ensure_bot_image
+    from harbor_pipeline.goals import BOT_IMAGE
+    ensure_bot_image(probe_root=tmp_path / "runtime", log_dir=tmp_path / "logs")
+    script = "BOT_SOURCE=" + repr(_BOT) + "\n" + r'''
+import json, os, threading, urllib.request, urllib.parse
+from pathlib import Path
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+secret = 'a' * 48
+Path('/tmp/bot-secret').write_text(secret)
+os.environ['BOT_TARGET_URL'] = 'http://127.0.0.1:8080'
+os.environ['BOT_SECRET_FILE'] = '/tmp/bot-secret'
+ns = {'__name__': 'bot_test'}
+exec(compile(BOT_SOURCE, 'bot.py', 'exec'), ns)
+seen = threading.Event()
+class Target(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path.startswith('/callback?'):
+            cookie = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get('cookie', [''])[0]
+            if 'harbor_secret=' + secret in cookie:
+                seen.set()
+            body = b'ok'
+        else:
+            body = b'<script>fetch("/callback?cookie="+encodeURIComponent(document.cookie))</script>'
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *args):
+        pass
+target = ThreadingHTTPServer(('127.0.0.1', 8080), Target)
+bot = ThreadingHTTPServer(('127.0.0.1', 8090), ns['Bot'])
+for server in (target, bot):
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+try:
+    request = urllib.request.Request('http://127.0.0.1:8090/visit',
+        data=json.dumps({'url': 'http://127.0.0.1:8080/'}).encode(),
+        headers={'Content-Type': 'application/json'})
+    with urllib.request.urlopen(request, timeout=40) as response:
+        assert response.status == 200
+    assert seen.wait(5)
+    print(json.dumps({'cookie_callback_observed': True}))
+finally:
+    for server in (target, bot):
+        server.shutdown()
+        server.server_close()
+'''
+    assert container(script, image=BOT_IMAGE, memory="1g")["cookie_callback_observed"]
 
 
 def test_listing_answer_rotates_even_with_a_supplied_old_name():

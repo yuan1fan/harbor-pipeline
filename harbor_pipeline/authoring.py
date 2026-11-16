@@ -528,6 +528,11 @@ relevant library source into `target/reference/` (read it with `exec`; it is
 inert because the app uses the installed package), list it in `source_paths`,
 and say what it shows. Do not copy the reference PoC or the answer.
 
+Before submitting, read the files named in `source_paths` and check every hint
+that claims a value is recorded there. If a necessary route suffix comes from
+an installed dependency rather than the shown files, give that routing context
+in a hint or expose the corresponding read-only source excerpt.
+
 After the matrix passes, a real solver agent attempts the task and a reviewer
 sees the intended solution. If that review asks for white-box or more context,
 it is a task defect: update `presentation`, resubmit, and do not weaken the

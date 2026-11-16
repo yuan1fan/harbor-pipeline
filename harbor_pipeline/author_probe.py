@@ -20,10 +20,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from .backend import _kill_tree, build_image, docker_binary, inspect_image
+from .backend import _kill_tree, build_image, daemon_available, docker_binary, inspect_image
+from .errors import TaskError
 from .goals import (
     BOT_COOKIE_NAME,
     BOT_IMAGE,
+    DEFAULT_BOT_IMAGE,
     BOT_PORT,
     LISTING_MOUNT,
     MARKER_DIR,
@@ -33,6 +35,7 @@ from .goals import (
     goal_family,
 )
 from .util import digest, no_window_kwargs, read_json, write_json
+from .resources import limited
 
 _BASE_VERIFIER = "base_verifier.Dockerfile"
 _BASE_ENVIRONMENT = "base_environment.Dockerfile"
@@ -69,6 +72,8 @@ def ensure_base_images(
     include_solver: bool = False,
 ) -> dict[str, dict[str, Any]]:
     """Build the task-independent images once and reuse them by digest."""
+    if not daemon_available(docker_binary()):
+        raise TaskError("infra_error", "Docker daemon is unavailable before preparing shared images")
     probe_root.mkdir(parents=True, exist_ok=True)
     images: dict[str, dict[str, Any]] = {}
     plans = [
@@ -107,6 +112,22 @@ def ensure_base_images(
             "cached": build.cached,
         }
     return images
+
+
+def ensure_bot_image(*, probe_root: Path, log_dir: Path, timeout_sec: int = 1800) -> dict:
+    """Prepare XSS runtime only when a task actually needs its browser."""
+    if BOT_IMAGE != DEFAULT_BOT_IMAGE:
+        return {"image_ref": BOT_IMAGE, "custom": True}
+    context = probe_root / "base" / "bot"
+    context.mkdir(parents=True, exist_ok=True)
+    dockerfile = context / "Dockerfile"
+    dockerfile.write_text(_asset("base_bot.Dockerfile").read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+    if image_exists(BOT_IMAGE):
+        identity, architecture = inspect_image(BOT_IMAGE, dockerfile=dockerfile)
+        return {"image_ref": BOT_IMAGE, "image_digest": identity, "architecture": architecture, "cached": True}
+    built = build_image(name="base-bot", context=context, image_ref=BOT_IMAGE,
+                        log_path=log_dir / "base-bot.log", timeout_sec=timeout_sec)
+    return built.to_json()
 
 
 def target_environment(spec: dict) -> dict[str, str]:
@@ -299,6 +320,7 @@ def _posix(path: Path) -> str:
     return Path(path).resolve().as_posix()
 
 
+@limited("probe")
 def run_compose(
     *,
     compose_file: Path,
@@ -333,26 +355,28 @@ def run_compose(
     )
     timed_out = False
     try:
-        stdout, stderr = proc.communicate(timeout=timeout_sec)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        _kill_tree(proc)
         try:
-            stdout, stderr = proc.communicate(timeout=15)
+            stdout, stderr = proc.communicate(timeout=timeout_sec)
         except subprocess.TimeoutExpired:
-            stdout, stderr = "", ""
-    output = (stdout or "") + (stderr or "")
-    log_path.write_text(output[-60_000:], encoding="utf-8")
-    try:
-        subprocess.run(
-            [docker, "compose", "-p", project, "-f", str(compose_file), "down", "-v", "--remove-orphans"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            **no_window_kwargs(),
-        )
-    except (OSError, subprocess.SubprocessError):
-        pass
+            timed_out = True
+            _kill_tree(proc)
+            try:
+                stdout, stderr = proc.communicate(timeout=15)
+            except subprocess.TimeoutExpired:
+                stdout, stderr = "", ""
+        output = (stdout or "") + (stderr or "")
+        log_path.write_text(output[-60_000:], encoding="utf-8")
+    finally:
+        # Disk-full/log-write errors must not leave the probe topology alive.
+        if proc.poll() is None:
+            _kill_tree(proc)
+        try:
+            subprocess.run(
+                [docker, "compose", "-p", project, "-f", str(compose_file), "down", "-v", "--remove-orphans"],
+                capture_output=True, text=True, timeout=120, **no_window_kwargs(),
+            )
+        except (OSError, subprocess.SubprocessError):
+            pass
     return {
         "exit": None if timed_out else proc.returncode,
         "timed_out": timed_out,
@@ -480,6 +504,8 @@ def probe_pair(
     timeout_sec: int = 420,
 ) -> dict[str, Any]:
     """Run the vulnerable and fixed probes sequentially and combine them."""
+    if (spec.get("task_goal") or {}).get("primitive") == "xss":
+        ensure_bot_image(probe_root=work_root / "base-images", log_dir=work_root / "build-logs")
     results: dict[str, dict[str, Any]] = {}
     for variant in ("vulnerable", "fixed"):
         results[variant] = probe_variant(
