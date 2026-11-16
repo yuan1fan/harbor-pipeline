@@ -222,3 +222,22 @@ def test_untagged_go_module_is_not_reported_as_unpublished(monkeypatch):
         files={"go.mod": "module x\n\ngo 1.25\n\nrequire example.com/mod/subpkg v{{REF}}\n"},
     )
     assert depcheck.check_bundle(bundle, SourceSettings()) == []
+
+
+def test_golang_target_overrides_a_mislabeled_product_ecosystem(monkeypatch):
+    calls = []
+
+    def lookup(ecosystem, name, settings):
+        calls.append(ecosystem)
+        return {"versions": ["v1.0.0", "v1.2.0"]}
+
+    monkeypatch.setattr(depcheck, "lookup", lookup)
+    monkeypatch.setattr(depcheck, "version_exists", lambda *args: True)
+    bundle = _bundle(
+        ecosystem="pypi",
+        name="github.com/example/mod",
+        base="golang:1.25-bookworm",
+        files={"main.go": "package main\n", "go.mod": "module example.com/mod\n"},
+    )
+    assert depcheck.check_bundle(bundle, SourceSettings()) == []
+    assert calls and calls[0] == "go"

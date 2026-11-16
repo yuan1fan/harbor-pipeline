@@ -133,6 +133,19 @@ def check_bundle(bundle: dict, settings: SourceSettings) -> list[str]:
     ecosystem = str(product.get("ecosystem") or "")
     name = str(product.get("name") or "")
     versions = bundle.get("versions") or {}
+    target = bundle.get("target") or {}
+    base_image = str(target.get("base_image") or "")
+    target_files = target.get("files") or {}
+    # The model occasionally labels a Go module as pypi. The target image and
+    # files are stronger evidence than that label; querying PyPI for a module
+    # path produces a misleading "not published" verdict.
+    if (
+        ecosystem in {"pypi", "npm", "maven"}
+        and base_image.startswith("golang:")
+        and "/" in name
+        and any(str(filename).endswith((".go", "go.mod")) for filename in target_files)
+    ):
+        ecosystem = "go"
     issues: list[str] = []
     if ecosystem not in {"pypi", "npm", "go", "maven"} or not name:
         return issues
@@ -162,7 +175,6 @@ def check_bundle(bundle: dict, settings: SourceSettings) -> list[str]:
                 f"{name!r}. Newest published versions include: {sample}."
             )
 
-    base_image = str((bundle.get("target") or {}).get("base_image") or "")
     language, runtime = _base_runtime(base_image)
     if language == "python" and ecosystem == "pypi":
         for key in ("vulnerable_ref", "fixed_ref"):
