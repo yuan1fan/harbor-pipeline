@@ -224,10 +224,10 @@ def _request_headers(settings: SourceSettings, url: str) -> dict[str, str]:
     parsed = urllib.parse.urlsplit(url)
     host = (parsed.hostname or "").casefold()
     if host == "api.github.com":
-        # The web .patch endpoint is blocked by some networks while the API
-        # remains reachable. Ask the commit endpoint for patch media.
+        # Some networks return an empty body for both web .patch and API patch
+        # media. Commit JSON includes per-file patches and the resolved SHA.
         if "/commits/" in parsed.path:
-            headers["Accept"] = "application/vnd.github.patch"
+            headers["Accept"] = "application/vnd.github+json"
         if settings.github_token:
             headers["Authorization"] = f"Bearer {settings.github_token}"
         headers["X-GitHub-Api-Version"] = "2022-11-28"

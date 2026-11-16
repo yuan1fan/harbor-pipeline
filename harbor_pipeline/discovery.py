@@ -551,6 +551,9 @@ def _fetch_fix_commit(
                 "Upstream fix commit referenced by the CVE records",
             )
             if fetched["status"] == "ok":
+                if not _local_text(fetched, collector.run_dir).strip():
+                    notes.append(f"fix commit response from {attempt} is empty; trying the next source")
+                    continue
                 entry = fetched
                 break
             notes.append(f"fix commit fetch failed for {attempt}: {fetched.get('error')}")
