@@ -38,6 +38,15 @@ _DOCKER_CONNECTION_ERROR = re.compile(
     r"is the docker daemon running|"
     r"failed to receive status: rpc error: code = Unavailable"
 )
+# Docker Desktop occasionally leaves the builder session open after BuildKit
+# has already exported and tagged the image. These markers prove that the
+# image is usable even when ``docker build`` never wrote its iidfile.
+_COMPLETED_EXPORT = re.compile(
+    r"(?im)^#\d+\s+(?:naming to|unpacking to)\b.*?\bdone\s*$"
+)
+_BUILD_FATAL_AFTER_EXPORT = re.compile(
+    r"(?i)ERROR:|failed to solve|failed to build|did not complete successfully"
+)
 
 
 @dataclass
@@ -353,6 +362,48 @@ def _pom_dependencies(path: Path) -> dict[str, str]:
     return lock
 
 
+def _read_log_tail(path: Path, limit: int = 100_000) -> str:
+    try:
+        with path.open("rb") as handle:
+            handle.seek(0, 2)
+            handle.seek(max(0, handle.tell() - limit))
+            return handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _log_shows_completed_export(path: Path) -> bool:
+    """Return true when BuildKit finished tagging and unpacking the image."""
+    text = _read_log_tail(path)
+    matches = list(_COMPLETED_EXPORT.finditer(text))
+    if not matches or "naming to" not in text.lower() or "unpacking to" not in text.lower():
+        return False
+    # A later fatal error may still make the tag unusable.
+    return not _BUILD_FATAL_AFTER_EXPORT.search(text[matches[-1].end():])
+
+
+def _recover_image_after_export(docker: str, image_ref: str, iid_file: Path, log_path: Path) -> str | None:
+    """Recover an image whose CLI session hung after a successful export."""
+    if not _log_shows_completed_export(log_path):
+        return None
+    try:
+        result = subprocess.run(
+            [docker, "image", "inspect", "--format", "{{.Id}}", image_ref],
+            capture_output=True, text=True, errors="replace", timeout=30,
+            **no_window_kwargs(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    image_id = (result.stdout or "").strip()
+    if result.returncode != 0 or not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+        return None
+    try:
+        iid_file.write_text(image_id + "\n", encoding="ascii")
+    except OSError:
+        return None
+    return image_id
+
+
 @limited("build")
 def build_image(
     *,
@@ -407,7 +458,29 @@ def build_image(
     started = time.monotonic()
     completed = None
     for attempt in range(2):
-        completed = _run(command, timeout=timeout_sec, log_path=log_path)
+        try:
+            completed = _run(command, timeout=timeout_sec, log_path=log_path)
+        except TaskError as exc:
+            if exc.category.code != "build_error":
+                raise
+            recovered = _recover_image_after_export(docker, image_ref, iid_file, log_path)
+            if recovered:
+                completed = subprocess.CompletedProcess(
+                    command, 0, _read_log_tail(log_path), ""
+                )
+                break
+            if _log_shows_completed_export(log_path):
+                raise TaskError(
+                    "infra_error",
+                    f"Docker build exported {name} but the CLI did not return; "
+                    "restart Docker Desktop before retrying",
+                    detail={
+                        "log": str(log_path),
+                        "daemon_available": True,
+                        "post_export_hang": True,
+                    },
+                ) from exc
+            raise
         if completed.returncode == 0:
             break
         output = (completed.stderr or "") + (completed.stdout or "")

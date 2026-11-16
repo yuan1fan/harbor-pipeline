@@ -219,3 +219,82 @@ def test_xss_runtime_installs_python_package_matching_browser_image():
     assert "mcr.microsoft.com/playwright/python:v1.48.0-jammy" in text
     assert "playwright==1.48.0" in text
     assert goals.BOT_IMAGE.startswith("harbor-pipeline/base-bot:")
+
+
+def _post_export_log(tmp_path, *, fatal=False):
+    log = tmp_path / "build.log"
+    text = (
+        "#10 exporting layers 1.0s done\n"
+        "#10 naming to docker.io/example/target:latest done\n"
+        "#10 unpacking to docker.io/example/target:latest 0.2s done\n"
+        "#10 DONE 1.2s\n"
+    )
+    if fatal:
+        text += "ERROR: failed to solve: manifest rejected\n"
+    log.write_text(text + "\nTIMEOUT\n", encoding="utf-8")
+    return log
+
+
+def test_post_export_timeout_recovers_the_tagged_image(tmp_path, monkeypatch):
+    context = tmp_path / "context"
+    context.mkdir()
+    (context / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    log = _post_export_log(tmp_path)
+    image_id = "sha256:" + "a" * 64
+
+    monkeypatch.setattr(backend, "docker_binary", lambda: "docker")
+    monkeypatch.setattr(backend, "daemon_available", lambda _docker: True)
+    monkeypatch.setattr(backend, "_run", lambda *args, **kwargs: (_ for _ in ()).throw(
+        TaskError("build_error", "Build exceeded 1s: docker build")))
+    monkeypatch.setattr(backend.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(
+        returncode=0, stdout=image_id + "\n", stderr=""))
+    monkeypatch.setattr(backend, "inspect_image", lambda *args, **kwargs: (image_id, "amd64"))
+    monkeypatch.setattr(backend, "dependency_lock", lambda _context: {})
+
+    built = backend.build_image(
+        name="target", context=context, image_ref="example/target:latest",
+        log_path=log, timeout_sec=1,
+    )
+    assert built.image_digest == image_id
+    assert (log.parent / "build.log.iid").read_text(encoding="ascii").strip() == image_id
+
+
+def test_post_export_timeout_without_a_tag_is_infra_error(tmp_path, monkeypatch):
+    context = tmp_path / "context"
+    context.mkdir()
+    (context / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    log = _post_export_log(tmp_path)
+
+    monkeypatch.setattr(backend, "docker_binary", lambda: "docker")
+    monkeypatch.setattr(backend, "daemon_available", lambda _docker: True)
+    monkeypatch.setattr(backend, "_run", lambda *args, **kwargs: (_ for _ in ()).throw(
+        TaskError("build_error", "Build exceeded 1s: docker build")))
+    monkeypatch.setattr(backend.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(
+        returncode=1, stdout="", stderr="No such image"))
+
+    with pytest.raises(TaskError) as caught:
+        backend.build_image(
+            name="target", context=context, image_ref="example/target:latest",
+            log_path=log, timeout_sec=1,
+        )
+    assert caught.value.category.code == "infra_error"
+    assert caught.value.detail.get("post_export_hang") is True
+
+
+def test_failed_export_timeout_remains_a_build_error(tmp_path, monkeypatch):
+    context = tmp_path / "context"
+    context.mkdir()
+    (context / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    log = _post_export_log(tmp_path, fatal=True)
+
+    monkeypatch.setattr(backend, "docker_binary", lambda: "docker")
+    monkeypatch.setattr(backend, "daemon_available", lambda _docker: True)
+    monkeypatch.setattr(backend, "_run", lambda *args, **kwargs: (_ for _ in ()).throw(
+        TaskError("build_error", "Build exceeded 1s: docker build")))
+
+    with pytest.raises(TaskError) as caught:
+        backend.build_image(
+            name="target", context=context, image_ref="example/target:latest",
+            log_path=log, timeout_sec=1,
+        )
+    assert caught.value.category.code == "build_error"
