@@ -177,6 +177,8 @@ class CvePipeline:
         self.synthesis = None
         self.run_id = run_id or new_run_id("run")
         base = Path(output_root) if output_root else Path(config.pipeline.output_dir)
+        from .resources import configure
+        configure(config.pipeline, output_dir=base)
         self.root = base.resolve() / self.run_id
         self.store = JobStore(base, self.run_id, cve_id)
         self.adapter = adapter or HarborAdapter(
@@ -1082,6 +1084,8 @@ class CvePipeline:
                     timeout_sec=self.config.pipeline.command_timeout_sec,
                 )
             except TaskError as exc:
+                if exc.category.code == "infra_error":
+                    raise
                 raise TaskError(
                     "build_error", f"Base images could not be built: {exc}"
                 ) from exc
@@ -1421,6 +1425,12 @@ class CvePipeline:
 
     def build(self, spec: dict, task: GeneratedTask, job=None) -> dict:
         job = job or self.store.load()
+        if (spec.get("task_goal") or {}).get("primitive") == "xss":
+            author_probe.ensure_bot_image(
+                probe_root=self.store.path("author-probe", "base-images"),
+                log_dir=self.store.path("build-logs"),
+                timeout_sec=self.config.pipeline.command_timeout_sec,
+            )
         if job.state in {"BUILT", "VALIDATING", "VALIDATED", "RELEASED"}:
             try:
                 image_set = self.store.read_artifact("image-set.json")
@@ -1833,9 +1843,8 @@ class CvePipeline:
             return None
         job = job or self.store.load()
         solver_task, solver_dir = self._solver_task(spec, job)
-        evidence_context = (
-            json.dumps({"spec": spec, "runtime_images": self.store.read_artifact("image-set.json")}, ensure_ascii=False, sort_keys=True)
-            + "\n" + synthesis_mod._evidence_excerpts(self._evidence(), self.store.root, limit=60000)
+        evidence_context = solver_review_mod.build_evidence_context(
+            spec, self.store.read_artifact("image-set.json"), self._evidence(), self.store.root,
         )
         review_input = digest({
             "task_files": solver_task.files,
@@ -1859,6 +1868,7 @@ class CvePipeline:
             and existing.get("instruction_sha256")
             == digest(solver_task.files.get("instruction.md", ""))
         ):
+            solver_review_mod.require_valid_solver(existing.get("solver") or {})
             return existing
         solver = solver_review_mod.run_solver(
             self.adapter,
@@ -1875,6 +1885,8 @@ class CvePipeline:
                 self._ledger().charge("usd", solver_cost)
             except PipelineError:
                 pass
+        self.store.write_artifact("solver-result.json", solver)
+        solver_review_mod.require_valid_solver(solver)
         presentation = (
             dict((self.synthesis.bundle.get("presentation") or {}))
             if self.synthesis
@@ -1894,8 +1906,11 @@ class CvePipeline:
         try:
             ledger.charge("calls", 1)
             ledger.charge("tokens", float(usage.get("input_tokens") or 0) + float(usage.get("output_tokens") or 0))
-            if usage.get("cost_usd") is not None:
-                ledger.charge("usd", float(usage["cost_usd"]))
+            cost = usage.get("cost_usd")
+            if cost is None:
+                cost = usage.get("usd")
+            if cost is not None:
+                ledger.charge("usd", float(cost))
         except PipelineError as exc:
             raise TaskError("budget_exhausted", str(exc)) from exc
         verdict = review["review"].get("verdict")
