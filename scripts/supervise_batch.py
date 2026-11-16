@@ -18,6 +18,8 @@ from pathlib import Path
 import psutil
 
 TERMINAL = {"RELEASED", "QUARANTINED", "UNSUPPORTED"}
+_ACTIVE_CHILD: subprocess.Popen | None = None
+_ACTIVE_RUN_ID: str | None = None
 
 
 def _counts(run_dir: Path) -> dict[str, int]:
@@ -51,6 +53,26 @@ def _pipeline_pid(run_id: str) -> int | None:
     return None
 
 
+def _terminate_tree(process: psutil.Process) -> None:
+    """Stop a pipeline process and its author/build/session descendants."""
+    try:
+        targets = process.children(recursive=True) + [process]
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return
+    for item in targets:
+        try:
+            item.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    _, alive = psutil.wait_procs(targets, timeout=10)
+    for item in alive:
+        try:
+            item.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    psutil.wait_procs(alive, timeout=5)
+
+
 def _launch(args, log_path: Path) -> subprocess.Popen:
     command = [
         sys.executable,
@@ -70,13 +92,18 @@ def _launch(args, log_path: Path) -> subprocess.Popen:
         str(args.workers),
         "--trial-workers",
         str(args.trial_workers),
+        "--output-dir",
+        str(args.output_dir),
     ]
     if args.limit:
         command.extend(["--limit", str(args.limit)])
     log = log_path.open("a", encoding="utf-8")
     log.write(f"\n=== supervisor restart {datetime.now().isoformat(timespec='seconds')} ===\n")
     log.flush()
-    return subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+    child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+    global _ACTIVE_CHILD
+    _ACTIVE_CHILD = child
+    return child
 
 
 def main() -> int:
@@ -91,15 +118,19 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, default=Path("runs"))
     parser.add_argument("--poll", type=float, default=300.0)
     args = parser.parse_args()
+    global _ACTIVE_RUN_ID
+    _ACTIVE_RUN_ID = args.run_id
 
     total = min(
         len(json.loads(args.input.read_text(encoding="utf-8"))),
         args.limit or 10**9,
     )
     run_dir = args.output_dir / args.run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
     log_path = args.output_dir / f"{args.run_id}-batch.log"
     status_path = args.output_dir / f"{args.run_id}-supervisor.log"
     restarts = 0
+    child: subprocess.Popen | None = None
 
     while True:
         counts = _counts(run_dir)
@@ -123,4 +154,11 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except KeyboardInterrupt:
+        child = _ACTIVE_CHILD
+        if child is not None and child.poll() is None:
+            _terminate_tree(psutil.Process(child.pid))
+        elif _ACTIVE_RUN_ID:
+            pid = _pipeline_pid(_ACTIVE_RUN_ID)
+            if pid is not None:
+                _terminate_tree(psutil.Process(pid))
         raise SystemExit(130)

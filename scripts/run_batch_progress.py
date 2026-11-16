@@ -15,6 +15,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import psutil
+
 TERMINAL = ("RELEASED", "QUARANTINED", "UNSUPPORTED")
 BAR_WIDTH = 30
 
@@ -80,6 +82,53 @@ def _draw(text: str, width: int) -> int:
     return max(width, len(text))
 
 
+def _log_tail(path: Path, offset: int, *, max_bytes: int = 8192) -> str:
+    """Read diagnostics from this invocation only, with bounded allocation."""
+    try:
+        with path.open("rb") as handle:
+            handle.seek(0, 2)
+            handle.seek(max(offset, handle.tell() - max_bytes))
+            text = handle.read(max_bytes).decode("utf-8", errors="replace")
+        return "\n".join(text.strip().splitlines()[-25:])
+    except OSError:
+        return "(could not read this invocation's log)"
+
+
+def _stamp(path: Path) -> tuple[int, int] | None:
+    try:
+        stat = path.stat()
+        return stat.st_mtime_ns, stat.st_size
+    except OSError:
+        return None
+
+
+def _terminate_tree(process: subprocess.Popen) -> None:
+    """Stop the batch and every author/build helper it spawned.
+
+    ``Popen.terminate()`` only stops the direct child on Windows. The native
+    Claude Code authors, ``harbor-author`` helpers and Docker builds are
+    grandchildren, so a plain Ctrl-C used to leave them running after this
+    wrapper exited. Kill the whole tree instead.
+    """
+    try:
+        parent = psutil.Process(process.pid)
+        targets = parent.children(recursive=True) + [parent]
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        targets = []
+    for item in targets:
+        try:
+            item.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    _, alive = psutil.wait_procs(targets, timeout=10)
+    for item in alive:
+        try:
+            item.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    psutil.wait_procs(alive, timeout=5)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True, help="candidate JSON list")
@@ -101,6 +150,9 @@ def main() -> int:
 
     run_dir = args.output_dir / args.run_id
     log_path = args.output_dir / f"{args.run_id}-batch.log"
+    report_path = run_dir / "batch-report.json"
+    report_before = _stamp(report_path)
+    log_offset = 0
     total = _candidate_count(args.input, args.limit)
 
     child: subprocess.Popen | None = None
@@ -124,15 +176,24 @@ def main() -> int:
             str(args.workers),
             "--trial-workers",
             str(args.trial_workers),
+            "--output-dir",
+            str(args.output_dir),
         ]
         if args.limit:
             command.extend(["--limit", str(args.limit)])
         if args.json:
             command.append("--json")
-        log = log_path.open("w", encoding="utf-8")
-        print(f"batch log: {log_path}")
-        print(f"run dir:   {run_dir}")
-        child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+        print(f"batch log: {log_path}", flush=True)
+        print(f"run dir:   {run_dir}", flush=True)
+        with log_path.open("ab") as log:
+            log.write(f"\n=== batch invocation {datetime.now(timezone.utc).isoformat()} ===\n".encode("utf-8"))
+            log.flush()
+            log_offset = log.tell()
+            try:
+                child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+            except OSError as exc:
+                print(f"failed to start batch: {exc}", file=sys.stderr)
+                return 2
 
     width = 0
     try:
@@ -150,11 +211,7 @@ def main() -> int:
     except KeyboardInterrupt:
         sys.stdout.write("\n")
         if child is not None and child.poll() is None:
-            child.terminate()
-            try:
-                child.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                child.kill()
+            _terminate_tree(child)
         print("interrupted")
         return 130
 
@@ -165,16 +222,33 @@ def main() -> int:
         name = str(state.get("state") or "")
         if name in counts:
             counts[name] += 1
+    done = sum(counts.values())
+    exit_code = child.returncode if child is not None else 0
+    report_after = _stamp(report_path)
+    new_report = report_after is not None and report_after != report_before
+    # Exit 3 is a normal completed batch with quarantined tasks only if the
+    # batch actually wrote its report. Old states do not prove a new run ended.
+    completed = done >= total and (
+        args.watch_only or (exit_code in (0, 3) and new_report)
+    )
+    label = "finished" if completed else ("failed" if exit_code else "incomplete")
     print(
-        f"finished: {sum(counts.values())}/{total} terminal | "
+        f"{label}: {done}/{total} terminal | "
         f"released {counts['RELEASED']} quarantined {counts['QUARANTINED']} "
-        f"unsupported {counts['UNSUPPORTED']}"
+        f"unsupported {counts['UNSUPPORTED']} | exit code {exit_code}"
     )
     if not args.watch_only:
         print(f"log:    {log_path}")
-        print(f"report: {run_dir / 'report.json'}")
+        if new_report:
+            print(f"report: {report_path}")
+        else:
+            print("report: not generated by this invocation; progress above is saved state")
+        if not completed:
+            tail = _log_tail(log_path, log_offset)
+            if tail:
+                print("This invocation's log tail:\n" + tail, file=sys.stderr)
     if child is not None:
-        return child.returncode or 0
+        return exit_code or (0 if completed else 1)
     return 0
 
 

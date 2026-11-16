@@ -38,7 +38,7 @@ python -m harbor_pipeline quality --run-dir runs/capacity-s0 \
 
 ## 并发与内存
 
-`workers × trial_workers` 决定容器峰值：每个 trial 至少起 target、verifier main、fixed-runner/target-fixed 等容器，还可能有 observer。Windows Docker Desktop 的 WSL VM 有硬内存上限，出题批次应保持 `workers = 1`、`trial_workers = 1`；提高并发前先用 `preflight` 检查内存预算和可回收磁盘。
+每个 trial 会启动 target、verifier、fixed-runner 等多个容器。`pipeline.scale.toml` 现在通过 `docker_slots = 2` 限制整机重资源阶段，候选 worker 可以单独增加，让模型等待与构建／验证重叠。`trial_workers = 1` 仍建议保留；先从 6 个候选 worker 观测，再决定是否增加。未启用 Docker 槽位的配置仍按 `workers × trial_workers` 放大并发。提高并发前执行 `preflight`，具体参数、镜像清理和 Windows 磁盘回收见 [资源管理说明](RESOURCE_MANAGEMENT.md)。
 
 ## 分片与数据集合并
 

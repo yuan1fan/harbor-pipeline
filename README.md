@@ -197,7 +197,7 @@ agent 只能通过 `harbor-author` 接触外部世界：
 ### 4.6 XSS / Admin Bot（`secret_read`，已实现）
 
 - **目标**：注入的脚本在 admin bot 的会话中执行，并把 bot 的 cookie secret 回传给 verifier。
-- **bot**：使用公开的 Playwright 镜像（默认 `mcr.microsoft.com/playwright/python:v1.48.0-jammy`，可用 `HARBOR_BOT_IMAGE` 覆盖）。bot 从 `/oracle/expected-token` 读取本次 token，写入非 HttpOnly 的 `harbor_secret` cookie，只访问 target host。
+- **bot**：在公开的 `mcr.microsoft.com/playwright/python:v1.48.0-jammy` 上预安装匹配的 `playwright==1.48.0`，按需构建并复用框架 bot 镜像（可用 `HARBOR_BOT_IMAGE` 指定已准备的运行镜像）。bot 从 `/oracle/expected-token` 读取本次 token，写入非 HttpOnly 的 `harbor_secret` cookie，只访问 target host。
 - **PoC 契约**：PoC `POST $BOT_URL/visit`，body 为 `{"url": "http://target:8080/..."}`；payload 读取 `document.cookie` 并发送到 `CALLBACK_URL`。verifier 只接受来自 bot 容器、且包含当前 token 的 callback。
 - **隔离**：reference 和 submitted 各有独立 bot 与 oracle volume；fixed 侧使用 `bot-fixed`。PoC 无法直接读取 bot 的 secret。
 - **SQLi**：`sql_injection` 同样归入 `secret_read`。target 启动时把 token 导入自身数据库，漏洞查询返回/盲注提取 token；无需浏览器。
