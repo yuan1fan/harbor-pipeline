@@ -18,7 +18,7 @@ from statistics import median
 from typing import Iterable
 
 from . import SCHEMA_VERSION
-from .backend import prune_build_cache, prune_task_images
+from .backend import prune_build_cache
 from .budget import Ledger
 from .config import Config
 from .contracts import MAX_MATRIX_REPEATS, load_experiments, load_policy
@@ -320,21 +320,16 @@ def run_batch(
 
 
 def _prune_candidate_images(root: Path, cve_id: str) -> list[str]:
-    """Drop a finished candidate's build images; never fail the batch for it."""
+    """Clean all terminal revisions, even if build never wrote image-set.json."""
+    from .storage import cleanup_run
     try:
-        image_set = read_json(root / cve_id / "image-set.json")
-    except (OSError, PipelineError):
-        return []
-    bases = image_set.get("tag_bases") or [image_set.get("tag_base")]
-    removed: list[str] = []
-    for base in bases:
-        if not base:
-            continue
+        return cleanup_run(root, apply=True, only_cve=cve_id)["removed"]
+    except Exception as exc:  # noqa: BLE001 - cleanup cannot change an admission verdict
         try:
-            removed.extend(prune_task_images(str(base)))
-        except Exception:  # noqa: BLE001 - storage cleanup is best effort
-            continue
-    return removed
+            write_json(root / cve_id / "storage-cleanup.json", {"removed": [], "error": str(exc)})
+        except OSError:
+            pass  # A full disk must not turn cleanup reporting into a batch failure.
+        return []
 
 
 def _summary(

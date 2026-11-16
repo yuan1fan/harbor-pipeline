@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from .backend import docker_binary
+from .resources import limited
 from .util import PipelineError, digest, no_window_kwargs
 
 OWNER_LABEL = "harbor-pipeline.author-workspace"
@@ -55,6 +56,7 @@ def cleanup(workspace: Path) -> None:
             pass
 
 
+@limited("debug-start")
 def start(workspace: Path, *, kind: str, image: str, network: str = "none", ttl: int = 7200) -> dict:
     if network not in {"none", "bridge"}:
         raise PipelineError("Author scratch network must be 'none' or 'bridge'")
@@ -92,6 +94,7 @@ def start(workspace: Path, *, kind: str, image: str, network: str = "none", ttl:
     return {"ok": True, "status": "started", "container": _name(workspace, kind), "network": network}
 
 
+@limited("debug-exec")
 def execute(workspace: Path, kind: str, command: str, *, timeout: int = 120) -> dict:
     data = inspect(workspace, kind)
     if not data or not data.get("State", {}).get("Running"):

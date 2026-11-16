@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -94,6 +95,11 @@ def build_parser() -> argparse.ArgumentParser:
     archive_cmd = sub.add_parser("archive-release", help="export measured images and a pinned executable task for offline replay")
     archive_cmd.add_argument("--release-dir", type=Path, required=True)
     archive_cmd.add_argument("--output-dir", type=Path, required=True)
+    storage_cmd = sub.add_parser("storage", help="preview or clean terminal candidates' unused Docker images")
+    storage_cmd.add_argument("--run-dir", type=Path, required=True)
+    storage_cmd.add_argument("--apply", action="store_true", help="remove only previewed unused task images; preserve releases")
+    check_config_cmd = sub.add_parser("check-config", help="check local configuration and connection inheritance without Docker or model calls")
+    check_config_cmd.add_argument("--json", action="store_true")
 
     doctor_cmd = sub.add_parser("doctor", help="check host, Harbor, Docker and policy")
     doctor_cmd.add_argument("--json", action="store_true")
@@ -254,6 +260,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "storage":
+        from .storage import cleanup_run
+        try:
+            print(json.dumps(cleanup_run(args.run_dir, apply=args.apply), indent=2, ensure_ascii=False))
+            return 0
+        except (OSError, ValueError, PipelineError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     if args.command == "archive-release":
         from .image_archive import archive_release_images
         try:
@@ -281,7 +295,13 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({key: value for key, value in report.items() if key not in {"tasks", "sampling"}}, indent=2))
         return 0
     try:
-        config = load_config(args.config or _default_config())
+        from .connection_env import inherited_connection
+        config_path = args.config or _default_config()
+        imported = inherited_connection(config_path)
+        os.environ.update(imported)
+        if imported:
+            print("connection: inherited " + ", ".join(sorted(imported)) + " from local Claude settings", file=sys.stderr)
+        config = load_config(config_path)
     except FileNotFoundError as exc:
         print(f"error: configuration not found: {exc}", file=sys.stderr)
         return 2
@@ -290,6 +310,20 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
+        if args.command == "check-config":
+            payload = {"ok": True, "config": str(config_path),
+                       "authoring": config.pipeline.authoring,
+                       "docker_slots": config.pipeline.docker_slots,
+                       "inherited_connection_keys": sorted(imported)}
+            if args.json:
+                print(json.dumps(payload, indent=2))
+            else:
+                print(f"configuration OK: {config_path} (local check; no Docker or model calls)")
+            return 0
+        from .resources import configure
+        if getattr(args, "output_dir", None):
+            config.pipeline.output_dir = str(args.output_dir)
+        configure(config.pipeline)
         if args.command == "doctor":
             return _doctor(config, args)
         if args.command == "preflight":
@@ -636,6 +670,7 @@ def _preflight(config, args) -> int:
         min_free_gb=args.min_free_gb,
         required_ports=tuple(args.required_port or DEFAULT_REQUIRED_PORTS),
         task_memory_mb=args.task_memory_mb,
+        docker_slots=config.pipeline.docker_slots,
         clean=args.clean,
         clean_images=args.clean_images,
     )

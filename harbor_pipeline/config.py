@@ -12,6 +12,9 @@ from .util import PipelineError
 @dataclass
 class Settings:
     output_dir: str = "runs"
+    # CLI only: reuse a complete saved Claude endpoint/auth pair when no
+    # connection overrides are set in the shell. Values stay in process env.
+    inherit_claude_settings: bool = False
     workers: int = 1
     # Trials inside one candidate's differential matrix. In a batch this is
     # multiplied by the candidate concurrency, so keep it small: each trial
@@ -23,6 +26,14 @@ class Settings:
     # BuildKit cache is the other long-run disk consumer. After each finished
     # candidate, keep at most this many GB of build cache.
     build_cache_keep_gb: int = 20
+    # Host-wide heavy operations, independent of candidate/LLM concurrency.
+    # Zero disables admission for compatibility with small standalone runs.
+    docker_slots: int = 0
+    resource_dir: str = "work/resources"
+    min_free_memory_mb: int = 4096
+    min_free_disk_gb: int = 15
+    resource_wait_sec: int = 7200
+    resource_disk_paths: list[str] = field(default_factory=list)
     archive_images: bool = False
     max_repairs: int = 2
     trials: int = 5
@@ -129,7 +140,17 @@ def load_config(path: Path | None = None) -> Config:
     config.sources.github_token = os.environ.get("GITHUB_TOKEN") or config.sources.github_token
     config.sources.nvd_api_key = os.environ.get("NVD_API_KEY") or config.sources.nvd_api_key
     settings = config.pipeline
-    for name in ("archive_images", "prune_images", "solver_review", "require_harbor_lint"):
+    for name in ("docker_slots", "min_free_memory_mb", "min_free_disk_gb"):
+        if type(getattr(settings, name)) is not int or getattr(settings, name) < 0:
+            raise PipelineError(f"{name} must be a nonnegative integer")
+    for name in ("resource_wait_sec", "build_cache_keep_gb"):
+        if type(getattr(settings, name)) is not int or getattr(settings, name) < 1:
+            raise PipelineError(f"{name} must be a positive integer")
+    if not isinstance(settings.resource_dir, str) or not settings.resource_dir.strip():
+        raise PipelineError("resource_dir must be a nonempty local directory")
+    if not isinstance(settings.resource_disk_paths, list) or any(not isinstance(p, str) or not p for p in settings.resource_disk_paths):
+        raise PipelineError("resource_disk_paths must be a list of paths")
+    for name in ("archive_images", "prune_images", "solver_review", "require_harbor_lint", "inherit_claude_settings"):
         if not isinstance(getattr(settings, name), bool):
             raise PipelineError(f"{name} must be a boolean")
     for name in ("workers", "trial_workers", "trials", "min_trials", "max_calls", "max_total_tokens", "max_context_bytes", "command_timeout_sec"):

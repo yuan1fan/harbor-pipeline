@@ -1,10 +1,18 @@
 [pipeline]
 output_dir = "runs"
-# Concurrent candidates in a batch.
+# Reuse only the endpoint/auth pair from local Claude settings when this
+# PowerShell has no connection overrides. No credentials are written here.
+inherit_claude_settings = true
+# Concurrent author/LLM candidates; Docker phases have a separate host queue.
 workers = 1
-# Concurrent trials inside one candidate. Batch container count is roughly
-# workers * trial_workers * 2, so raise it only with host capacity.
+# Concurrent trials inside one candidate. Docker admission below caps the
+# aggregate build/probe/trial concurrency across candidate workers.
 trial_workers = 1
+docker_slots = 2
+resource_dir = "work/resources"
+min_free_memory_mb = 4096
+min_free_disk_gb = 15
+resource_wait_sec = 7200
 prune_images = true
 build_cache_keep_gb = 20
 max_repairs = 6

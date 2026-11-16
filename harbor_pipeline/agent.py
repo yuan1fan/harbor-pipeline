@@ -227,6 +227,8 @@ def agent_environment(
         "HARBOR_AUTHOR_PYTHON", _python_identity()
     )
     env.update(extra_env or {})
+    from .resources import child_environment
+    env.update(child_environment())
     return env
 
 

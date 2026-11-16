@@ -93,6 +93,8 @@ def _load_context() -> ToolContext:
             config = Config()
     else:
         config = Config()
+    from .resources import configure
+    configure(config.pipeline, inherit=True)
     try:
         revision = int(os.environ.get("HARBOR_AUTHOR_REVISION") or 1)
     except ValueError:
@@ -662,6 +664,13 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         ctx = _load_context()
+        from .resources import policy as resource_policy
+        if args.subcommand in {"build", "probe"} and resource_policy().get("slots"):
+            # Debug targets are disposable; retaining both while starting a
+            # full probe doubles the candidate's target memory footprint.
+            from . import author_debug
+            for kind in ("vulnerable", "fixed"):
+                author_debug.stop(ctx.workspace, kind)
         if args.subcommand in {"shell", "debug", "cleanup"}:
             from . import author_debug
             if args.subcommand == "cleanup":

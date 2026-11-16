@@ -100,6 +100,7 @@ def run_preflight(
     min_free_gb: float = 60.0,
     required_ports: tuple[int, ...] = DEFAULT_REQUIRED_PORTS,
     task_memory_mb: int = 2048,
+    docker_slots: int = 0,
     clean: bool = False,
     clean_images: bool = False,
 ) -> dict:
@@ -232,6 +233,13 @@ def run_preflight(
 
     # Concurrency versus the WSL memory limit.
     peak_trials = max(1, workers) * max(1, trial_workers)
+    if docker_slots:
+        peak_trials = min(peak_trials, docker_slots)
+        checks.append(_check(
+            "pass", "docker-admission",
+            f"{workers} candidate workers share {docker_slots} Docker slots across builds/probes/trials; "
+            "persistent debug services and host model clients consume additional memory",
+        ))
     estimate_gb = peak_trials * task_memory_mb / 1024 + 2.0
     if estimate_gb > mem_total_gb * 0.85:
         checks.append(_check(

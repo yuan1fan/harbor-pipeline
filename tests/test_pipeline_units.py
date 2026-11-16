@@ -936,14 +936,15 @@ def test_run_batch_prunes_released_candidate_images(tmp_path: Path, monkeypatch)
     )
     calls: list[str] = []
 
-    def fake_prune(tag_base: str) -> list[str]:
-        calls.append(tag_base)
-        return [f"{tag_base}-target:latest"]
+    def fake_prune(run_root, cve_id):
+        calls.append((run_root, cve_id))
+        return ["harbor-pipeline/cve-2024-23334-vulnerable-r1-target:latest"]
 
-    monkeypatch.setattr(batch_module, "prune_task_images", fake_prune)
+    monkeypatch.setattr(batch_module, "_prune_candidate_images", fake_prune)
+    monkeypatch.setattr(batch_module, "prune_build_cache", lambda _keep: {})
     run_batch(plan, Config(), output_root=tmp_path, prune_images=True)
 
-    assert calls == ["harbor-pipeline/cve-2024-23334-vulnerable-r1"]
+    assert calls == [(root, "CVE-2024-23334")]
     report = json.loads(
         (root / "reports" / "CVE-2024-23334.json").read_text(encoding="utf-8")
     )

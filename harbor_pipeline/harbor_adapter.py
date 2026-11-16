@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .errors import TaskError
+from .resources import limited
 from .util import PipelineError, hidden_console_kwargs, no_window_kwargs, read_json, write_json
 
 HARBOR_VERSION_REQUIRED = "0.23.0"
@@ -105,7 +106,7 @@ def classify_trial(trial: TrialOutcome) -> str | None:
     classified by the evidence status the trusted verifier recorded.
     """
     if trial.exception is not None:
-        name = str(trial.exception.get("type") or trial.exception.get("name") or "")
+        name = str(trial.exception.get("exception_type") or trial.exception.get("type") or trial.exception.get("name") or "")
         if "Build" in name or "Docker" in name or "Image" in name:
             return "build_error"
         return "infra_error"
@@ -225,6 +226,7 @@ class HarborAdapter:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
         return f"{prefix}-{stamp}-{uuid.uuid4().hex[:6]}"
 
+    @limited("harbor", concurrency_arg="n_concurrent")
     def run(
         self,
         task_paths: list[Path],
