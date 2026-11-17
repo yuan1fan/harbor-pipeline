@@ -12,44 +12,43 @@
 
 下图对应当前自动出题主链：`--scenario auto`、`authoring = "agent"`、`run --until release`。Resolver 既可补全初始证据，也可接受 author 在阅读源码、构建或 probe 后发起的证据复核。
 
-使用 GitHub 原生 [Mermaid 渲染](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams#creating-mermaid-diagrams)：在 GitHub 网页上可使用图中的缩放、平移控件查看细节。
-
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "wrappingWidth": 240, "padding": 24, "nodeSpacing": 50, "rankSpacing": 60}}}%%
 flowchart TD
-    IN(["输入 CVE 候选"]) --> DISC["collect / discovery<br/>收集证据，确定性选择并校验版本对"]
+    IN(["输入 CVE 候选"]) --> DISC["collect / discovery<br/>收集证据、选择版本对<br/>确定性校验来源与身份"]
     DISC --> PAIR{"初始证据与版本对完整？"}
-    PAIR -->|"是"| AUTHOR["Author 原生会话<br/>编写 target、fixed variant 和 PoC"]
-    PAIR -->|"否，且启用 resolver"| RESOLVER["Evidence resolver<br/>补全证据或复核被质疑的版本对"]
+    PAIR -->|"是"| AUTHOR["Author 原生会话<br/>编写漏洞版与修复版<br/>编写参考 PoC"]
+    PAIR -->|"否，且启用 resolver"| RESOLVER["Evidence resolver<br/>补全证据或复核版本对"]
     PAIR -->|"否，且未启用 resolver"| UNSUPPORTED(["UNSUPPORTED"])
-    RESOLVER --> CHECK{"框架校验提案<br/>来源、ref 身份与修复依据"}
+    RESOLVER --> CHECK{"框架校验提案<br/>来源与 ref 身份<br/>修复依据"}
     CHECK -->|"初次补全通过"| AUTHOR
-    CHECK -->|"author 复核通过"| APPLY["应用复核结果并刷新 author 输入<br/>换对：revision + 1，失效旧构建与验证<br/>原对成立：保留解释，要求重新 probe"]
-    APPLY -->|"resume 同一个 author 会话"| AUTHOR
-    CHECK -->|"初始配对仍不可用 / 明确不支持"| UNSUPPORTED
-    CHECK -->|"author 复核失败或提案无效"| QUARANTINED(["QUARANTINED"])
+    CHECK -->|"author 复核通过"| APPLY["应用复核结果，刷新输入<br/>换对：revision + 1<br/>旧构建与验证失效<br/>原对成立：解释并重跑 probe"]
+    APPLY -->|"resume 同一会话"| AUTHOR
+    CHECK -->|"初始配对不可用<br/>或明确不支持"| UNSUPPORTED
+    CHECK -->|"author 复核未通过"| QUARANTINED(["QUARANTINED"])
 
-    AUTHOR --> LOCAL["harbor-author 内循环<br/>validate / build / probe / exec / debug"]
+    AUTHOR --> LOCAL["harbor-author 内循环<br/>validate / build / probe<br/>exec / debug"]
     LOCAL -->|"修订源码或 PoC"| AUTHOR
-    AUTHOR -->|"源码或日志表明版本 / 补丁有误"| REQUEST["request-evidence-review<br/>校验本地 citations，绑定当前版本对"]
+    AUTHOR -->|"发现版本或补丁矛盾"| REQUEST["request-evidence-review<br/>校验本地 citations<br/>绑定当前版本对"]
     REQUEST --> RESOLVER
     AUTHOR -->|"decline"| UNSUPPORTED
-    LOCAL -->|"submit"| FREEZE["freeze → generate<br/>冻结 CveSpec，生成题面与固定 verifier"]
+    LOCAL -->|"submit"| FREEZE["freeze → generate<br/>冻结 CveSpec，生成题面<br/>生成固定 verifier"]
 
-    FREEZE --> BUILD["正式 build<br/>构建或复用匹配的镜像，核验运行时身份"]
+    FREEZE --> BUILD["正式 build<br/>构建或复用匹配的镜像<br/>核验运行时身份"]
     BUILD --> MATRIX["固定差分矩阵与准入评估<br/>T03 / T04 → 重复与负例<br/>T09 冷构建 → T11 / T12"]
     BUILD -->|"可修复构建问题"| REPAIR{"仍有 author 修订额度？"}
     MATRIX -->|"可修复题目问题"| REPAIR
-    REPAIR -->|"有：携带失败证据，resume"| AUTHOR
+    REPAIR -->|"有：反馈证据并 resume"| AUTHOR
     REPAIR -->|"无"| QUARANTINED
-    MATRIX -->|"未过其他准入门 / 基础设施故障"| QUARANTINED
+    MATRIX -->|"未过其他准入门<br/>或基础设施故障"| QUARANTINED
 
     MATRIX -->|"通过"| SOLVER_ON{"启用 solver_review？"}
-    SOLVER_ON -->|"是"| SOLVER["Solver 在 Harbor 中真实试解"]
-    SOLVER -->|"有效试解结果"| REVIEW{"Reviewer 结构化审查<br/>可解性、公平性、CVE 机制归因"}
+    SOLVER_ON -->|"是"| SOLVER["Solver 真实试解<br/>运行于 Harbor"]
+    SOLVER -->|"有效试解结果"| REVIEW{"Reviewer 结构化审查<br/>可解性与公平性<br/>CVE 机制归因"}
     SOLVER -->|"执行异常"| QUARANTINED
-    REVIEW -->|"要求修订 / 低分 / 归因未获支持"| REPAIR
+    REVIEW -->|"要求修订或低分<br/>或归因未获支持"| REPAIR
     REVIEW -->|"decline"| UNSUPPORTED
-    REVIEW -->|"release 且满足审查门槛"| RELEASE["release<br/>打包、审计，并从发布包重放验证"]
+    REVIEW -->|"release 且满足审查门槛"| RELEASE["release：打包与审计<br/>从发布包重放验证"]
     SOLVER_ON -->|"否"| RELEASE
     RELEASE -->|"全部通过"| DONE(["RELEASED"])
 
