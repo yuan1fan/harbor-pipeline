@@ -26,6 +26,7 @@ from .harbor_adapter import HarborAdapter
 from .providers import build_provider
 from .providers.base import ModelRequest, ensure_structured
 from .retries import TRANSIENT_MODEL, add_usage, retry_model
+from . import telemetry
 from .util import PipelineError, digest, read_json, utc_now_text
 
 REVIEW_SCHEMA: dict[str, Any] = {
@@ -286,7 +287,8 @@ def review_task(
     decisions = {}
     for correction in range(2):
         try:
-            response = retry_model(lambda: provider.generate(request), settings=settings,
+            response = retry_model(lambda: telemetry.model_request(provider, request, stage="reviewer", model=settings.model,
+                                   reason="format_correction" if correction else "review"), settings=settings,
                                    directory=config.pipeline.resource_dir)
         except PipelineError as exc:
             if correction or not any(token in str(exc).lower() for token in ("non-json", "structured output")):

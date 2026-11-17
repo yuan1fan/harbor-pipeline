@@ -406,31 +406,26 @@ class ClaudeCodeAgent:
         resume: str | None = None,
     ) -> AgentOutcome:
         workspace = workspace.resolve()
-        attempt = self._run_once(
-            prompt=prompt,
-            workspace=workspace,
-            contract=contract,
-            settings_path=settings_path,
-            extra_env=extra_env,
-            resume=resume,
-            bare=True,
-        )
+        from .telemetry import Stage
+
+        def invoke(*, bare, safe_mode=False, resumed=resume):
+            with Stage(self.role, root=workspace.parent, kind="model_call", expects_usage=True,
+                       provider="claude-code", model=self.settings.model, resume_session_id=resumed,
+                       call_mode="bare" if bare else "auth_fallback") as meter:
+                outcome = self._run_once(prompt=prompt, workspace=workspace, contract=contract,
+                    settings_path=settings_path, extra_env=extra_env, resume=resumed, bare=bare,
+                    **({"safe_mode": True} if safe_mode else {}))
+                meter.outcome(outcome)
+                return outcome
+
+        attempt = invoke(bare=True)
         # Some gateways front the API with a token-only auth path rather than
         # an API key. ``--bare`` is stricter about that; retry once with the
         # user's normal settings sources if the first attempt could not
         # authenticate. The prompt and workspace are unchanged, so the retry
         # is safe.
         if attempt.status == "auth_error" and not resume:
-            fallback = self._run_once(
-                prompt=prompt,
-                workspace=workspace,
-                contract=contract,
-                settings_path=settings_path,
-                extra_env=extra_env,
-                resume=None,
-                bare=False,
-                safe_mode=True,
-            )
+            fallback = invoke(bare=False, safe_mode=True, resumed=None)
             if fallback.status != "auth_error":
                 return fallback
         return attempt

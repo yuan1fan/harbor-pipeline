@@ -147,6 +147,7 @@ def prepare_workspace(
     evidence: dict,
     model: str,
     review_request: dict | None = None,
+    correction_feedback: dict | None = None,
 ) -> ResolverWorkspace:
     """Create the resolver tree, its read-only inputs and its helper wrapper."""
     run_dir = Path(run_dir).resolve()
@@ -174,6 +175,11 @@ def prepare_workspace(
         write_json(review_path, review_request)
     else:
         review_path.unlink(missing_ok=True)
+    feedback_path = inputs / "proposal-feedback.json"
+    if correction_feedback:
+        write_json(feedback_path, correction_feedback)
+    else:
+        feedback_path.unlink(missing_ok=True)
     for source in evidence.get("sources", []):
         local = str(source.get("local_path") or "")
         if not local:
@@ -549,6 +555,8 @@ class EvidenceResolver:
         discovery: Discovery,
         evidence: dict,
         review_request: dict | None = None,
+        correction_feedback: dict | None = None,
+        resume: str | None = None,
     ) -> ResolverOutcome:
         model = self.config.model_for("resolver").model
         workspace = prepare_workspace(
@@ -558,6 +566,7 @@ class EvidenceResolver:
             evidence=evidence,
             model=model,
             review_request=review_request,
+            correction_feedback=correction_feedback,
         )
         agent = self.runner or ClaudeCodeAgent(self.config, role="resolver")
         extra_env = {
@@ -568,11 +577,16 @@ class EvidenceResolver:
             extra_env["HARBOR_EVIDENCE_CONFIG"] = str(self.config.source_path)
         try:
             outcome = agent.run(
-                prompt=first_prompt(cve_id, review_request),
+                prompt=first_prompt(cve_id, review_request) + (
+                    "\nYour previous proposal failed deterministic validation. Read inputs/proposal-feedback.json for the exact "
+                    "errors and previous proposal. Correct the evidence/refs and submit again; do not relax the checks or "
+                    "claim an unfetched source exists. If there is no defensible pair, explain that with an unsupported proposal."
+                    if correction_feedback else ""),
                 workspace=workspace.root,
                 contract=workspace.contract,
                 settings_path=workspace.settings_path,
                 extra_env=extra_env,
+                **({"resume": resume} if resume else {}),
             )
         except Exception as exc:  # noqa: BLE001 - a resolver failure is classified
             return ResolverOutcome(

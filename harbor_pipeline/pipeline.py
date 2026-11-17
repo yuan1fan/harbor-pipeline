@@ -27,6 +27,7 @@ from .contracts import (
 )
 from . import author_probe
 from . import authoring
+from . import telemetry
 from . import discovery as discovery_mod
 from . import evidence_resolver
 from . import solver_review as solver_review_mod
@@ -48,7 +49,7 @@ from .differential import (
     run_ladder,
     run_seed_repeats,
 )
-from .errors import TaskError
+from .errors import TaskError, recovery_decision
 from .evaluator import GOAL_PASSING, EvaluationOutcome, evaluate
 from .generator import GeneratedTask, inspect_task, render_task
 from .harbor_adapter import Capabilities, HarborAdapter, TrialOutcome
@@ -75,13 +76,6 @@ from .util import (
     read_json,
     utc_now_text,
     write_json,
-)
-
-# Categories the bounded repair loop may edit environment/ for. The same set
-# gates a resume: re-running identical inputs reproduces the same verdict, so
-# only a fresh repair can change the outcome of an auto-repairable quarantine.
-REPAIRABLE_CATEGORIES = frozenset(
-    {"build_error", "generation_error", "validation_error"}
 )
 
 STAGE_ORDER = (
@@ -915,6 +909,7 @@ class CvePipeline:
 
     # -- stages ------------------------------------------------------------
 
+    @telemetry.pipeline_stage("discovery", expects_usage=False)
     def collect(self, job=None) -> dict:
         job = job or self.store.create()
         if self.auto:
@@ -1050,6 +1045,47 @@ class CvePipeline:
             (workspace / name).unlink(missing_ok=True)
 
     def _resolve_evidence(self, discovery, evidence: dict, *, review_request: dict | None = None) -> tuple[object, dict]:
+        """Feed failed proposal checks back to the resolver within a saved budget."""
+        scope = review_request.get("request_id") if review_request else "initial"
+        try:
+            saved = self.store.read_artifact("resolver-feedback.json")
+        except PipelineError:
+            saved = {}
+        feedback = saved.get("feedback") if saved.get("scope") == scope and saved.get("status") in {"pending", "running"} else None
+        while True:
+            if feedback:
+                job = self.store.load()
+                used = int(job.attempts.get("resolver_correction", 0))
+                if used >= self.config.pipeline.max_repairs:
+                    self.store.write_artifact("resolver-feedback.json", {"scope": scope, "status": "exhausted", "feedback": feedback})
+                    raise TaskError("evidence_insufficient", "Resolver proposal corrections exhausted: " + str(feedback.get("error")),
+                                    detail={"recovery_action": "stop", "recovery_reason": "resolver correction allowance exhausted"})
+                # Reserve before invoking: an interrupted correction still uses
+                # an attempt and cannot reset the limit on the next worker run.
+                job.attempts["resolver_correction"] = used + 1
+                self.store.save(job)
+                self.store.write_artifact("resolver-feedback.json", {"scope": scope, "status": "running", "feedback": feedback})
+            try:
+                with telemetry.details(reason="proposal_correction" if feedback else "author_review" if review_request else "initial",
+                                       review_request_id=scope if review_request else None):
+                    result = self._resolve_evidence_once(discovery, evidence, review_request=review_request, correction_feedback=feedback)
+            except TaskError as exc:
+                if exc.category.code != "evidence_insufficient":
+                    raise
+                outcome = self.store.read_artifact("resolver-result.json")
+                feedback = {"error": str(exc), "previous_proposal": outcome.get("proposal"),
+                            "session_id": (outcome.get("session") or {}).get("session_id"), "scope": scope}
+                self.store.write_artifact("resolver-feedback.json", {"scope": scope, "status": "pending", "feedback": feedback})
+                number = int(self.store.load().attempts.get("resolver_correction", 0))
+                self.store.write_artifact(f"resolver-corrections/{number:03d}-{digest(scope)[:12]}.json", feedback)
+                evidence = read_json(self.store.path("evidence-index.json"))
+                continue
+            self.store.write_artifact("resolver-feedback.json", {"scope": scope, "status": "accepted", "feedback": feedback})
+            return result
+
+    @telemetry.pipeline_stage("resolver", expects_usage=True)
+    def _resolve_evidence_once(self, discovery, evidence: dict, *, review_request: dict | None = None,
+                               correction_feedback: dict | None = None) -> tuple[object, dict]:
         """Run the bounded evidence resolver for an incomplete discovery.
 
         Service failures are infrastructure, and missing/invalid proposals are
@@ -1063,6 +1099,8 @@ class CvePipeline:
                 discovery=discovery,
                 evidence=evidence,
                 **({"review_request": review_request} if review_request else {}),
+                **({"correction_feedback": correction_feedback, "resume": correction_feedback.get("session_id")}
+                   if correction_feedback else {}),
             )
         except Exception as exc:  # noqa: BLE001 - optional stage must not mask collection
             self.store.write_artifact(
@@ -1074,6 +1112,7 @@ class CvePipeline:
                 },
             )
             raise TaskError("infra_error", f"Evidence resolver failed: {exc}") from exc
+        telemetry.current().outcome(outcome)
         self.store.write_artifact("resolver-result.json", outcome.to_json())
         try:
             ledger = self._ledger()
@@ -1108,7 +1147,8 @@ class CvePipeline:
             )
         if outcome.status != "proposed":
             category = "infra_error" if outcome.status in {"infra_error", "auth_error", "provider_error", "timeout"} else "evidence_insufficient"
-            raise TaskError(category, outcome.error or f"Evidence resolver ended with {outcome.status}; no pair was accepted")
+            raise TaskError(category, outcome.error or f"Evidence resolver ended with {outcome.status}; no pair was accepted",
+                            detail={"resolver_status": outcome.status})
         try:
             resolved, refreshed = evidence_resolver.apply_proposal(
                 discovery=discovery,
@@ -1151,15 +1191,18 @@ class CvePipeline:
             return self.author(evidence)
         return self._legacy_draft(evidence)
 
+    @telemetry.pipeline_stage("authoring", expects_usage=False)
     def author(self, evidence: dict):
         """Run the native authoring session; resume from disk when possible."""
         pending_review = authoring.evidence_review_pending(authoring.workspace_for(self.store.root))
         if self.synthesis is not None and not pending_review:
+            telemetry.current().cache("synthesis.json")
             return self.synthesis
         try:
             if pending_review:
                 raise PipelineError("pending author evidence review must be handled first")
             self.synthesis = synthesis_mod.load(self.store.root, self.cve_id)
+            telemetry.current().cache("synthesis.json")
             return self.synthesis
         except TaskError:
             raise
@@ -1242,10 +1285,13 @@ class CvePipeline:
         self, workspace: authoring.AuthorWorkspace, *, prompt: str, resume: str | None,
     ) -> AgentOutcome:
         """Route explicit evidence-review requests before consuming a submission."""
+        reason = telemetry.label("reason") or ("resume" if resume else "initial")
         while True:
             if authoring.evidence_review_pending(workspace.root):
                 workspace, prompt = self._review_author_evidence(workspace, resume)
-            outcome = self._run_author_session_once(workspace, prompt=prompt, resume=resume)
+                reason = "evidence_review_resume"
+            with telemetry.details(reason=reason):
+                outcome = self._run_author_session_once(workspace, prompt=prompt, resume=resume)
             resume = outcome.session_id or resume
             if not authoring.evidence_review_pending(workspace.root):
                 helper = outcome.helper_result or {}
@@ -1263,9 +1309,11 @@ class CvePipeline:
                     prompt = authoring.resume_prompt("Your last helper result is available. Read .harbor/job.json for its result. "
                         "Do not start another copy of a still-running command. Fix a concrete build error or continue probing and submit.\n" +
                         json.dumps(outcome.helper_result, ensure_ascii=False))
+                    reason = "helper_resume"
                     continue
                 return outcome
 
+    @telemetry.pipeline_stage("author", expects_usage=True)
     def _run_author_session_once(
         self,
         workspace: authoring.AuthorWorkspace,
@@ -1321,6 +1369,7 @@ class CvePipeline:
                 ledger.charge("usd", float(outcome.usd))
         except (PipelineError, ValueError):
             pass
+        telemetry.current().outcome(outcome)
         self._author_outcome = outcome
         self.store.write_artifact(
             "author-session.json",
@@ -1622,6 +1671,7 @@ class CvePipeline:
         for name in ("task", "fixed-build", "solver-task"):
             shutil.rmtree(self.store.path(name), ignore_errors=True)
 
+    @telemetry.pipeline_stage("freeze", expects_usage=False)
     def freeze(self, evidence: dict, job=None) -> dict:
         job = job or self.store.load()
         try:
@@ -1649,13 +1699,16 @@ class CvePipeline:
         spec = freeze(raw, self.policy.policy_version)
         issues = check_evidence_links(spec, evidence, run_dir=self.store.root) + check_spec_consistency(spec)
         if issues:
-            raise TaskError("evidence_insufficient", "; ".join(issues), detail={"issues": issues})
+            raise TaskError("evidence_insufficient", "; ".join(issues), detail={"issues": issues,
+                **({"recovery_action": "author", "recovery_reason": "author assertions/spec must match the collected evidence"}
+                   if self.auto and self.config.pipeline.authoring == "agent" else {})})
         self.store.write_artifact("cve-spec.json", spec)
         job = self.store.load()
         if job.state == "EVIDENCE_READY":
             self.store.transition(job, "SPEC_FROZEN", "facts frozen")
         return spec
 
+    @telemetry.pipeline_stage("generate", expects_usage=False)
     def generate(self, spec: dict, job=None) -> tuple[GeneratedTask, Path]:
         job = job or self.store.load()
         task_dir = self.store.path("task")
@@ -1717,6 +1770,7 @@ class CvePipeline:
             self.store.transition(job, "GENERATED", "task rendered")
         return task, task_dir
 
+    @telemetry.pipeline_stage("build", expects_usage=False)
     def build(self, spec: dict, task: GeneratedTask, job=None) -> dict:
         job = job or self.store.load()
         if (spec.get("task_goal") or {}).get("primitive") == "xss":
@@ -1824,6 +1878,7 @@ class CvePipeline:
             self.store.transition(job, "BUILT", "images built")
         return image_set
 
+    @telemetry.pipeline_stage("validation", expects_usage=False)
     def validate(
         self,
         spec: dict,
@@ -2106,6 +2161,9 @@ class CvePipeline:
         # them before the candidate settles into a terminal state so the retry
         # and repair paths can still act.
         if matrix.aborted_category in {"infra_error", "build_error"}:
+            repair = self._matrix_repair_error(matrix, outcome)
+            if repair and recovery_decision(repair)["action"] in {"author", "blocked"}:
+                raise repair
             raise TaskError(
                 matrix.aborted_category,
                 f"Differential matrix stopped at {matrix.aborted_at}: "
@@ -2161,6 +2219,7 @@ class CvePipeline:
         pin_task_images(task, self.store.read_artifact("image-set.json"), self._base_images)
         return task, task.write(self.store.path("solver-task"))
 
+    @telemetry.pipeline_stage("solver_review", expects_usage=False)
     def solver_review(self, spec: dict, job=None) -> dict | None:
         """Run a solver attempt, then a fairness review with the intended solution."""
         if not self.config.pipeline.solver_review:
@@ -2194,6 +2253,10 @@ class CvePipeline:
         ):
             solver_review_mod.require_valid_solver(existing.get("solver") or {})
             self._require_review_verdict(existing)
+            telemetry.current().cache("solver-review.json")
+            for role in ("solver", "reviewer"):
+                with telemetry.Stage(role) as cached:
+                    cached.cache("solver-review.json")
             return existing
         solver_input = digest({"files": solver_task.files, "model": vars(self.config.model_for("solver")),
                                "limits": {k: v for k, v in vars(self.config.pipeline).items() if k.startswith("solver_")}})
@@ -2203,6 +2266,8 @@ class CvePipeline:
             if previous.get("input_sha256") == solver_input:
                 solver_review_mod.require_valid_solver(previous)
                 solver = previous
+                with telemetry.Stage("solver") as cached:
+                    cached.cache("solver-result.json")
         except (PipelineError, OSError, ValueError):
             pass
         if solver is None:
@@ -2210,7 +2275,18 @@ class CvePipeline:
             attempts = []
 
             def run_solver():
-                result = solver_review_mod.run_solver(self.adapter, solver_dir, self.config, cve_id=self.cve_id)
+                with telemetry.Stage("solver", expects_usage=True, model=self.config.model_for("solver").model,
+                                     reason="retry" if attempts else "solve") as meter:
+                    result = solver_review_mod.run_solver(self.adapter, solver_dir, self.config, cve_id=self.cve_id)
+                    meter.set_usage(result.get("usage"), source="harbor")
+                    for trial in result.get("trials") or []:
+                        with telemetry.Stage("solver", kind="solver_trial", expects_usage=True,
+                                             trial_dir=trial.get("trial_dir")) as trial_meter:
+                            trial_meter.set_usage(trial.get("usage"), source="harbor")
+                            trial_meter.record.update(reported_duration_sec=trial.get("duration_sec"),
+                                reported_started_at=trial.get("started_at"), reported_finished_at=trial.get("finished_at"),
+                                reward=trial.get("reward"), failure_type=trial.get("failure_type"),
+                                status="failed" if trial.get("exception") or trial.get("reward") is None else "completed")
                 attempts.append(result)
                 recorded = {**result, "input_sha256": solver_input, "infrastructure_attempts": attempts[:-1]}
                 self.store.write_artifact("solver-result.json", recorded)
@@ -2234,9 +2310,15 @@ class CvePipeline:
             else {}
         )
         try:
-            review = solver_review_mod.solver_review(
-                solver_task, solver, self.config, presentation=presentation, evidence_context=evidence_context,
-            )
+            with telemetry.Stage("reviewer", expects_usage=True, model=self.config.model_for("reviewer").model) as meter:
+                try:
+                    review = solver_review_mod.solver_review(
+                        solver_task, solver, self.config, presentation=presentation, evidence_context=evidence_context,
+                    )
+                except TaskError as error:
+                    meter.set_usage((error.detail or {}).get("review_usage"))
+                    raise
+                meter.set_usage(review.get("usage"))
         except TaskError as exc:
             self._charge_review_usage((exc.detail or {}).get("review_usage") or {})
             raise
@@ -2287,6 +2369,7 @@ class CvePipeline:
             "release_code": digest(Path(release_module.__file__).read_bytes()),
         })
 
+    @telemetry.pipeline_stage("release_resume")
     def _resume_release(self):
         """Resume a staged publication only while all prior evidence still matches."""
         try:
@@ -2318,6 +2401,7 @@ class CvePipeline:
         released = self.release(spec, evidence, task, images, matrix, outcome, job)
         return self._report(self.store.load(), task, images, outcome, released, matrix)
 
+    @telemetry.pipeline_stage("release", expects_usage=False)
     def release(
         self,
         spec: dict,
@@ -2506,6 +2590,7 @@ class CvePipeline:
 
     # -- driver ------------------------------------------------------------
 
+    @telemetry.pipeline_stage("pipeline", expects_usage=False)
     def run(self, until: str = "release") -> PipelineReport:
         """Advance the candidate up to `until`; safe to call again to resume."""
         if until not in {
@@ -2521,14 +2606,18 @@ class CvePipeline:
         try:
             job = self._prepare_retry(job)
             if job.state in {"QUARANTINED", "UNSUPPORTED", "RELEASED"}:
+                if telemetry.current():
+                    telemetry.current().cache("state.json")
                 return self._stored_report(job)
             while True:
                 try:
                     return self._advance(until)
                 except TaskError as exc:
+                    self._record_recovery(exc, "dispatch")
                     if not self._attempt_repair(exc):
                         raise
         except TaskError as exc:
+            self._record_recovery(exc, "stopped")
             job = self.store.load()
             self.store.fail(job, exc)
             return self._stored_report(self.store.load())
@@ -2542,6 +2631,16 @@ class CvePipeline:
             wrapped = TaskError("infra_error", f"{type(exc).__name__}: {exc}")
             self.store.fail(job, wrapped)
             return self._stored_report(self.store.load())
+
+    def _record_recovery(self, error: TaskError, phase: str) -> None:
+        try:
+            entries = self.store.read_artifact("recovery-log.json")
+        except PipelineError:
+            entries = []
+        job = self.store.load()
+        entries.append({"at": utc_now_text(), "phase": phase, "state": job.state,
+                        "revision": job.revision, "attempts": dict(job.attempts), "error": error.as_record()})
+        self.store.write_artifact("recovery-log.json", entries)
 
     def _advance(self, until: str) -> PipelineReport:
         job = self.store.load()
@@ -2768,107 +2867,49 @@ class CvePipeline:
             return []
         return list(log) if isinstance(log, list) else []
 
-    def _matrix_repair_error(
-        self, matrix: MatrixResult, outcome: EvaluationOutcome
-    ) -> TaskError | None:
-        """Return a repairable error when only the app logic failed the matrix.
-
-        The signature is narrow on purpose. Healthy vulnerable and fixed
-        targets plus negatives that were scored and rejected mean packaging,
-        verifier and oracle plumbing all work; if the reference exploit then
-        reaches no secret, the defect is in the synthesized application.
-        Everything else (missing trials, unhealthy targets, accepted negatives,
-        sampling thresholds) is not the repairer's to fix: it may only edit
-        ``environment/`` and never the tests or the instruction.
-
-        A negative submission that never reaches scoring is different from an
-        accepted one. When the app crashes every request, T05/T06/T07/T10 also
-        end as ``oracle_failure`` with zero reward; that is the same broken
-        interface that blocks T03, not evidence that the grader is too loose.
-        """
+    def _matrix_repair_error(self, matrix: MatrixResult, outcome: EvaluationOutcome) -> TaskError | None:
+        """Route failed measurements without weakening any acceptance gate."""
         if outcome.evaluation["admission_status"] == "released":
             return None
-        failed = {
-            hc["id"]: hc["detail"]
-            for hc in outcome.hard_conditions
-            if not hc["passed"]
-        }
+        checks = [*outcome.hard_conditions, *outcome.evaluation.get("framework_health", [])]
+        failed = {check["id"]: check["detail"] for check in checks if not check["passed"]}
+        records = matrix.records
         if not failed:
-            return None
-        finder = getattr(matrix, "expectation", None)
-        t02 = finder("T02") if callable(finder) else None
-        # T04 never runs when T03 fails, so a derived T02 is "missing", not
-        # "unhealthy". That is not evidence against repair; only an observed
-        # unhealthy fixed build rules it out.
-        t02_unobserved = bool(
-            t02 is not None and getattr(t02, "observed_status", "") == "missing"
-        )
-        if "t01_vulnerable_health" in failed or (
-            "t02_fixed_health" in failed and not t02_unobserved
-        ):
-            return None
-        negative_failures = [key for key in failed if key.startswith("negative_")]
-
-        def observed(experiment_id: str) -> bool:
-            finder = getattr(matrix, "record_for", None)
-            if callable(finder):
-                return finder(experiment_id) is not None
-            return any(
-                record.get("experiment_id") == experiment_id
-                for record in matrix.records
-            )
-
-        # A fail-fast stop leaves later negatives unrun. Only a negative that
-        # was actually observed can rule repair out; an unrun one is not
-        # evidence that the grader accepts it.
-        observed_negatives = [
-            key for key in negative_failures
-            if observed(key.removeprefix("negative_"))
-        ]
-        if observed_negatives and not all(
-            self._negative_failed_to_execute(matrix, key)
-            for key in observed_negatives
-        ):
-            return None
-        if not {"reference_poc_all_success", "zero_fixed_success"} & failed.keys():
-            return None
+            return TaskError("infra_error", "Quarantine has no diagnostic checks", detail={
+                "recovery_action": "blocked", "recovery_reason": "framework must explain its quarantine verdict"})
+        details = {"failed_hard_conditions": failed}
+        observed = {r.get("experiment_id") for r in records}
+        framework_negative = any(
+            f"negative_{r.get('experiment_id')}" in failed and (r.get("_audit") or {}).get("mode") == "framework-verifier"
+            for r in records)
+        if ("fault_T12" in failed and "T12" in observed) or framework_negative:
+            return TaskError("grader_failure", "Framework self-test failed: " + str(failed), detail={
+                **details, "recovery_action": "blocked", "recovery_reason": "repair the fixed verifier/framework before retrying; author cannot change it"})
+        from .retries import TRANSIENT_BUILD, TRANSIENT_MODEL
+        abort = str(getattr(matrix, "aborted_detail", "") or "")
+        if TRANSIENT_BUILD.search(abort) or TRANSIENT_MODEL.search(abort):
+            return TaskError("infra_error", abort, detail=details)
+        measured_unhealthy = any((r.get("health") or {}).get("ok") is False for r in records
+                                if r.get("experiment_id") in {"T01", "T02", "T03", "T04"})
+        infra_records = any(r.get("error_category") in {"infra_error", "build_error"} for r in records)
+        missing_only = {"min_valid_trials", "paired_samples", "artifact_digest", "infra_error_rate", "fault_T12",
+                        "clean_rebuild_vulnerable", "clean_rebuild_fixed", *[f"candidate_{t}" for t in ("T05", "T06", "T07", "T10")]}
+        if not records or (infra_records and not measured_unhealthy) or set(failed) <= missing_only:
+            return TaskError("infra_error", "Complete or repeat the missing/invalid measurements: " + str(failed), detail=details)
         lines = [f"{key}: {value}" for key, value in sorted(failed.items())]
-        for record in matrix.records:
-            if record["experiment_id"] not in {"T03", "T04"}:
-                continue
+        for record in records[-12:]:
             detail = self._trial_failure_detail(record)
             if detail:
-                lines.append(f"{record['trial_id']}: {detail}")
-        return TaskError(
-            "validation_error",
-            "Differential validation failed in the synthesized application. "
-            + "; ".join(lines[:12]),
-            detail={"failed_hard_conditions": failed},
-        )
-
-    @staticmethod
-    def _negative_failed_to_execute(matrix: MatrixResult, condition_id: str) -> bool:
-        """True when a negative submission crashed instead of being scored.
-
-        ``oracle_failure`` with zero reward means the request produced no
-        score at all; the app, not the grader, rejected it. A negative that
-        reaches the goal has ``goal_result == "passed"`` and is a grader
-        defect; one on an unhealthy target is a health defect. Neither is the
-        repairer's to fix.
-        """
-        experiment_id = condition_id.removeprefix("negative_")
-        records = [
-            record for record in matrix.records
-            if record["experiment_id"] == experiment_id
-        ]
-        return bool(records) and all(
-            str(record["trigger_evidence"]["detail"]) == "oracle_failure"
-            and (record.get("reward") or 0.0) == 0.0
-            for record in records
-        )
+                lines.append(f"{record.get('trial_id')}: {detail}")
+        negative_accepted = any(f"negative_{r.get('experiment_id')}" in failed and r.get("reward") == 1.0 for r in records)
+        category = "grader_failure" if negative_accepted else "validation_error"
+        return TaskError(category, "Candidate failed acceptance; repair source, packaging, PoC or evidence. "
+            "Keep the fixed verifier and all thresholds unchanged. " + "; ".join(lines[:16]), detail={
+                **details, "recovery_action": "author",
+                "recovery_reason": "candidate failure needs author diagnosis; request evidence review if the refs or fix are wrong"})
 
     def _trial_failure_detail(self, record: dict) -> str:
-        """Describe a failed T03/T04 trial without echoing the secret."""
+        """Describe a failed trial without echoing the secret."""
         if record["experiment_id"] == "T03" and record["goal_result"] == GOAL_PASSING:
             return ""
         status = str(record["trigger_evidence"]["detail"])
@@ -2968,6 +3009,7 @@ class CvePipeline:
                 pass
         return "\n\n".join(parts)
 
+    @telemetry.pipeline_stage("author_repair", expects_usage=False)
     def _resume_author(self, error: TaskError) -> bool:
         """Continue the same native Claude Code session after a final verdict.
 
@@ -3026,12 +3068,14 @@ class CvePipeline:
                 prompt = authoring.solver_review_prompt(report)
         else:
             prompt = authoring.resume_prompt(report)
+        workspace.submission_path.unlink(missing_ok=True)
         revision_before_session = self.store.load().revision
-        outcome = self._run_author_session(
-            workspace,
-            prompt=prompt,
-            resume=session_id or None,
-        )
+        with telemetry.details(reason="repair", repair_round=used + 1):
+            outcome = self._run_author_session(
+                workspace,
+                prompt=prompt,
+                resume=session_id or None,
+            )
         decision = workspace.status()
         if decision != "submitted":
             if decision == "declined":
@@ -3079,12 +3123,22 @@ class CvePipeline:
         self._clear_derived()
         return True
 
+    @telemetry.pipeline_stage("repair")
     def _attempt_repair(self, error: TaskError) -> bool:
         """Try one bounded repair; return True when the pipeline may resume."""
-        if error.category.code not in REPAIRABLE_CATEGORIES:
+        if recovery_decision(error)["action"] != "author":
             return False
         if self.auto and self.config.pipeline.authoring == "agent":
-            return self._resume_author(error)
+            while True:
+                before = int(self.store.load().attempts.get("author_resume", 0))
+                if self._resume_author(error):
+                    return True
+                after = int(self.store.load().attempts.get("author_resume", 0))
+                if after <= before or after >= self.config.pipeline.author_max_resumes:
+                    exhausted = after >= self.config.pipeline.author_max_resumes
+                    error.detail.update(recovery_action="stop" if exhausted else "blocked", recovery_reason=
+                                        "author repair allowance exhausted" if exhausted else "no resumable author workspace is available")
+                    return False
         job = self.store.load()
         used = int(job.attempts.get("repair", 0))
         if used >= self.config.pipeline.max_repairs:
@@ -3245,38 +3299,19 @@ class CvePipeline:
         error = job.error or {}
         used = int(job.attempts.get("retry", 0))
         category = str(error.get("category") or "")
-        message = str(error.get("message") or "").lower()
-        # Public CVE/OSV endpoints reset connections in some networks. Treat
-        # those as an outage rather than a candidate defect: back off and
-        # allow a longer retry window so a brief network drop does not burn
-        # the whole sample. A 404 or a permanently missing source still stops
-        # at the normal limit.
-        transient_source = category == "source_error" and any(
-            token in message
-            for token in (
-                "winerror",
-                "timed out",
-                "timeout",
-                "connection",
-                "reset",
-                "temporarily",
-                "502",
-                "503",
-                "504",
-                # A local resolver/proxy can briefly map public CVE hosts to
-                # a benchmark-range fake IP. That is an outage, not a bad CVE.
-                "refusing non-public address",
-                "non-public address",
-                "name or service not known",
-                "temporary failure in name resolution",
-                "eai_again",
-                "dns",
-            )
-        )
-        retry_limit = self.config.pipeline.max_repairs
-        if transient_source:
-            retry_limit = max(retry_limit, 12)
-        if used >= retry_limit:
+        from .retries import infrastructure_retry_limit
+        recovery = recovery_decision(error)
+        if recovery["action"] not in {"retry", "author", "blocked"}:
+            return job
+        retry_limit = infrastructure_retry_limit(error, self.config.pipeline.max_repairs)
+        if recovery["action"] == "blocked":
+            # Automatic workers stop on blocked reports. A later explicit
+            # run/batch invocation may retry after the operator fixes the cause.
+            retry_limit = self.config.pipeline.max_repairs
+        if recovery["action"] in {"retry", "blocked"} and used >= retry_limit:
+            job.error = {**error, "retryable": False, "recovery": {
+                "action": "stop", "reason": "infrastructure retry allowance exhausted"}}
+            self.store.save(job)
             return job
         # A native authoring session that ended without a submission is not a
         # generic infrastructure fault; its own session budget is the right
@@ -3288,10 +3323,14 @@ class CvePipeline:
             and used >= self.config.pipeline.author_max_resumes + 1
         ):
             return job
-        if transient_source:
-            time.sleep(min(300, 15 * (2 ** min(used, 5))))
-        if not error.get("retryable") and category in REPAIRABLE_CATEGORIES:
-            if int(job.attempts.get("repair", 0)) >= self.config.pipeline.max_repairs:
+        if recovery["action"] == "retry":
+            # Stage-local cooldowns still apply; cap this checkpoint delay so
+            # one broken candidate does not monopolize a worker indefinitely.
+            time.sleep(min(30, 2 ** (min(used, 4) + 1)))
+        if recovery["action"] == "author":
+            native = self.auto and self.config.pipeline.authoring == "agent"
+            counter, limit = ("author_resume", self.config.pipeline.author_max_resumes) if native else ("repair", self.config.pipeline.max_repairs)
+            if int(job.attempts.get(counter, 0)) >= limit:
                 return job
             job.attempts["retry"] = used + 1
             self.store.save(job)
@@ -3302,7 +3341,7 @@ class CvePipeline:
             )
             self._attempt_repair(stored)
             return self.store.load()
-        if not error.get("retryable"):
+        if recovery["action"] not in {"retry", "blocked"}:
             return job
         job.attempts["retry"] = used + 1
         self.store.save(job)

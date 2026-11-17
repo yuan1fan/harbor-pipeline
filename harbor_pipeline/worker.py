@@ -14,6 +14,7 @@ from pathlib import Path
 from .config import Config
 from .errors import TaskError
 from .pipeline import CvePipeline
+from .retries import infrastructure_retry_limit
 from .util import PipelineError
 
 
@@ -36,7 +37,7 @@ def execute_pipeline(pipeline: CvePipeline, *, retries: int) -> dict:
         error = report.error or {}
         if not error.get("retryable"):
             break
-        if attempts > retries:
+        if attempts > infrastructure_retry_limit(error, retries):
             break
     payload = report.to_json()
     payload["attempts"] = attempts

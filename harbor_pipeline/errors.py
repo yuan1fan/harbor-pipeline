@@ -8,6 +8,7 @@ The names are part of the data contract; do not rename without a policy bump.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from .util import PipelineError
 
@@ -77,6 +78,33 @@ def error_class(code: str) -> ErrorClass:
         raise PipelineError(f"Unknown error category: {code!r}") from exc
 
 
+def recovery_decision(error) -> dict[str, str]:
+    """Choose who can change the outcome; quarantine is only the checkpoint."""
+    if isinstance(error, dict):
+        code, message, detail = error.get("category"), str(error.get("message") or ""), error.get("detail") or {}
+    else:
+        code, message, detail = error.category.code, str(error), error.detail
+    if code in {"budget_exhausted", "unsupported"}:
+        return {"action": "stop", "reason": "budget exhausted" if code == "budget_exhausted" else "explicitly unsupported"}
+    override = detail.get("recovery_action")
+    if override in {"author", "resolver", "retry", "blocked", "stop"}:
+        return {"action": override, "reason": str(detail.get("recovery_reason") or message)[:1200]}
+    if code in {"infra_error", "source_error"}:
+        context = message + " " + str(detail.get("solver_failure_type") or "")
+        if detail.get("author_status") == "auth_error" or detail.get("resolver_status") == "auth_error" or re.search(r"(?i)AuthenticationError|invalid[ _-]*(?:api[ _-]*)?(?:key|token)|unauthorized|"
+                     r"authentication failed|missing (?:api.key|credentials)|not logged in|HTTP(?:/\S+)?\s+401\b", context):
+            return {"action": "blocked", "reason": "credentials/configuration must be corrected before this stage can run"}
+        if re.search(r"(?i)(?:docker|harbor|claude)(?: CLI)? is not on PATH|framework fault-injection check T12 failed", context):
+            return {"action": "blocked", "reason": "missing runtime or failed framework self-test requires an external fix"}
+        return {"action": "retry", "reason": "retry the failed stage with unchanged task inputs"}
+    category = ERROR_CLASSES.get(str(code))
+    if category and category.auto_repairable:
+        return {"action": "author", "reason": "return task/source/PoC defects to their author without changing acceptance rules"}
+    if isinstance(error, dict) and not code and error.get("retryable"):
+        return {"action": "retry", "reason": "legacy report explicitly permits a bounded stage retry"}
+    return {"action": "blocked", "reason": "no supported automatic repair is available for this evidence or configuration"}
+
+
 class TaskError(PipelineError):
     """A classified pipeline failure carrying a contract category."""
 
@@ -86,11 +114,13 @@ class TaskError(PipelineError):
         self.detail = detail or {}
 
     def as_record(self) -> dict:
+        recovery = recovery_decision(self)
         return {
             "category": self.category.code,
             "message": str(self),
-            "retryable": self.category.retryable,
-            "auto_repairable": self.category.auto_repairable,
+            "retryable": recovery["action"] == "retry",
+            "auto_repairable": recovery["action"] == "author",
+            "recovery": recovery,
             "terminal_state": self.category.terminal_state,
             "detail": self.detail,
         }

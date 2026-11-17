@@ -28,6 +28,10 @@ MAX_PACKAGES = 6
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9._@/+:-]+$")
 
 
+def _safe_name(value: str) -> bool:
+    return bool(_SAFE_NAME.fullmatch(value)) and all(part not in {"", ".", ".."} for part in value.split("/"))
+
+
 def _sort_versions(versions: list[str]) -> list[str]:
     try:
         from packaging.version import Version
@@ -80,7 +84,7 @@ def version_exists(
     existence check rejects every older release. This asks the registry for
     the exact version instead. ``None`` means the registry could not answer.
     """
-    if not _SAFE_NAME.fullmatch(name) or not _SAFE_NAME.fullmatch(version):
+    if not _safe_name(name) or not _safe_name(version):
         return None
     try:
         if ecosystem == "pypi":
@@ -113,7 +117,7 @@ def version_exists(
 
 def lookup(ecosystem: str, name: str, settings: SourceSettings) -> dict:
     """Return ``{"versions": [...]}`` or ``{"error": "..."}`` never raise."""
-    if not _SAFE_NAME.fullmatch(name):
+    if not _safe_name(name):
         return {"error": "unsafe registry name"}
     try:
         versions = _sort_versions(_parse(ecosystem, name, settings))

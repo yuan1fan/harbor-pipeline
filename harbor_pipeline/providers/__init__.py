@@ -20,7 +20,8 @@ def build_provider(config: Config, role: str = "default") -> ModelProvider:
     except KeyError as exc:
         raise PipelineError(f"Unknown provider {settings.provider!r}") from exc
     module = __import__(module_name, fromlist=[class_name])
-    return getattr(module, class_name)(settings)
+    from ..telemetry import metered_provider
+    return metered_provider(getattr(module, class_name)(settings), role, settings.model)
 
 
 __all__ = ["ModelProvider", "ModelRequest", "ModelResponse", "build_provider"]

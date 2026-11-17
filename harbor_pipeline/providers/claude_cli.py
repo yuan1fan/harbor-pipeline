@@ -13,6 +13,7 @@ import subprocess
 from typing import Any
 
 from ..config import ModelSettings
+from .. import telemetry
 from ..util import PipelineError, hidden_console_kwargs
 from .base import ModelRequest, ModelResponse
 
@@ -67,23 +68,34 @@ class ClaudeCliProvider:
         # CLI's configured default but rejected as an explicit --model value.
         # Try the configured model first, then fall back to the CLI default.
         for model_args in (["--model", self.model], []):
-            try:
-                completed = subprocess.run(
-                    base + model_args,
-                    input=prompt,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    timeout=self.settings.timeout_sec,
-                    env=self._env(),
-                    cwd=os.getcwd(),
-                    check=False,
-                    # ``claude`` is also a uv trampoline and allocates a
-                    # visible console without one of its own.
-                    **hidden_console_kwargs(),
-                )
-            except subprocess.TimeoutExpired as exc:
-                raise PipelineError("claude CLI timed out") from exc
+            with telemetry.Stage(request.role, kind="provider_attempt", expects_usage=True,
+                                 provider=self.name, model=self.model if model_args else None,
+                                 call_mode="configured_model" if model_args else "default_model") as meter:
+                try:
+                    completed = subprocess.run(
+                        base + model_args,
+                        input=prompt,
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        timeout=self.settings.timeout_sec,
+                        env=self._env(),
+                        cwd=os.getcwd(),
+                        check=False,
+                        # The uv trampoline needs a hidden console of its own.
+                        **hidden_console_kwargs(),
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    raise PipelineError("claude CLI timed out") from exc
+                meter.record["status"] = "completed" if completed.returncode == 0 else "provider_error"
+                try:
+                    reported = json.loads(completed.stdout)
+                except ValueError:
+                    reported = {}
+                if isinstance(reported, dict):
+                    meter.set_usage(reported.get("usage"), source="anthropic", cost=reported.get("total_cost_usd"))
+                    if isinstance(reported.get("model"), str):
+                        meter.record["model"] = reported["model"]
             if completed.returncode == 0:
                 break
             if model_args and "unrecognized_model" in (completed.stderr or ""):
@@ -105,10 +117,14 @@ class ClaudeCliProvider:
             except ValueError as exc:
                 # Echo the head of the reply: without it a repair that keeps
                 # failing looks identical to a provider outage.
-                raise PipelineError(
+                failure = PipelineError(
                     "claude CLI returned non-JSON structured output: "
                     f"{text.strip()[:200]!r}"
-                ) from exc
+                )
+                from ..telemetry import usage
+                raw = data if isinstance(data, dict) else {}
+                failure.metering_usage = usage(raw.get("usage") or {}, source="anthropic", cost=raw.get("total_cost_usd"))
+                raise failure from exc
         usage = data.get("usage", {}) if isinstance(data, dict) else {}
         return ModelResponse(
             text=text,

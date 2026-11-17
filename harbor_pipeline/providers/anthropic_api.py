@@ -82,10 +82,13 @@ class AnthropicProvider:
                 hint = (
                     " (output_token_limit)" if stop == "max_tokens" else ""
                 )
-                raise PipelineError(
+                failure = PipelineError(
                     f"Model returned non-JSON structured output: stop_reason={stop!r}, "
                     f"chars={len(text)}{hint}, tail={text[-200:]!r}"
                 )
+                from ..telemetry import usage as measured_usage
+                failure.metering_usage = measured_usage(data.get("usage") or {}, source="anthropic")
+                raise failure
         usage = _usage(data.get("usage", {}), request.system, request.prompt)
         return ModelResponse(
             text=text,

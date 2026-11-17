@@ -3,6 +3,8 @@
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from harbor_pipeline import registry
 from harbor_pipeline.config import SourceSettings
 from harbor_pipeline.errors import TaskError
@@ -45,7 +47,9 @@ def test_lookup_parses_each_supported_registry(monkeypatch):
 
 def test_lookup_rejects_unsafe_names_and_reports_fetch_failure(monkeypatch):
     settings = SourceSettings()
+    monkeypatch.setattr(registry, "fetch", lambda *a, **k: pytest.fail("unsafe names must not reach the registry"))
     assert "error" in registry.lookup("pypi", "../evil", settings)
+    assert registry.version_exists("pypi", "example", "../evil", settings) is None
 
     def failing(_url, _settings, max_redirects=3):
         raise TaskError("source_error", "HTTP 404 not found")

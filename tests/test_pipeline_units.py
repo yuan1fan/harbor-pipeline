@@ -1460,7 +1460,7 @@ def test_validation_repair_allows_a_t03_failure_with_an_unrun_t04():
     assert error.category.code == "validation_error"
 
 
-def test_validation_repair_blocks_an_observed_unhealthy_fixed_build():
+def test_validation_repair_routes_an_observed_unhealthy_fixed_build_to_author():
     from types import SimpleNamespace
 
     from harbor_pipeline import fixtures
@@ -1477,11 +1477,12 @@ def test_validation_repair_blocks_an_observed_unhealthy_fixed_build():
     pipeline._derive_health_verdicts(
         matrix, spec, SimpleNamespace(revision=1), "sha256:" + "a" * 64
     )
-    assert CvePipeline._matrix_repair_error(
+    error = CvePipeline._matrix_repair_error(
         pipeline,
         matrix,
         _outcome({"reference_poc_all_success", "t02_fixed_health"}),
-    ) is None
+    )
+    assert error.as_record()["recovery"]["action"] == "author"
 
 
 def test_validation_repair_allows_unrun_negatives_after_a_fail_fast_stop():
@@ -1495,35 +1496,36 @@ def test_validation_repair_allows_unrun_negatives_after_a_fail_fast_stop():
     assert error.category.code == "validation_error"
 
 
-def test_validation_repair_still_blocks_when_an_observed_negative_was_accepted():
+def test_validation_repair_diagnoses_an_observed_candidate_negative_acceptance():
     records = [
         _trial("T03"),
         _trial("T05", goal="passed", status="goal_passed", reward=1.0),
     ]
-    assert _classify(
+    error = _classify(
         records,
         {"reference_poc_all_success", "negative_T05", "negative_T07"},
-    ) is None
+    )
+    assert error.category.code == "grader_failure" and error.as_record()["auto_repairable"]
 
 
-def test_validation_repair_skips_an_accepted_negative():
-    # reward 1.0 means the negative reached the goal: the grader is too loose.
+def test_validation_repair_cannot_relax_the_grader_for_an_accepted_negative():
+    # The candidate may leak the answer; author diagnosis must keep the grader.
     records = [
         _trial("T03"),
         _trial("T05", goal="passed", status="goal_passed", reward=1.0),
     ]
 
-    assert _classify(
+    error = _classify(
         records, {"reference_poc_all_success", "negative_T05"}
-    ) is None
+    )
+    assert "Keep the fixed verifier and all thresholds unchanged" in str(error)
 
 
-def test_validation_repair_skips_verifier_and_health_failures():
+def test_validation_repair_routes_task_failures_and_blocks_unexplained_quarantine():
     t03 = [_trial("T03")]
-    assert _classify(t03, {"negative_T05"}) is None
-    assert _classify(t03, {"t01_vulnerable_health"}) is None
-    assert _classify(t03, {"quality_threshold"}) is None
-    assert _classify(t03, set()) is None
+    for failed in ({"negative_T05"}, {"t01_vulnerable_health"}, {"quality_threshold"}):
+        assert _classify(t03, failed).as_record()["recovery"]["action"] == "author"
+    assert _classify(t03, set()).as_record()["recovery"]["action"] == "blocked"
 
 
 def test_validation_repair_ignores_passing_and_held_trials():
@@ -1738,4 +1740,4 @@ def test_transient_dns_source_error_backs_off_instead_of_burning_the_candidate(
     retried = pipeline._prepare_retry(store.load())
     assert retried.state == "REPAIRING"
     assert retried.attempts["retry"] == 1
-    assert sleeps == [15]
+    assert sleeps == [2]

@@ -237,7 +237,8 @@ def test_empty_successful_patch_is_not_reused_as_complete_checkpoint(tmp_path, m
     with pytest.raises(TaskError, match="no_proposal") as caught:
         pipeline._collect_auto(pipeline.store.create())
     assert caught.value.category.code == "evidence_insufficient"
-    assert recollected == [True] and calls == [True]
+    assert recollected == [True] and len(calls) == 1 + config.pipeline.max_repairs
+    assert pipeline.store.load().attempts["resolver_correction"] == config.pipeline.max_repairs
 
 
 @pytest.mark.parametrize("recoverable", [True, False])
@@ -265,7 +266,7 @@ def test_pipeline_checkpoint_runs_rules_then_cc_if_still_incomplete(tmp_path, mo
         with pytest.raises(TaskError, match="no_proposal") as caught:
             pipeline._collect_auto(job)
         assert caught.value.category.code == "evidence_insufficient"
-        assert len(calls) == 1
+        assert len(calls) == 1 + config.pipeline.max_repairs
 
 
 def test_triage_cache_also_applies_ref_rules(tmp_path, monkeypatch):

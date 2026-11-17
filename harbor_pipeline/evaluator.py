@@ -753,10 +753,10 @@ def _task_gates(
 
 
 def _framework_health(matrix: MatrixResult, policy: Policy) -> list[dict]:
-    """Verifier/fault checks that are not task defects.
+    """Fixed negative/fault checks; every failure still blocks admission.
 
-    A failure here means the grader or the harness is broken; the pipeline
-    should stop and fix it, not ask the repair agent to rewrite the task.
+    Recovery distinguishes candidate leaks from failed framework self-tests.
+    It may repair the application, but never relax these checks.
     """
     checks: list[dict] = []
 

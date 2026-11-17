@@ -5,7 +5,7 @@ import re
 import time
 from pathlib import Path
 
-from .errors import TaskError
+from .errors import TaskError, recovery_decision
 from .util import PipelineError, digest, file_lock, read_json, write_json
 
 
@@ -23,6 +23,20 @@ TRANSIENT_MODEL = re.compile(
 )
 
 
+def infrastructure_retry_limit(error, default: int) -> int:
+    """One limit shared by the worker and persisted pipeline retry counter."""
+    if default <= 0 or recovery_decision(error)["action"] != "retry":
+        return 0
+    if isinstance(error, dict):
+        category, message = error.get("category"), str(error.get("message") or "")
+    else:
+        category, message = error.category.code, str(error)
+    transient_source = category == "source_error" and re.search(
+        r"(?i)winerror|time.?out|connection|reset|temporar|50[234]|non-public address|"
+        r"name or service not known|eai_again|dns", message)
+    return max(default, 12) if transient_source else max(0, default)
+
+
 def retry_model(operation, *, settings, directory, attempts=3):
     """Coordinate a short cooldown for callers using the same API endpoint."""
     path = Path(directory).resolve() / f"model-cooldown-{digest(settings.api_base)[:16]}.json"
@@ -37,6 +51,8 @@ def retry_model(operation, *, settings, directory, attempts=3):
         try:
             return operation()
         except PipelineError as exc:
+            if isinstance(exc, TaskError) and recovery_decision(exc)["action"] != "retry":
+                raise
             transient = TRANSIENT_MODEL.search(str(exc)) or bool(getattr(exc, "detail", {}).get("retryable_model"))
             if not transient or attempt + 1 == attempts:
                 raise
@@ -65,7 +81,7 @@ def retry_infrastructure(operation, *, attempts=3, delay_sec=2.0, on_retry=None)
         try:
             return operation()
         except TaskError as exc:
-            if exc.category.code not in {"infra_error", "source_error"} or attempt + 1 == attempts:
+            if recovery_decision(exc)["action"] != "retry" or attempt + 1 == attempts:
                 raise
             if on_retry:
                 on_retry(attempt + 1, exc)

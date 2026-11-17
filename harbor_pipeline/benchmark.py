@@ -221,6 +221,8 @@ def _trial_record(trial: TrialOutcome) -> dict:
         "success": success,
         "evidence_status": trial.evidence_status,
         "duration_sec": round(trial.duration_sec, 2),
+        "started_at": trial.started_at,
+        "finished_at": trial.finished_at,
         "exception": trial.exception,
         "failure_type": failure,
         "usage": {
