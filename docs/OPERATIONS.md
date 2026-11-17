@@ -1,12 +1,14 @@
 # Harbor CVE 产线运维手册
 
+> 2026-11-17 验收更新：T08、T11 已移除；T09 默认关闭，通过 `pipeline.cold_rebuild = true` 开启；不再按备选 PoC 划分质量档。下文历史实验中的旧测试编号和结果保留，当前规则见 [README 验收说明](../README.md#3-验证fixed-verifier-no-llm-scoring)。
+
 > 0.2 变更（2026-11-06）：运行时执行证据和独立复核取代“自动 RELEASED 即正确”的假设。新增或修改内容见 README 与 `policies/`；旧 run-id 的 RELEASED 结果不能直接混入 0.2 数据集，需要按新协议重新验收。
 
 - author 仍只能使用 Read/Write/Edit/Grep/Glob，Bash 只允许 helper；新增 `shell` 持久沙箱和 `debug --variant fixed exec -- ...`，可以在构建前做实验，也可以分别调试 vulnerable/fixed 现场。
 - `author_sandbox_network` 默认 `none`；确有下载依赖需求时可显式改成 `bridge`，但 scratch 容器不挂载 Docker socket、宿主凭据或评分文件；`author_sandbox_image` 可配置基础工具链。
 - `target.business_probes` 必填：除 `/health`、`/business` 外至少一条正常业务探针，并在 vulnerable 和 fixed 两边都通过，避免“只有漏洞路径能跑”的假应用。
 - `recheck` 只在执行签名（spec、task 文件、镜像 digest、verifier/生成器代码）一致时复用旧 matrix；spec、镜像 ID 或 verifier 改动会作废旧证据，重新构建并重跑 trial。
-- Qualification 还要求候选级 T03/T04 成对样本、T09 干净重建、T11/T12 结果，最小 blocking 集合为 18 个 trial；solver/reviewer 的评分只用于出题反馈，不参与准入。
+- Qualification 要求候选级 T03/T04 成对样本、T05/T06/T07/T10 负例和 T12 故障分类，默认最小矩阵为 11 个 trial；显式启用 T09 时增加 6 个。solver/reviewer 的评分只用于出题反馈，不参与准入。
 - `quality --run-dir ... --output ...` 输出分层抽样和独立复核统计；没有独立复核时准确率写 `null`，不能用发布率代替真实正确率。
 
 0.2 的 trial 预算、抽样方法和分片策略见 [CAPACITY_10K.md](CAPACITY_10K.md)；框架层面的历史背景见 [FRAMEWORK_PLAN.md](FRAMEWORK_PLAN.md)。
@@ -55,7 +57,7 @@ python -m harbor_pipeline run --cve CVE-2024-23334 --profile smoke --run-id smok
 2. **合成**：`deepseek-flash-cyber` 只补根因描述、target 文件与两个 PoC；产品名、版本、修复 commit、fix_basis 由发现结果强制覆盖，模型不能改写。
 3. **确定性校验**：检查 `{{REF}}` 版本开关、危险 Dockerfile 特性、base image 白名单、PoC 是否越界读本地文件、断言是否引用已抓取的 CVE 记录与修复 commit。
 4. **通用契约渲染**：框架生成 secret 生命周期、entrypoint、题面、独立 verifier 与负例；target 固定监听 `0.0.0.0:8080`，`/health` 与 `/business` 返回 `ok`，secret 位于 `/opt/app/secret/token`。
-5. **差分验证与评分**：T01–T12、oracle、负例与 Wilson 区间；合成题没有框架可控的 T08 变体，该项记录为 `not_applicable` 并在证据中说明原因，不伪装成通过。
+5. **差分验证与评分**：固定矩阵、oracle、负例与 Wilson 区间；T08、T11 已移除，T09 默认关闭，详见 README 的当前验收规则。
 6. **终态**：缺版本对、缺可抓取修复 commit、或模型判定不属于未认证远程文件读取时，进入 `UNSUPPORTED` 并保留量化原因；其余按 smoke/qualification 输出评分与准入。
 
 ```bash
@@ -186,11 +188,11 @@ issues = verify_release(Path("work/runs/qual-01/CVE-2024-23334/release"))
 
 token 记账把 `input_tokens`、`cache_creation_input_tokens` 与 `cache_read_input_tokens` 相加。当前网关曾对 8 KB prompt 只回报 134 input tokens；若回报低于 `(len(system)+len(prompt)) // 4` 的四分之一，provider 会改用这个估算值并在 usage 中写 `input_tokens_estimated = true` 与 `input_tokens_reported`。该网关不返回 `usd`，所以 `max_total_tokens` 与 `max_calls` 是实际生效的预算闸门，费用需以网关账单为准，不能依赖 `budget.json` 的 `usd` 字段。
 
-单候选的 trial 上限按 `(mandatory + 2 × trials + 3) × (max_repairs + 1) + 10` 计算，其中 `mandatory` 是除 T03/T04/T09 外的必需实验数，`2 × trials` 是成对 qualification 的漏洞版与修复版，`+3` 覆盖 T09 种子与重试。参与预算的 `trials` 是允许的最大重复数（`MAX_MATRIX_REPEATS = 20`），因为批次计划发生在合成之前；实际默认只跑 3 次，只有出题模型在 bundle 中声明 `matrix_repeats` 时才上调。每次修复会以新 revision 重跑整套矩阵，所以预算必须乘以修复次数；否则第一次 repair 后 qualification 必然 `budget_exhausted`。批次在单候选公式之外再乘候选数并额外预留 30 次 trial 与 6 次 build。
+单候选和批次预算预留允许的最大成对重复数（`MAX_MATRIX_REPEATS = 20`）以及修复轮次；实际默认各跑 3 次 T03/T04，author 可在 bundle 中提高 `matrix_repeats`。T09 默认关闭，只有 `pipeline.cold_rebuild = true` 时才为每轮矩阵增加 6 个 trial 的预算。默认最小矩阵为 11 个 trial，启用 T09 后为 17 个；author 调试、solver 和发布重放另计，预算上限不代表实际消耗。
 
 每个候选同时占用三类资源：候选级 `workers` 控制并行 CVE 数；`[pipeline].trial_workers` 控制单个候选内部同时运行的 Harbor trial 数。两者相乘决定 Docker 容器与网络峰值。10k 批量运行时先用 `--plan-only` 检查 `batch-plan.json` 的候选数与上限，再按 shard 分主机执行；`--shard-index/--shard-count` 使用稳定取模，同一 CVE 在重试时仍落在同一 shard。
 
-矩阵执行采用阶梯式 fail-fast：T03 首次、T04 首次、确认重复和 T09 seeds 各自是一个独立 Harbor job，任一 blocking 步骤的期望未满足就停止后续步骤；T11/T12 是 advisory，只在全部 blocking 步骤通过后运行，失败只降低 quality。T01/T02 的 health/business 检查发生在 T03/T04 的 verifier 内部并写入 trial 记录，因此由 `_derive_health_verdicts` 从 T03/T04 记录推导 verdict，并生成 `_audit.mode = "derived"` 的审计记录，不再起独立容器。T05/T06/T07/T10 的 payload 是框架常量、verifier 是共享模板，因此由 `verifier_check.py` 在宿主机上用 stub target 运行一次（无 Docker，约 2 秒），结果以 `_audit.mode = "framework-verifier"` 的合成 trial 记录并入矩阵；如果 verifier 本身坏了，会在任何容器启动前抛 `grader_failure`。0.2 的 qualification 还要求 T05/T06/T07/T10 存在候选级 trial（不能只用框架 stub 结果），T09 用 `--no-cache` 重建 vulnerable 与 fixed 并记录实际 image ID；`trials.json` 保存执行签名，verifier 或合成代码变化后旧结果不能被 `recheck` 复用。
+矩阵执行采用阶梯式 fail-fast：T03 首次、T04 首次、确认重复、候选级负例依次执行，blocking 步骤失败就停止后续步骤。启用 T09 时再做三轮成对冷重建；最后执行 T12 故障分类检查，失败会阻止发布并按框架故障处理。T01/T02 的 health/business 检查由 T03/T04 记录推导，不再单独起容器。T05/T06/T07/T10 在宿主机上的 verifier 自检之外，还必须在候选 target 上通过，不能用 stub 结果替代。`trials.json` 保存执行签名和 T09 开关，生成器/verifier 或验收配置改变后不能直接复用旧的通过结果。T08、T11 不再执行。
 
 矩阵探针使用预构建镜像：`pipeline.build` 为 vulnerable/fixed 两个 variant 各构建 agent/target/verifier 三个镜像（每个 revision 共 6 个），探针的 `task.toml` 写入 `[environment] docker_image` 与 `[verifier.environment] docker_image`，compose 的 target 服务写入 `image:`，因此 Harbor 走 `_use_prebuilt` 路径并跳过 `docker compose build`，不再为每个 trial 生成项目级镜像和 build history。主任务（发布源）保持不带 image 锁定，release 包仍然可移植。
 
@@ -310,7 +312,7 @@ token 记账把 `input_tokens`、`cache_creation_input_tokens` 与 `cache_read_i
 - 对于 OSV 记录未声明生态的 generic 候选，`_probe_registries` 只会尝试 PyPI 与 npm：只有这两个 registry 能用“产品名 + 版本”直接探到包。Go module 需要完整 module path，Maven 需要 `groupId:artifactId`，无法从产品名可靠推断；这类候选必须由 OSV 或引用链接声明生态，否则保持 generic。
 - 2026 样本的 300 条原始 triage 中，257 条进入 eligible。对这 257 条用当前代码重跑 triage（`candidates/cve-2026-triage-sample300c.json`，实测 1,339s / 4 workers）：`eligible = 237`、`unsupported = 14`、`error = 6`；生态分布为 npm 36、PyPI 36、Go 16、Maven 1、NuGet 1、generic 147。
 - 同一轮中，能取到 vulnerable 与 fixed 两版 registry 身份的有 85 条：PyPI 36、npm 36、Go 12、Maven 1（Go 另有 4 条 sumdb 未返回）。其余 generic 多为私有项目或非 registry 分发的应用。该比例是样本估计，不是全量 13,687 候选的最终产出率；`eligible` 也不等于 `RELEASED`。
-- 合成题的 target 由模型生成，框架无法确定性地移除单个前提，因此 T08 controlled 记为 `not_applicable`；修复版对照由 mandatory T04 承担。
+- T08 已移除；修复版对照仍由 mandatory T04 承担。
 - `split` 由共享项目与根因组决定，新增同源 CVE 时先检查 `batch-report.json` 的 `split_audit`，避免同族样本跨集合。
 - 发布包中的 `README.md`、`spec.json`、`evaluation.json` 含答案信息，部署时不得挂载进 agent 环境；agent 只能看到 `task/instruction.md` 与运行时环境。
 - 正式资格验收要求 20 组样本与 grade A；smoke 档位只用于开发冒烟，不能作为发布依据。

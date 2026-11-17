@@ -368,7 +368,7 @@ def _p2_status(pre: dict, auth: dict | None) -> str:
         records=records,
         expectations={"T01": Expectation("T01", True, "healthy", "healthy")},
     )
-    dimension = evaluator._dimension_p(spec, matrix, {})
+    dimension = evaluator._dimension_p(spec, matrix)
     return next(item for item in dimension.items if item.id == "P2-auth-precondition").status
 
 

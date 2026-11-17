@@ -69,15 +69,15 @@ def test_repaired_reference_propagates_to_solve_sh():
     # never pass: the verifier's reference run and the artifact would diverge.
     assert "echo REPAIRED" in task.files["solution/solve.sh"]
 
-    # The alternate probe keeps its own payload.
-    alternate = render_task(
+    # A negative probe keeps its fixed payload when the reference is repaired.
+    negative = render_task(
         fixtures.cve_spec(),
         scenario_name="fixture",
         variant="vulnerable",
-        probe="alternate",
+        probe="fake",
         overrides={POC_PATH: repaired},
     )
-    assert "echo REPAIRED" not in alternate.files["solution/solve.sh"]
+    assert "echo REPAIRED" not in negative.files["solution/solve.sh"]
 
 
 def test_step_cases_render_prebuilt_probes(tmp_path: Path):

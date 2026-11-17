@@ -466,18 +466,18 @@ def test_matrix_ladder_continues_after_an_advisory_failure():
     def run_step(step):
         calls.append(step.key)
         result = MatrixResult()
-        if step.key == "t11":
-            result.verdicts.append(_verdict("T11", met=False))
+        if step.key == "t12":
+            result.verdicts.append(_verdict("T12", met=False))
         else:
             result.verdicts.append(_verdict("T03", met=True))
         return result
 
     steps = [
-        MatrixStep("t11", ("T11",), 1, False),
+        MatrixStep("t12", ("T12",), 1, False),
         MatrixStep("confirm", ("T03", "T04"), 2, True),
     ]
     ladder = run_ladder(steps, run_step)
-    assert calls == ["t11", "confirm"]
+    assert calls == ["t12", "confirm"]
     assert ladder.aborted_at is None
 
 
@@ -564,11 +564,12 @@ def test_plan_matrix_steps_runs_candidate_negatives():
 
     steps = plan_matrix_steps(repeats=3)
     experiment_ids = [eid for step in steps for eid in step.experiment_ids]
-    # T05/T06/T07/T10 run once per verifier template, not per candidate.
+    # T05/T06/T07/T10 also run against the candidate.
     assert {"T05", "T06", "T07", "T10"} <= set(experiment_ids)
     # T01/T02 are derived from T03/T04 instead of starting their own target.
     assert not {"T01", "T02"} & set(experiment_ids)
-    assert [step.key for step in steps if not step.blocking] == ["t11", "t12"]
+    assert [step.key for step in steps if not step.blocking] == ["t12"]
+    assert not {"T08", "T11"} & set(experiment_ids)
     assert steps[-1].key == "t12"
     assert any(step.key == "confirm" for step in steps)
 

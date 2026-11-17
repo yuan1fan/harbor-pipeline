@@ -23,7 +23,7 @@ def candidate():
             "runtime_identity": {"verified": True, "image": identity, "dependencies": {"example-webapp": version}},
         }
     matrix = MatrixResult(matrix_repeats=3)
-    for experiment_id in ("T01", "T02", "T03", "T04", "T05", "T06", "T07", "T10", "T11", "T12"):
+    for experiment_id in ("T01", "T02", "T03", "T04", "T05", "T06", "T07", "T10", "T12"):
         matrix.expectations[experiment_id] = Expectation(experiment_id, True, "observed", "healthy")
     for experiment_id, variant, status, count in (
         ("T03", "vulnerable", "goal_passed", 3), ("T04", "fixed", "fixed_variant_holds", 3),
@@ -40,7 +40,7 @@ def candidate():
                 record["_audit"] = {"mode": "clean-rebuild", "actual_image_digest": image, "no_cache": True}
             matrix.records.append(record)
     return dict(spec=spec, evidence=evidence, matrix=matrix, image_set=images,
-                policy=load_policy(), profile_name="qualification", skipped_experiments={"T08": "not applicable"})
+                policy=load_policy(), profile_name="qualification", cold_rebuild=True)
 
 
 def test_complete_execution_evidence_is_admitted():
@@ -63,6 +63,42 @@ def test_reusing_prebuilt_images_does_not_count_as_clean_rebuilds():
         if record["experiment_id"] == "T09":
             record["_audit"] = {"mode": "prebuilt-replay"}
     assert not evaluate(**kwargs).admitted
+
+
+def test_default_admission_needs_no_cold_rebuild_evidence():
+    kwargs = candidate()
+    kwargs.pop("cold_rebuild")
+    kwargs["matrix"].records = [r for r in kwargs["matrix"].records if r["experiment_id"] != "T09"]
+    result = evaluate(**kwargs)
+    assert result.admitted, result.evaluation["failure_reasons"]
+    assert result.evaluation["quality_flags"]["cold_rebuild"] == "disabled"
+    assert not any(g["id"].startswith("clean_rebuild_") or g["id"] == "seed_stability"
+                   for g in result.hard_conditions)
+
+    kwargs["cold_rebuild"] = True
+    result = evaluate(**kwargs)
+    assert not result.admitted
+    assert result.evaluation["quality_flags"]["cold_rebuild"] == "fail"
+    assert {g["id"] for g in result.hard_conditions if not g["passed"]} == {
+        "clean_rebuild_vulnerable", "clean_rebuild_fixed",
+    }
+
+
+def test_cold_rebuild_opt_in_requires_all_rounds_and_no_errors():
+    kwargs = candidate()
+    result = evaluate(**kwargs)
+    assert result.admitted
+    assert result.evaluation["quality_flags"]["cold_rebuild"] == "pass"
+    kwargs["matrix"].records.pop()  # Missing the third fixed round.
+    result = evaluate(**kwargs)
+    assert not result.admitted
+    assert {g["id"] for g in result.hard_conditions if not g["passed"]} == {"clean_rebuild_fixed"}
+
+    kwargs = candidate()
+    kwargs["extra_seed_errors"] = ["cold build failed"]
+    result = evaluate(**kwargs)
+    assert not result.admitted
+    assert not next(g for g in result.hard_conditions if g["id"] == "seed_stability")["passed"]
 
 
 def test_metadata_from_a_different_image_does_not_attest_the_target():

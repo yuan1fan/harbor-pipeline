@@ -1,4 +1,6 @@
 [pipeline]
+# Optional T09: three no-cache rebuilds of each variant.
+cold_rebuild = false
 output_dir = "runs"
 # Reuse only the endpoint/auth pair from local Claude settings when this
 # PowerShell has no connection overrides. No credentials are written here.

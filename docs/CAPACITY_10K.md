@@ -8,11 +8,11 @@
 | --- | ---: |
 | T03/T04 成对（含确认重复） | 6 |
 | T05/T06/T07/T10 候选级负例 | 4 |
-| T09 干净重建（3 seeds × vulnerable/fixed） | 6 |
-| T11/T12 | 2 |
-| **合计** | **18** |
+| T12 故障分类 | 1 |
+| **默认合计** | **11** |
+| T09 干净重建（显式开启，3 轮 × vulnerable/fixed） | 另加 6 |
 
-T01/T02 由 T03/T04 的 trial 记录推导，不再单独起容器。T09 现在使用 `--no-cache` 重建 vulnerable 与 fixed 两个 variant，并记录实际 image ID；复用预构建镜像不再算作干净重建。上表是最小 blocking 集合，策略要求的重复次数会继续放大成对样本，实际预算以 `batch-plan.json` 为准。
+T01/T02 由 T03/T04 的 trial 记录推导，不再单独起容器。T08、T11 已移除；T09 默认关闭，在配置中设置 `pipeline.cold_rebuild = true` 后才会使用 `--no-cache` 重建 vulnerable 与 fixed，并记录实际 image ID。默认最小矩阵是 11 个 trial，开启 T09 后是 17 个；策略要求的重复次数会继续放大成对样本，实际预算以 `batch-plan.json` 为准。
 
 除 trial 外，每个候选还有：
 
@@ -20,7 +20,7 @@ T01/T02 由 T03/T04 的 trial 记录推导，不再单独起容器。T09 现在�
 - 可选的 solver 试次（Harbor `claude-code` agent）和 reviewer 结构化评审；
 - 发布阶段的不可变副本 oracle 重放。
 
-这些成本计入 USD、token 与 wall-clock，但不计入上表的 18 个 trial。
+这些成本计入 USD、token 与 wall-clock，但不计入上表的矩阵 trial 数。
 
 ## 质量抽样
 

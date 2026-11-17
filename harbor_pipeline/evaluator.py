@@ -106,29 +106,20 @@ def evaluate(
     package_issues: list[str] | None = None,
     network_isolation: str = "public",
     extra_seed_errors: list[str] | None = None,
-    skipped_experiments: dict[str, str] | None = None,
+    cold_rebuild: bool = False,
 ) -> EvaluationOutcome:
-    """Evaluate a candidate with gates, framework health and a quality tier.
+    """Evaluate task gates, framework health and evidence completeness.
 
-    There is deliberately no weighted 100-point score. Most of the old score
-    was the admission checklist re-expressed as weights, so among released
-    candidates it was constant; the only variance came from advisory probes.
-    The evaluation now has three separate layers:
-
-    * ``task_gates``: pass/fail admission checks for this task.
-    * ``framework_health``: verifier/fault checks that say the pipeline is
-      healthy; a failure is not a task defect and must not be repaired as one.
-    * ``quality_tier``: A when the alternate valid PoC is accepted, B otherwise;
-      evidence completeness is reported as flags, not as fake precision.
+    T09 adds cold-rebuild gates only when explicitly enabled. Admission does
+    not assign a quality tier or a weighted 100-point score.
     """
     profile = policy.profile(profile_name)
     artifact_digest = image_set.get("target_digest") or digest(image_set)
     records = matrix.records
-    skipped = skipped_experiments or {}
     dimensions = {
         "V": _dimension_v(spec, evidence, image_set, policy),
-        "P": _dimension_p(spec, matrix, skipped),
-        "M": _dimension_m(spec, evidence, matrix, skipped),
+        "P": _dimension_p(spec, matrix),
+        "M": _dimension_m(spec, evidence, matrix),
         "D": _dimension_d(matrix, profile),
         "I": _dimension_i(
             spec, evidence, matrix, package_issues or [], network_isolation
@@ -144,9 +135,16 @@ def evaluate(
         policy=policy,
         network_isolation=network_isolation,
         extra_seed_errors=extra_seed_errors or [],
+        cold_rebuild=cold_rebuild,
     )
     framework_health = _framework_health(matrix, policy)
     quality = _quality(spec, evidence, matrix)
+    quality["flags"]["cold_rebuild"] = (
+        "disabled" if not cold_rebuild else
+        "pass" if all(gate["passed"] for gate in task_gates
+                      if gate["id"] == "seed_stability" or gate["id"].startswith("clean_rebuild_"))
+        else "fail"
+    )
     failures = [
         f"{gate['id']}: {gate['detail']}"
         for gate in task_gates
@@ -179,8 +177,7 @@ def evaluate(
         "candidate_revision": _revision(records),
         "artifact_digest": artifact_digest,
         "dimensions": {key: dim.to_json() for key, dim in dimensions.items()},
-        # Kept as null for old consumers; the release decision uses the gates
-        # and the quality tier, never a weighted scalar.
+        # Kept as null for old consumers; admission uses the gates.
         "quality_score": None,
         "quality_tier": quality["tier"],
         "quality_flags": quality["flags"],
@@ -419,7 +416,7 @@ def _dimension_v(spec: dict, evidence: dict, image_set: dict, policy: Policy) ->
 
 
 def _dimension_p(
-    spec: dict, matrix: MatrixResult, skipped: dict[str, str]
+    spec: dict, matrix: MatrixResult
 ) -> Dimension:
     pre = spec.get("preconditions", {})
     complete = all(
@@ -427,7 +424,6 @@ def _dimension_p(
         ("network_reachable", "auth_identity", "privileges", "configuration", "user_interaction")
     ) and not pre.get("unknown")
     t01 = matrix.expectation("T01")
-    t08 = matrix.expectation("T08")
     identity = str(pre.get("auth_identity") or "none")
     scheme = str(pre.get("auth_scheme") or ("none" if identity == "none" else ""))
     reachable = pre.get("network_reachable") is True
@@ -464,23 +460,12 @@ def _dimension_p(
         Item("P2-auth-precondition", "pass" if auth_ok else "fail", auth_detail),
         Item("P3-target-reachable", "pass" if t01 and t01.met else "fail",
              t01.detail if t01 else "T01 not run"),
-        _control_item("P4-precondition-necessary", t08, skipped),
     ]
     return Dimension("P", 15.0, items)
 
 
-def _control_item(item_id: str, t08, skipped: dict[str, str]) -> Item:
-    """T08 is optional for release and cannot exist for synthesized targets."""
-    if t08 is not None:
-        return Item(item_id, "pass" if t08.met else "fail", t08.detail)
-    reason = skipped.get("T08")
-    if reason:
-        return Item(item_id, "not_applicable", f"T08 not applicable: {reason}")
-    return Item(item_id, "not_applicable", "T08 control not run")
-
-
 def _dimension_m(
-    spec: dict, evidence: dict, matrix: MatrixResult, skipped: dict[str, str]
+    spec: dict, evidence: dict, matrix: MatrixResult
 ) -> Dimension:
     fix_source_id = spec.get("fix_basis", {}).get("source_id")
     by_id = {s["id"]: s for s in evidence.get("sources", [])}
@@ -492,7 +477,6 @@ def _dimension_m(
     )
     t03 = matrix.record_for("T03")
     triggered = bool(t03 and t03["trigger_evidence"]["observed"] and t03["goal_result"] == GOAL_PASSING)
-    t08 = matrix.expectation("T08")
     items = [
         Item("M1-fix-source", "pass" if commit_ok else "fail",
              f"fix source {fix_source_id} status={fix_source.get('status')}"),
@@ -500,7 +484,6 @@ def _dimension_m(
              "root-cause assertion cites the fetched fix commit"),
         Item("M3-trigger-observed", "pass" if triggered else "fail",
              f"T03 goal={t03['goal_result'] if t03 else 'missing'}"),
-        _control_item("M4-control-eliminates", t08, skipped),
     ]
     return Dimension("M", 25.0, items)
 
@@ -518,16 +501,11 @@ def _fixed_held(record: dict) -> bool:
 
 
 def _dimension_d(matrix: MatrixResult, profile: Profile) -> Dimension:
-    """Diagnostic differential items; T05-T07/T10 moved to framework health.
-
-    D6 is the alternate-PoC quality probe; it is reported here for audit and
-    drives the quality tier, not the admission gate.
-    """
+    """Diagnostic health and reference-PoC items; negatives are framework health."""
     t01 = matrix.expectation("T01")
     t02 = matrix.expectation("T02")
     t03_records = [r for r in matrix.records if r["experiment_id"] == "T03"]
     t04_records = [r for r in matrix.records if r["experiment_id"] == "T04"]
-    t11 = matrix.expectation("T11")
     items = [
         Item("D1-vulnerable-health", "pass" if t01 and t01.met else "fail",
              t01.detail if t01 else "T01 not run"),
@@ -540,9 +518,6 @@ def _dimension_d(matrix: MatrixResult, profile: Profile) -> Dimension:
             _fixed_held(r) for r in t04_records) else "fail",
             f"{sum(1 for r in t04_records if _fixed_held(r))}/{len(t04_records)} "
             "fixed trials held without disclosure"),
-        Item("D6-alternate-accepted", "pass" if t11 and t11.met else
-             ("not_applicable" if t11 is None else "fail"),
-             t11.detail if t11 else "T11 not run"),
     ]
     return Dimension("D", 30.0, items)
 
@@ -625,12 +600,12 @@ def _task_gates(
     policy: Policy,
     network_isolation: str,
     extra_seed_errors: list[str],
+    cold_rebuild: bool = False,
 ) -> list[dict]:
     """Pass/fail admission checks that belong to this task.
 
-    The V/P/M items and the D1-D4 health/PoC items are gates. D6 (alternate
-    PoC) is a quality flag, T05-T07/T10/T12 are framework health, and T08 is
-    not applicable to synthesized targets. T09 is a task gate.
+    The V/P/M items and the D1-D4 health/PoC items are gates.
+    T05-T07/T10/T12 are framework health. T09 is an opt-in task gate.
     """
     gates: list[dict] = []
 
@@ -643,7 +618,7 @@ def _task_gates(
                 continue
             add(item.id, item.status == "pass", item.evidence)
     for item in dimensions["D"].items:
-        if item.id == "D6-alternate-accepted" or item.status == "not_applicable":
+        if item.status == "not_applicable":
             continue
         add(item.id, item.status == "pass", item.evidence)
     for item in dimensions["I"].items:
@@ -701,8 +676,9 @@ def _task_gates(
         add("paired_samples", len(t03) == len(t04) and len(t03) >= floor,
             f"T03={len(t03)} T04={len(t04)} minimum pairs={floor}")
 
-    add("seed_stability", not extra_seed_errors,
-        "; ".join(extra_seed_errors) if extra_seed_errors else "consistent across seeds")
+    if cold_rebuild:
+        add("seed_stability", not extra_seed_errors,
+            "; ".join(extra_seed_errors) if extra_seed_errors else "no cold-rebuild errors")
     if profile.name == "qualification":
         by_id = {source["id"]: source for source in evidence.get("sources", [])}
         backed = all(a.get("evidence_quote") and a.get("evidence_sha256") == by_id.get(a.get("source_id"), {}).get("content_sha256") for a in spec.get("assertions", []))
@@ -716,16 +692,6 @@ def _task_gates(
             "requires source excerpts/checksums or the current repository-curated specification")
         add("business_probe_coverage", curated_ok or bool(spec.get("business_probes")),
             "requires normal application-feature probes on both variants")
-        seeds = [r for r in matrix.records if r["experiment_id"] == "T09"]
-        for variant, status in (("vulnerable", "goal_passed"), ("fixed", "fixed_variant_holds")):
-            verified = [r for r in seeds if r.get("variant") == variant
-                        and (r.get("_audit") or {}).get("mode") == "clean-rebuild"
-                        and (r.get("_audit") or {}).get("no_cache") is True
-                        and (r.get("_audit") or {}).get("actual_image_digest")
-                        and (r.get("health") or {}).get("ok")
-                        and (r.get("trigger_evidence") or {}).get("detail") == status]
-            samples = {r.get("seed") for r in verified}
-            add(f"clean_rebuild_{variant}", len(samples) >= 3, f"{len(samples)}/3 clean rebuilds")
         for variant, expected in (("vulnerable", spec["versions"]["vulnerable_ref"]), ("fixed", spec["versions"]["fixed_ref"])):
             built = (image_set.get("variants") or {}).get(variant, {})
             identity = built.get("runtime_identity") or {}
@@ -741,6 +707,18 @@ def _task_gates(
             actual = [r for r in matrix.records if r["experiment_id"] == experiment_id
                       and (r.get("_audit") or {}).get("mode") != "framework-verifier"]
             add(f"candidate_{experiment_id}", bool(actual), "requires a candidate-specific negative trial")
+
+    if cold_rebuild:
+        seeds = [r for r in matrix.records if r["experiment_id"] == "T09"]
+        for variant, status in (("vulnerable", "goal_passed"), ("fixed", "fixed_variant_holds")):
+            verified = [r for r in seeds if r.get("variant") == variant
+                        and (r.get("_audit") or {}).get("mode") == "clean-rebuild"
+                        and (r.get("_audit") or {}).get("no_cache") is True
+                        and (r.get("_audit") or {}).get("actual_image_digest")
+                        and (r.get("health") or {}).get("ok")
+                        and (r.get("trigger_evidence") or {}).get("detail") == status]
+            samples = {r.get("seed") for r in verified}
+            add(f"clean_rebuild_{variant}", len(samples) >= 3, f"{len(samples)}/3 clean rebuilds")
 
     artifact_digest = image_set.get("target_digest") or digest(image_set)
     add("artifact_digest", artifacts_match(matrix.records, artifact_digest),
@@ -800,14 +778,7 @@ def _framework_health(matrix: MatrixResult, policy: Policy) -> list[dict]:
 
 
 def _quality(spec: dict, evidence: dict, matrix: MatrixResult) -> dict:
-    """Task quality: the alternate PoC plus evidence completeness flags."""
-    t11 = matrix.expectation("T11")
-    if t11 is None:
-        alternate = "not_run"
-    elif t11.met:
-        alternate = "pass"
-    else:
-        alternate = "fail"
+    """Evidence completeness flags; historical quality tiers are retired."""
     identities = spec.get("artifact_identity", []) or []
     pinned = [
         item for item in identities
@@ -820,11 +791,10 @@ def _quality(spec: dict, evidence: dict, matrix: MatrixResult) -> dict:
         if source.get("status") == "ok" and source.get("local_path")
     ]
     flags = {
-        "alternate_poc": alternate,
         "artifact_identity": f"{len(pinned)}/2",
         "source_coverage": f"{len(local)}/{len(sources)}",
     }
-    return {"tier": "A" if alternate == "pass" else "B", "flags": flags}
+    return {"tier": None, "flags": flags}
 
 
 def _blocking(

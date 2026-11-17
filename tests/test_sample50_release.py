@@ -115,6 +115,14 @@ def test_changed_execution_cannot_use_release_checkpoint(ready, monkeypatch):
     assert ready.pipeline._resume_release() is None
 
 
+def test_enabling_cold_rebuild_cannot_resume_a_release_without_it(ready, monkeypatch):
+    monkeypatch.setattr(pipeline_mod, "recheck_from_release", lambda *a, **k: (_ for _ in ()).throw(TaskError("infra_error", "offline")))
+    with pytest.raises(TaskError):
+        _release(ready)
+    ready.pipeline.config.pipeline.cold_rebuild = True
+    assert ready.pipeline._resume_release() is None
+
+
 def test_environment_start_error_is_not_a_failed_poc(tmp_path, monkeypatch):
     (tmp_path / "task").mkdir()
     monkeypatch.setattr(

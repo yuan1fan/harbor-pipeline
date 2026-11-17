@@ -10,7 +10,7 @@ reaches it.
 This module renders the task's own verifier and runs it against a stub target
 on localhost, so all four checks execute in about a second on the pipeline
 host. The stub target is deliberately not the task's application; the per-task
-application is covered by T01-T04 and T11.
+application is covered by T01-T04.
 """
 
 from __future__ import annotations

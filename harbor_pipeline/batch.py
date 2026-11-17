@@ -132,6 +132,7 @@ def plan_batch(
     limit: int | None = None,
     output_root: Path | None = None,
     max_repairs: int = 2,
+    cold_rebuild: bool = False,
     shard_index: int = 0,
     shard_count: int = 1,
     per_candidate_calls: int = 48,
@@ -190,17 +191,17 @@ def plan_batch(
     # repair agent may execute up to MAX_VERIFIER_RUNS paired verifier trials
     # and MAX_BUILD_RUNS build-only cycles.
     per_candidate = (
-        (mandatory + 2 * repeats + 6) * (repairs + 1)
+        (mandatory + 2 * repeats + (6 if cold_rebuild else 0)) * (repairs + 1)
         + 2 * MAX_VERIFIER_RUNS * repairs
     )
     n = max(1, len(unique))
     limits = {
         "trials": float(per_candidate * n + 30),
-        # Six images per revision plus six images per build or verifier tool
-        # call in a repair.
+        # Six images per revision, plus twelve for optional cold rebuilds;
+        # each repair tool call has its own build allowance.
         "builds": float(
             (
-                18 * (repairs + 1)
+                (6 + (12 if cold_rebuild else 0)) * (repairs + 1)
                 + 6 * (MAX_VERIFIER_RUNS + MAX_BUILD_RUNS) * repairs
             ) * n
             + 6
@@ -508,7 +509,7 @@ def _difficulty_baseline(results: dict[str, dict], root: Path) -> dict:
         "oracle_success_rate": successes / total if total else 0.0,
         "oracle_median_seconds": median(durations) if durations else 0.0,
         "oracle_samples": total,
-        "seed_consistent": all(values == {"passed"} for values in seeds.values()),
+        "seed_consistent": all(values == {"passed"} for values in seeds.values()) if seeds else None,
         # The oracle rate is only an upper bound on solvability. Model
         # difficulty comes from an explicit, recorded agent run.
         "model_baseline": model_baseline,

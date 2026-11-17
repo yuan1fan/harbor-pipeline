@@ -223,6 +223,24 @@ def test_normalize_forces_evidence_facts(tmp_path: Path):
     assert notes
 
 
+@pytest.mark.parametrize("legacy_alternate", [False, True])
+def test_reference_only_bundle_normalizes_and_renders(tmp_path: Path, legacy_alternate):
+    evidence = _write_evidence(tmp_path)
+    body = _bundle()
+    body["poc"].pop("alternate")
+    if legacy_alternate:
+        body["poc"]["alternate"] = "obsolete and invalid Python"
+    bundle, _, issues = synthesis_mod.normalize_bundle(
+        body, evidence=evidence, discovery=_discovery(), run_dir=tmp_path,
+    )
+    assert issues == []
+    assert set(bundle["poc"]) == {"reference"}
+    from types import SimpleNamespace
+    from harbor_pipeline.scenario import synthesis_solution_for
+    script = synthesis_solution_for("reference", SimpleNamespace(poc=bundle["poc"]))
+    assert bundle["poc"]["reference"] in script
+
+
 def test_normalize_collapses_model_path_noise(tmp_path: Path):
     evidence = _write_evidence(tmp_path)
     body = _bundle()
@@ -334,10 +352,7 @@ def test_focused_poc_asks_only_for_the_missing_object(tmp_path: Path):
             }
         },
     )
-    assert poc == {
-        "reference": "#!/bin/sh\necho REFERENCE\n",
-        "alternate": "#!/bin/sh\necho ALTERNATE\n",
-    }
+    assert poc == {"reference": "#!/bin/sh\necho REFERENCE\n"}
     assert "missing its" in engine.provider.prompts[0]
     assert "print('app')" in engine.provider.prompts[0]
 

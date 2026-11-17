@@ -89,6 +89,62 @@ def _validate(scenario):
     return scenario.pipeline.validate(scenario.spec, fixtures.evidence_index(), scenario.task, scenario.images)
 
 
+def test_cold_rebuild_opt_in_invalidates_completed_matrix_but_reuses_normal_trials(scenario, monkeypatch):
+    seed_calls = []
+    evaluations = []
+
+    def seeds(*args, **kwargs):
+        seed_calls.append(kwargs["repeats"])
+        return [], []
+
+    def evaluate(**kwargs):
+        evaluations.append(kwargs["cold_rebuild"])
+        return EvaluationOutcome(fixtures.evaluation("released"), {}, [])
+
+    monkeypatch.setattr(pipeline_mod, "run_seed_repeats", seeds)
+    monkeypatch.setattr(pipeline_mod, "evaluate", evaluate)
+    _validate(scenario)
+    assert seed_calls == []
+    assert evaluations == [False]
+    original = scenario.pipeline.store.read_artifact("trials.json")
+    assert original["cold_rebuild"] is False
+    calls = list(scenario.adapter.calls)
+
+    scenario.pipeline.config.pipeline.cold_rebuild = True
+    _validate(scenario)
+    assert seed_calls == [3]
+    assert evaluations[-1] is True
+    assert scenario.adapter.calls == calls
+    enabled = scenario.pipeline.store.read_artifact("trials.json")
+    assert enabled["cold_rebuild"] is True
+    assert enabled["validation_signature"] != original["validation_signature"]
+    assert enabled["execution_signature"] == original["execution_signature"]
+    _validate(scenario)
+    assert seed_calls == [3]  # Completed T09 matrix is reusable.
+
+    scenario.pipeline.config.pipeline.cold_rebuild = False
+    _validate(scenario)
+    assert seed_calls == [3]
+    assert evaluations[-1] is False
+    assert scenario.adapter.calls == calls
+
+
+def test_turning_off_cold_rebuild_recovers_after_its_failure(scenario, monkeypatch):
+    scenario.pipeline.config.pipeline.cold_rebuild = True
+    monkeypatch.setattr(pipeline_mod, "run_seed_repeats", lambda *a, **k: ([], ["network unavailable"]))
+    with pytest.raises(TaskError):
+        _validate(scenario)
+    failed = scenario.pipeline.store.read_artifact("trials.json")
+    assert failed["aborted_at"] == "t09-seeds"
+    before = list(scenario.adapter.calls)
+    scenario.pipeline.config.pipeline.cold_rebuild = False
+    matrix, _ = _validate(scenario)
+    assert matrix.aborted_at is None
+    assert matrix.seed_errors == []
+    assert not any(r["experiment_id"] == "T09" for r in matrix.records)
+    assert not set(before) & set(scenario.adapter.calls[len(before):])
+
+
 def test_partial_step_resumes_only_the_failed_case_without_charging_successes(scenario):
     scenario.adapter.fail_on = "confirm-t04"
     with pytest.raises(TaskError) as caught:
@@ -223,10 +279,12 @@ def test_partial_cold_seeds_resume_without_duplicate_builds_or_missing_seeds(tmp
     assert sum("reuse" in r["_audit"] for r in records) == 2
 
 
-def test_alternate_poc_changes_execution_signature_even_if_reference_task_is_unchanged(scenario):
+def test_only_reference_poc_changes_execution_signature(scenario):
     synthesis = SimpleNamespace(target={"files": {}}, poc={"reference": "same", "alternate": "one"})
     before = execution_signature(scenario.spec, scenario.task, scenario.images, synthesis=synthesis)
     synthesis.poc["alternate"] = "two"
+    assert execution_signature(scenario.spec, scenario.task, scenario.images, synthesis=synthesis) == before
+    synthesis.poc["reference"] = "changed"
     assert execution_signature(scenario.spec, scenario.task, scenario.images, synthesis=synthesis) != before
 
 

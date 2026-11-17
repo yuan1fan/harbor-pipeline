@@ -147,7 +147,8 @@
       "enum": [
         "A",
         "B",
-        "C"
+        "C",
+        null
       ]
     },
     "quality_flags": {

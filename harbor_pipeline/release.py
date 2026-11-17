@@ -378,7 +378,8 @@ def _write_readme(root: Path, spec: dict, evaluation: dict, manifest: dict, task
         *(
             [f"- Quality tier: {evaluation['quality_tier']}"]
             if evaluation.get("quality_tier")
-            else [f"- Quality score (legacy): {evaluation.get('quality_score')}"]
+            else [f"- Quality score (legacy): {evaluation['quality_score']}"]
+            if evaluation.get("quality_score") is not None else []
         ),
         *(
             [

@@ -2,8 +2,8 @@
 
 The synthesizer is the only runtime model call that *authors* a task. It sees
 the fetched evidence, the deterministic version/commit discovery, and a fixed
-target contract; it must return a container recipe, a reference PoC, and an
-alternate PoC. Everything it returns is treated as untrusted input and is
+target contract; it must return a container recipe and a reference PoC.
+Everything it returns is treated as untrusted input and is
 checked before it can reach a build:
 
 * the product, version pair and fix commit are replaced with the values parsed
@@ -88,10 +88,9 @@ MAX_SYNTHESIS_ATTEMPTS = 3
 POC_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["reference", "alternate"],
+    "required": ["reference"],
     "properties": {
         "reference": {"type": "string", "minLength": 20, "maxLength": 60000},
-        "alternate": {"type": "string", "minLength": 10, "maxLength": 60000},
     },
 }
 
@@ -321,7 +320,6 @@ class Synthesizer:
             if not (
                 isinstance(poc, dict)
                 and isinstance(poc.get("reference"), str)
-                and isinstance(poc.get("alternate"), str)
             ):
                 # The model returned the application but dropped the PoC. Ask
                 # for just that object instead of making it reproduce the whole
@@ -453,16 +451,14 @@ class Synthesizer:
             "`poc` object. Return only the PoC object for this exact application.\n\n"
             f"## Target files\n```json\n{target_text}\n```\n\n"
             "## PoC contract\n"
-            "- Both are standalone Python 3 or bash scripts starting with a shebang.\n"
+            "- Write a standalone Python 3 or bash script starting with a shebang.\n"
             "- Read `TARGET_HOST` (default `target`) and `TARGET_PORT` (default `8080`).\n"
             f"- {family_contract}\n"
             f"- {auth_contract}"
-            "- The alternate must reach the same observable through a different "
-            "payload on the same route, method, and parameter names.\n"
             "- Exit non-zero on failure; write a one-line stderr diagnostic with the "
             "HTTP status and the response prefix on failure.\n"
             "- The verifier runs Python 3 or bash only.\n\n"
-            'Return {"reference": "...", "alternate": "..."} and nothing else.'
+            'Return {"reference": "..."} and nothing else.'
         )
         reservation = f"{cve_id}-synthesis-poc-{attempt}"
         estimated = max(1, len(prompt) // 4) + 16000
@@ -506,11 +502,9 @@ class Synthesizer:
             poc = ensure_structured(response)
         except PipelineError:
             return None
-        if not isinstance(poc.get("reference"), str) or not isinstance(
-            poc.get("alternate"), str
-        ):
+        if not isinstance(poc.get("reference"), str):
             return None
-        return {"reference": poc["reference"], "alternate": poc["alternate"]}
+        return {"reference": poc["reference"]}
 
     def _prompt(
         self,
@@ -678,9 +672,9 @@ class Synthesizer:
             "an error message, debug output, response header, or unintended route.\n\n"
             "The fixed release must defeat the reference PoC through the real upstream "
             "fix, with the same application layout, routes, and internal services.\n\n"
-            "## Reference and alternate PoC\n\n"
-            "- Both are standalone executable scripts that start with a shebang.\n"
-            "- They run on the verifier host with no arguments and the environment "
+            "## Reference PoC\n\n"
+            "- Write a standalone executable script that starts with a shebang.\n"
+            "- It runs on the verifier host with no arguments and the environment "
             "variables `TARGET_HOST` (default `target`) and `TARGET_PORT` (default "
             "`8080`). They must read those variables (use `TARGET_HOST` in the text).\n"
             "- When authentication is declared, the PoC reads `TARGET_USER` and "
@@ -726,15 +720,8 @@ class Synthesizer:
             "- Prefer `urllib.request` with a custom opener or raw sockets that follow "
             "redirects; do not assume a single request returns the body.\n"
             "- The reference PoC must succeed on the vulnerable release and fail on "
-            "the fixed release. The alternate PoC must reach the same observable "
-            "through a different payload, not a different application interface: keep the same "
-            "route, method, parameter names and body shape as the reference, and "
-            "vary the exploit values (flag aliases, file names, encodings, ordering). "
-            "The goal is to prove the verifier accepts another valid attack, so an "
-            "alternate that relies on a transport the handler does not parse is a "
-            "defect, not a stronger test.\n"
-            "- Trace BOTH the reference and the alternate request through the server "
-            "code you just wrote before returning, not only the alternate. Confirm "
+            "the fixed release.\n"
+            "- Trace the reference request through the server code before returning. Confirm "
             "the route is registered, the method matches, the parameter name is the "
             "one the handler parses, and the observable can actually reach the "
             "response. Repeated query parameters are not a list unless the handler "
@@ -1111,6 +1098,10 @@ def normalize_bundle(
     bundle["target"] = target
 
     poc = bundle.get("poc") or {}
+    # Accept historical bundles without requiring, validating or executing the
+    # retired alternate PoC. New schemas only request the reference.
+    if isinstance(poc, dict):
+        poc.pop("alternate", None)
     issues.extend(_validate_poc(poc))
     bundle["poc"] = poc
 
@@ -1747,23 +1738,19 @@ def _validate_python_poc(label: str, body: str) -> list[str]:
 
 def _validate_poc(poc: dict[str, Any]) -> list[str]:
     issues: list[str] = []
-    reference = str(poc.get("reference", ""))
-    alternate = str(poc.get("alternate", ""))
-    for label, body in (("reference", reference), ("alternate", alternate)):
-        if not body.startswith("#!"):
-            issues.append(f"poc.{label} must start with a shebang")
-        elif not _VERIFIER_SHEBANG.match(body):
-            issues.append(
-                f"poc.{label} must run on the verifier's Python 3 or bash; "
-                "other interpreters are not installed"
-            )
-        if "TARGET_HOST" not in body:
-            issues.append(f"poc.{label} must read the TARGET_HOST environment variable")
-        if len(body.encode("utf-8")) > MAX_FILE_BYTES:
-            issues.append(f"poc.{label} exceeds {MAX_FILE_BYTES} bytes")
-        issues.extend(_validate_python_poc(label, body))
-    if reference and reference == alternate:
-        issues.append("poc.alternate must differ from poc.reference")
+    body = str(poc.get("reference", ""))
+    if not body.startswith("#!"):
+        issues.append("poc.reference must start with a shebang")
+    elif not _VERIFIER_SHEBANG.match(body):
+        issues.append(
+            "poc.reference must run on the verifier's Python 3 or bash; "
+            "other interpreters are not installed"
+        )
+    if "TARGET_HOST" not in body:
+        issues.append("poc.reference must read the TARGET_HOST environment variable")
+    if len(body.encode("utf-8")) > MAX_FILE_BYTES:
+        issues.append(f"poc.reference exceeds {MAX_FILE_BYTES} bytes")
+    issues.extend(_validate_python_poc("reference", body))
     return issues
 
 

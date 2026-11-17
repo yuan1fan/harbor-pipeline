@@ -41,16 +41,17 @@ def execution_signature(spec, task, image_set, *, synthesis=None, overrides=None
         "spec": {key: value for key, value in spec.items() if key not in {"frozen_at", "frozen_digest"}},
         "files": execution_files(task), "images": _images(image_set),
         "target_digest": image_set.get("target_digest"),
-        "synthesis": {"target": synthesis.target, "poc": synthesis.poc} if synthesis else None,
+        "synthesis": {"target": synthesis.target, "poc": {"reference": synthesis.poc["reference"]}} if synthesis else None,
         "overrides": {key: value for key, value in (overrides or {}).items()
                       if key not in {"instruction.md", "README.md", ".gitignore"}},
         "parameters": parameters, "executors": _executors(),
     })
 
 
-def validation_signature(spec, task, image_set):
+def validation_signature(spec, task, image_set, *, cold_rebuild=False):
     return digest({
-        "protocol": 2,
+        "protocol": 3,
+        "cold_rebuild": cold_rebuild,
         "spec": spec,
         "files": task.files,
         "images": _images(image_set),

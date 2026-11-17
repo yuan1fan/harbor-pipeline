@@ -1,4 +1,6 @@
 [pipeline]
+# Optional T09: three no-cache rebuilds of each variant.
+cold_rebuild = false
 output_dir = "runs"
 # Concurrent candidates in a batch.
 workers = 4

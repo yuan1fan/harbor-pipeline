@@ -66,17 +66,7 @@ def test_fixed_hold_requires_healthy_target():
     assert _d4_status([unhealthy]) == "fail"
 
 
-def test_control_items_are_not_applicable_when_synthesized():
-    item = evaluator._control_item(
-        "P4-precondition-necessary",
-        None,
-        {"T08": "synthesized targets have no framework-owned controlled variant"},
-    )
-    assert item.status == "not_applicable"
-    assert "no framework-owned controlled variant" in item.evidence
-
-
-def test_skipped_control_does_not_lower_p_or_m():
+def test_preconditions_and_mechanism_do_not_require_a_control_variant():
     spec = {
         "preconditions": {
             "network_reachable": True,
@@ -106,15 +96,14 @@ def test_skipped_control_does_not_lower_p_or_m():
         records=records,
         expectations={"T01": Expectation("T01", True, "healthy", "healthy")},
     )
-    skipped = {"T08": "synthesized targets have no framework-owned controlled variant"}
 
-    p = evaluator._dimension_p(spec, matrix, skipped)
-    m = evaluator._dimension_m(spec, evidence, matrix, skipped)
+    p = evaluator._dimension_p(spec, matrix)
+    m = evaluator._dimension_m(spec, evidence, matrix)
 
     assert p.score == 1.0
     assert m.score == 1.0
-    assert next(i for i in p.items if i.id == "P4-precondition-necessary").status == "not_applicable"
-    assert next(i for i in m.items if i.id == "M4-control-eliminates").status == "not_applicable"
+    assert all(i.id != "P4-precondition-necessary" for i in p.items)
+    assert all(i.id != "M4-control-eliminates" for i in m.items)
 
 
 def _i1_status(goal: dict, *, confidentiality: str = "high") -> str:

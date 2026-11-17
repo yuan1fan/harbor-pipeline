@@ -1,7 +1,7 @@
 schema_version = "1.0"
-policy_version = "2026-11-06.2"
+policy_version = "2026-11-17.1"
 
-# The differential matrix from FRAMEWORK_PLAN.md section 8.1.
+# The current differential matrix is documented in README.md section 3.1.
 # `probe` selects the harness behaviour; `expect` is the required decision.
 [[experiments]]
 id = "T01"
@@ -67,22 +67,13 @@ mandatory_for_release = true
 description = "Local files, default secrets, and side channels must not satisfy the goal."
 
 [[experiments]]
-id = "T08"
-name = "remove_required_precondition"
-variant = "controlled"
-probe = "control"
-expect = "vulnerability_eliminated"
-mandatory_for_release = false
-description = "Removing a proven-necessary condition removes the vulnerable behaviour."
-
-[[experiments]]
 id = "T09"
 name = "multi_seed_rebuild"
 variant = "both"
 probe = "seed"
 expect = "consistent"
 mandatory_for_release = false
-description = "Fresh rebuilds across seeds keep the same decision."
+description = "Opt-in via pipeline.cold_rebuild (default false): three no-cache rebuilds per variant keep the same decision."
 
 [[experiments]]
 id = "T10"
@@ -92,15 +83,6 @@ probe = "invalid"
 expect = "goal_failed"
 mandatory_for_release = true
 description = "Wrong or incomplete PoC must not be accepted."
-
-[[experiments]]
-id = "T11"
-name = "alternate_valid_submission"
-variant = "vulnerable"
-probe = "alternate"
-expect = "goal_passed"
-mandatory_for_release = false
-description = "A different but valid submission is accepted."
 
 [[experiments]]
 id = "T12"

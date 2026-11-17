@@ -96,7 +96,6 @@ def render_task(
     synthetic: bool = False,
     network_mode: str = "public",
     allowed_hosts: tuple[str, ...] = ("target",),
-    controlled: bool = False,
     fault: bool = False,
     overrides: dict[str, str] | None = None,
     synthesis=None,
@@ -136,7 +135,6 @@ def render_task(
         spec_digest=spec["frozen_digest"],
         attribution_grade=spec["attribution_grade"],
         synthetic=synthetic or synthesis is not None,
-        controlled=controlled,
         fault=fault,
         business_path="/business" if synthesis is not None else "/static/hello.txt",
         business_body="ok" if synthesis is not None else "hello",
@@ -227,7 +225,6 @@ def render_task(
         spec=spec,
         variant=variant,
         probe=probe,
-        controlled=controlled,
         fault=fault,
         synthesis_digest=synthesis_digest,
     )
@@ -240,7 +237,6 @@ def render_task(
         synthetic=synthetic or synthesis is not None,
         network_mode=network_mode,
         allowed_hosts=allowed_hosts,
-        controlled=controlled,
         fault=fault,
         synthesis_digest=synthesis_digest,
         image_base=tag_base,
@@ -310,7 +306,6 @@ def compute_task_digest(
     spec: dict,
     variant: str,
     probe: str,
-    controlled: bool = False,
     fault: bool = False,
     synthesis_digest: str = "",
 ) -> str:
@@ -319,7 +314,6 @@ def compute_task_digest(
         "spec_digest": spec["frozen_digest"],
         "variant": variant,
         "probe": probe,
-        "controlled": controlled,
         "fault": fault,
         "synthesis_digest": synthesis_digest,
         "generator_version": GENERATOR_VERSION,
@@ -353,7 +347,7 @@ def pin_task_images(task: GeneratedTask, *image_sets: dict) -> GeneratedTask:
             body = body.replace(f'docker_image = "{ref}"', f'docker_image = "{identity}"')
         task.files[name] = body
     task.task_digest = compute_task_digest(task.files, spec={"frozen_digest": task.spec_digest},
-        variant=task.variant, probe=task.probe, controlled=metadata.get("controlled", False),
+        variant=task.variant, probe=task.probe,
         fault=metadata.get("fault_injected", False), synthesis_digest=task.synthesis_digest)
     task.files["task.toml"] = task.files["task.toml"].replace(f'task_digest = "{old_digest}"', f'task_digest = "{task.task_digest}"')
     return task
@@ -369,7 +363,6 @@ def _task_toml(
     synthetic: bool,
     network_mode: str,
     allowed_hosts: tuple[str, ...],
-    controlled: bool,
     fault: bool,
     synthesis_digest: str = "",
     image_base: str | None = None,
@@ -378,7 +371,7 @@ def _task_toml(
     presentation_mode: str = "black_box",
     agent_timeout_sec: float | None = None,
 ) -> str:
-    suffix = "-control" if controlled else ("-fault" if fault else "")
+    suffix = "-fault" if fault else ""
     # Task validation probes reuse two task-independent images so every
     # candidate does not rebuild an agent and a verifier that are byte-identical
     # for all tasks. The target image stays per-candidate.
@@ -424,7 +417,6 @@ scenario = {_q(scenario_name)}
 synthetic = {str(synthetic).lower()}
 generation_mode = {_q("synthesized" if synthesis_digest else "template")}
 synthesis_digest = {_q(synthesis_digest)}
-controlled = {str(controlled).lower()}
 fault_injected = {str(fault).lower()}
 attribution_grade = {_q(spec['attribution_grade'])}
 spec_digest = {_q(spec['frozen_digest'])}

@@ -1,5 +1,7 @@
 # Harbor CVE 自动出题产线搭建计划
 
+> 历史设计文档。2026-11-17 起已移除 T08、T11，T09 改为 `pipeline.cold_rebuild` 显式开启、默认关闭，且不再按备选 PoC 划分质量档。当前验收规则以 [README 第 3 节](../README.md#3-验证fixed-verifier-no-llm-scoring) 和 `policies/` 为准；下文旧设计及实验记录保留作历史参考。
+
 日期：2026 年 11 月 1 日  
 状态：自动化产线已实现；支持输入任意 CVE 编号自动发现证据、合成题目并差分验证；模板 CVE-2024-23334 已完成 qualification 并发布，自动合成 CVE-2023-40587 已完成真实 Docker/Harbor 验证  
 交接入口：[HANDOFF.md](../HANDOFF.md)  

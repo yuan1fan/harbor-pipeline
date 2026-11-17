@@ -557,6 +557,7 @@ def _batch(config, args) -> int:
         limit=args.limit,
         output_root=output_root,
         max_repairs=config.pipeline.max_repairs,
+        cold_rebuild=config.pipeline.cold_rebuild,
         shard_index=args.shard_index,
         shard_count=args.shard_count,
         per_candidate_calls=per_calls,
@@ -992,9 +993,10 @@ def _print_report(payload: dict) -> None:
     print(f"{payload['cve_id']}  {payload['state']}")
     if payload.get("admission_status"):
         quality = payload.get("quality_tier") or payload.get("quality_score")
+        quality_label = f"quality={quality} " if quality is not None else ""
         print(
             f"  admission={payload['admission_status']} "
-            f"quality={quality} "
+            f"{quality_label}"
             f"trials={len(payload.get('trials') or [])}"
         )
     if payload.get("image_digest"):
@@ -1022,7 +1024,9 @@ def _print_batch(summary: dict) -> None:
         tail = ""
         if item.get("admission_status"):
             quality = item.get("quality_tier") or item.get("quality_score")
-            tail = f" admission={item['admission_status']} quality={quality}"
+            tail = f" admission={item['admission_status']}"
+            if quality is not None:
+                tail += f" quality={quality}"
         if item.get("error_category"):
             tail += f" error={item['error_category']}"
         print(f"  {item['cve_id']}: {item['state']}{tail}")

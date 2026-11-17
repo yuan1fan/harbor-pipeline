@@ -40,6 +40,8 @@ class Settings:
     # Infrastructure retries are independent of author repair attempts.
     max_infra_retries: int = 2
     stage_retry_attempts: int = 2
+    # Optional T09: three no-cache rebuilds per variant, beyond normal trials.
+    cold_rebuild: bool = False
     trials: int = 5
     min_trials: int = 5
     max_calls: int = 12
@@ -158,7 +160,7 @@ def load_config(path: Path | None = None) -> Config:
         raise PipelineError("resource_dir must be a nonempty local directory")
     if not isinstance(settings.resource_disk_paths, list) or any(not isinstance(p, str) or not p for p in settings.resource_disk_paths):
         raise PipelineError("resource_disk_paths must be a list of paths")
-    for name in ("archive_images", "prune_images", "solver_review", "evidence_resolver", "require_harbor_lint", "inherit_claude_settings", "wsl_reclaim_memory"):
+    for name in ("cold_rebuild", "archive_images", "prune_images", "solver_review", "evidence_resolver", "require_harbor_lint", "inherit_claude_settings", "wsl_reclaim_memory"):
         if not isinstance(getattr(settings, name), bool):
             raise PipelineError(f"{name} must be a boolean")
     for name in ("workers", "trial_workers", "trials", "min_trials", "max_calls", "max_total_tokens", "max_context_bytes", "command_timeout_sec"):

@@ -104,6 +104,9 @@ def test_prepare_workspace_copies_inputs_and_settings(tmp_path: Path):
     assert not (workspace.root / "bin" / "harbor-author").exists()
     # The contract must name the literal placeholder the renderer replaces.
     assert "{{REF}}" in workspace.contract
+    assert not (workspace.root / "poc" / "alternate.py").exists()
+    assert "alternate.py" not in workspace.contract
+    assert "--alternate" not in workspace.contract
 
 
 def test_assemble_bundle_reads_the_three_trees(tmp_path: Path):
@@ -124,7 +127,7 @@ def test_assemble_bundle_reads_the_three_trees(tmp_path: Path):
     assert set(bundle["target"]["files"]) == {"Dockerfile", "requirements.txt", "app.py"}
     assert set(bundle["target"]["fixed_overrides"]) == {"requirements.txt"}
     assert bundle["poc"]["reference"].startswith("#!/usr/bin/env python3")
-    assert "TARGET_HOST" in bundle["poc"]["alternate"]
+    assert set(bundle["poc"]) == {"reference"}
 
 
 def test_assemble_bundle_rejects_traversal(tmp_path: Path):

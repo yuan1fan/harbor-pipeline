@@ -84,16 +84,15 @@ def test_fault_switch_is_in_the_normal_target_and_both_composes():
     assert 'TARGET_FAULT: "1"' in faulty.files["tests/docker-compose.yaml"]
 
 
-def test_quality_tier_comes_from_the_alternate_poc():
+def test_historical_alternate_poc_does_not_assign_a_quality_tier():
     spec = {"artifact_identity": [{"digest": "sha256:" + "a" * 64}]}
     evidence = {"sources": [{"status": "ok", "local_path": "x"}]}
     matrix = _matrix({
         "T11": Expectation("T11", True, "status=goal_passed", "goal_passed"),
     })
     quality = evaluator._quality(spec, evidence, matrix)
-    assert quality["tier"] == "A"
+    assert quality["tier"] is None
     assert quality["flags"] == {
-        "alternate_poc": "pass",
         "artifact_identity": "1/2",
         "source_coverage": "1/1",
     }
@@ -101,7 +100,7 @@ def test_quality_tier_comes_from_the_alternate_poc():
     matrix.expectations["T11"] = Expectation(
         "T11", False, "status=goal_failed", "goal_failed"
     )
-    assert evaluator._quality(spec, evidence, matrix)["tier"] == "B"
+    assert evaluator._quality(spec, evidence, matrix) == quality
 
 
 def test_framework_health_owns_negatives_and_t12():
@@ -134,7 +133,7 @@ def test_quality_does_not_block_but_framework_health_does():
     assert evaluator._blocking(task_gates, broken, profile) is True
 
 
-def test_evaluation_has_no_weighted_score_and_uses_a_tier():
+def test_evaluation_has_no_weighted_score_or_quality_tier():
     spec = fixtures.cve_spec()
     matrix = _matrix()
     outcome = evaluator.evaluate(
@@ -152,11 +151,12 @@ def test_evaluation_has_no_weighted_score_and_uses_a_tier():
     )
     evaluation = outcome.evaluation
     assert evaluation["quality_score"] is None
-    assert evaluation["quality_tier"] in {"A", "B"}
+    assert evaluation["quality_tier"] is None
+    assert evaluation["quality_flags"]["cold_rebuild"] == "disabled"
     assert "quality_flags" in evaluation
     assert "framework_health" in evaluation
     assert any(check["id"] == "fault_T12" for check in evaluation["framework_health"])
-    # The new schema accepts the gate/tier shape.
+    # The schema still accepts the historical fields as null.
     validate("evaluation", evaluation)
 
 

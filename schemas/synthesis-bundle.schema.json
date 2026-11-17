@@ -226,10 +226,9 @@
     "poc": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["reference", "alternate"],
+      "required": ["reference"],
       "properties": {
-        "reference": {"type": "string", "minLength": 20, "maxLength": 60000},
-        "alternate": {"type": "string", "minLength": 10, "maxLength": 60000}
+        "reference": {"type": "string", "minLength": 20, "maxLength": 60000}
       }
     },
     "matrix_repeats": {

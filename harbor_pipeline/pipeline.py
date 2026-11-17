@@ -859,7 +859,7 @@ class CvePipeline:
         # and the reservation is taken before the bundle is visible here, so the
         # ceiling has to assume the largest count the schema permits.
         repeats = max(self.profile.trials, MAX_MATRIX_REPEATS)
-        per_matrix = mandatory + 2 * repeats + 6
+        per_matrix = mandatory + 2 * repeats + (6 if self.config.pipeline.cold_rebuild else 0)
         repairs = max(0, self.config.pipeline.max_repairs)
         agent_authoring = self.config.pipeline.authoring == "agent"
         author_model = self.config.model_for("author")
@@ -899,7 +899,7 @@ class CvePipeline:
                     + 2 * MAX_VERIFIER_RUNS * repairs + 10,
                 )
             ),
-            "builds": builds + 12 * (repairs + resumes + 1),
+            "builds": builds + (12 * (repairs + resumes + 1) if self.config.pipeline.cold_rebuild else 0),
             "wall_sec": wall_sec,
             "calls": calls,
             "tokens": tokens,
@@ -1903,7 +1903,7 @@ class CvePipeline:
             try:
                 trials = self.store.read_artifact("trials.json")
                 from .validation_evidence import validation_signature
-                if (trials.get("validation_signature") == validation_signature(spec, task, image_set)
+                if (trials.get("validation_signature") == validation_signature(spec, task, image_set, cold_rebuild=self.config.pipeline.cold_rebuild)
                         and trials.get("execution_signature") == execution_key
                         and not trials.get("aborted_at") and not trials.get("errors")
                         and not trials.get("seed_errors")):
@@ -1913,7 +1913,7 @@ class CvePipeline:
                         policy=self.policy, profile_name=self.profile.name,
                         package_issues=inspect_task(task.files, spec), network_isolation=self.network_mode,
                         extra_seed_errors=list(trials.get("seed_errors") or []),
-                        skipped_experiments={"T08": "no framework-owned control"} if self.auto else {},
+                        cold_rebuild=self.config.pipeline.cold_rebuild,
                     )
                     self.store.write_artifact("evaluation.json", outcome.evaluation)
                     if job.state == "VALIDATING":
@@ -1964,7 +1964,7 @@ class CvePipeline:
         # test the synthesized draft before any repeats or negatives. A failure
         # here is a draft defect: _matrix_repair_error hands the evidence to
         # the tool-using repair agent. Only a passing pair proceeds to
-        # confirm/seeds/T11/T12, which are the release gate.
+        # confirm/optional cold rebuilds/T12, which are the release gate.
         blocking_steps = [step for step in all_steps if step.blocking]
         advisory_steps = [step for step in all_steps if not step.blocking]
         matrix_root = self.store.path("matrix")
@@ -2042,7 +2042,7 @@ class CvePipeline:
 
         matrix = run_ladder(blocking_steps, run_step)
         seed_errors: list[str] = []
-        if matrix.aborted_at is None:
+        if matrix.aborted_at is None and self.config.pipeline.cold_rebuild:
             seed_records, seed_errors = run_seed_repeats(
                 self.adapter,
                 spec,
@@ -2129,10 +2129,7 @@ class CvePipeline:
             package_issues=inspect_task(task.files, spec),
             network_isolation=self.network_mode,
             extra_seed_errors=seed_errors,
-            skipped_experiments=(
-                {"T08": "synthesized targets have no framework-owned controlled variant"}
-                if self.auto else {}
-            ),
+            cold_rebuild=self.config.pipeline.cold_rebuild,
         )
         # Record the effective count and the framework evidence on the result
         # itself so trials.json and the release audit agree.
@@ -2146,8 +2143,9 @@ class CvePipeline:
             for experiment_id, evidence in framework_checks.items()
         }
         from .validation_evidence import validation_signature
-        matrix.validation_signature = validation_signature(spec, task, image_set)
+        matrix.validation_signature = validation_signature(spec, task, image_set, cold_rebuild=self.config.pipeline.cold_rebuild)
         matrix.seed_errors = list(seed_errors)
+        matrix.cold_rebuild = self.config.pipeline.cold_rebuild
         matrix_json = matrix.to_json()
         matrix_json["execution_signature"] = execution_key
         matrix_json["cases"] = case_manifest(rendered)
@@ -2176,7 +2174,7 @@ class CvePipeline:
             self.store.transition(
                 job,
                 target_state,
-                f"quality={outcome.evaluation.get('quality_tier') or outcome.evaluation.get('quality_score')} admission={admission}",
+                f"admission={admission}",
             )
         return matrix, outcome
 
@@ -2361,7 +2359,7 @@ class CvePipeline:
         discovery_path = self.store.path("discovery.json")
         pair = authoring.discovery_identity(discovery_mod.Discovery.from_json(read_json(discovery_path))) if discovery_path.is_file() else None
         return digest({
-            "execution": validation_signature(spec, task, image_set), "pair": pair,
+            "execution": validation_signature(spec, task, image_set, cold_rebuild=self.config.pipeline.cold_rebuild), "pair": pair,
             "trials": self.store.read_artifact("trials.json"),
             "evidence": evidence, "evaluation": outcome.evaluation,
             "revision": self.store.load().revision, "profile": vars(self.profile),
@@ -2387,7 +2385,7 @@ class CvePipeline:
                                synthesis=self.synthesis, revision=job.revision)
             from .validation_evidence import validation_signature
             if (not outcome.admitted or trials.get("aborted_at") or trials.get("seed_errors")
-                    or trials.get("validation_signature") != validation_signature(spec, task, images)
+                    or trials.get("validation_signature") != validation_signature(spec, task, images, cold_rebuild=self.config.pipeline.cold_rebuild)
                     or _tree_digest(self.store.path("task")) != manifest.get("tree_digest")
                     or checkpoint.get("input_sha256") != self._release_key(spec, evidence, task, images, outcome)):
                 return None
@@ -2546,7 +2544,7 @@ class CvePipeline:
             self.synthesis = None
         task, _ = self.generate(spec, job)
         from .validation_evidence import validation_signature
-        if trials.get("validation_signature") != validation_signature(spec, task, image_set):
+        if trials.get("validation_signature") != validation_signature(spec, task, image_set, cold_rebuild=self.config.pipeline.cold_rebuild):
             # An evaluator-only change can reuse execution evidence. Changed
             # templates, targets, verifier, or missing legacy provenance cannot.
             archive = self.store.path("recheck-history", datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f"))
@@ -2580,10 +2578,7 @@ class CvePipeline:
             package_issues=inspect_task(task.files, spec),
             network_isolation=self.network_mode,
             extra_seed_errors=list(trials.get("seed_errors") or []),
-            skipped_experiments=(
-                {"T08": "synthesized targets have no framework-owned controlled variant"}
-                if self.auto else {}
-            ),
+            cold_rebuild=self.config.pipeline.cold_rebuild,
         )
         self.store.write_artifact("image-set.json", image_set)
         self.store.write_artifact("evaluation.json", outcome.evaluation)
@@ -3470,6 +3465,7 @@ def _reload_matrix(data: dict) -> MatrixResult:
         framework_checks=dict(data.get("framework_checks") or {}),
         validation_signature=data.get("validation_signature"),
         seed_errors=list(data.get("seed_errors") or []),
+        cold_rebuild=data.get("cold_rebuild", False),
     )
 
 

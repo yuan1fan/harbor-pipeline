@@ -488,7 +488,7 @@ def _ensure_built(ctx: ToolContext, bundle: dict) -> dict:
     return state
 
 
-def cmd_probe(ctx: ToolContext, *, alternate: bool = False, quiet: bool = False) -> int:
+def cmd_probe(ctx: ToolContext, *, quiet: bool = False) -> int:
     bundle, notes, issues = validate_workspace(
         workspace=ctx.workspace,
         run_dir=ctx.run_dir,
@@ -506,7 +506,7 @@ def cmd_probe(ctx: ToolContext, *, alternate: bool = False, quiet: bool = False)
         if not quiet:
             _print({"ok": False, "stage": "spec", "issues": [str(exc)]})
         return 1
-    _job_start(ctx, "probe", alternate=alternate)
+    _job_start(ctx, "probe")
     try:
         state = _ensure_built(ctx, bundle)
     except PipelineError as exc:
@@ -515,7 +515,7 @@ def cmd_probe(ctx: ToolContext, *, alternate: bool = False, quiet: bool = False)
             _print({"ok": False, "stage": "build", "error": str(exc)})
         return 1
     variants = state["variants"]
-    submitted_name = "alternate.py" if alternate else "reference.py"
+    submitted_name = "reference.py"
     submitted = ctx.workspace / "poc" / submitted_name
     if not submitted.is_file():
         _job_finish(ctx, "failed", stage="probe", error=f"missing poc/{submitted_name}")
@@ -525,7 +525,7 @@ def cmd_probe(ctx: ToolContext, *, alternate: bool = False, quiet: bool = False)
     _charge(ctx, "probes")
     # The same submitted file is used for both variants; the reference stays
     # the trusted reference in tests/reference_poc.py.
-    work_root = ctx.run_dir / "author-probe" / f"probe-r{ctx.revision}-{int(alternate)}"
+    work_root = ctx.run_dir / "author-probe" / f"probe-r{ctx.revision}-0"
     summary = author_probe.probe_pair(
         spec=spec,
         target_images={name: variants[name].get("image_digest") or variants[name]["image_ref"] for name in variants},
@@ -548,7 +548,6 @@ def cmd_probe(ctx: ToolContext, *, alternate: bool = False, quiet: bool = False)
         {
             "bundle_digest": digest(bundle),
             "spec_digest": spec["frozen_digest"],
-            "alternate": alternate,
             **summary,
             "updated_at": utc_now_text(),
         },
@@ -579,7 +578,7 @@ def cmd_submit(ctx: ToolContext) -> int:
     state_path = ctx.workspace / PROBE_STATE_FILE
     probe = read_json(state_path) if state_path.is_file() else {}
     if probe.get("bundle_digest") != digest(bundle) or probe.get("alternate"):
-        code = cmd_probe(ctx, alternate=False, quiet=True)
+        code = cmd_probe(ctx, quiet=True)
         if code != 0:
             return 1
         probe = read_json(state_path)
@@ -744,8 +743,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("validate", help="assemble and run deterministic checks")
     build_cmd = sub.add_parser("build", help="build both target images")
     build_cmd.add_argument("--variant", choices=("both", "vulnerable", "fixed"), default="both")
-    probe_cmd = sub.add_parser("probe", help="run the real verifier pair")
-    probe_cmd.add_argument("--alternate", action="store_true")
+    sub.add_parser("probe", help="run the real verifier pair")
     exec_cmd = sub.add_parser("exec", help="run a command in the vulnerable image")
     exec_cmd.add_argument("--timeout", type=int, default=60)
     exec_cmd.add_argument("--variant", choices=("vulnerable", "fixed"), default="vulnerable")
@@ -823,7 +821,7 @@ def _dispatch(ctx, args):
     if args.subcommand == "build":
         return cmd_build(ctx, variant=args.variant)
     if args.subcommand == "probe":
-        return cmd_probe(ctx, alternate=args.alternate)
+        return cmd_probe(ctx)
     if args.subcommand == "exec":
         command = list(args.command)
         if command and command[0] == "--":

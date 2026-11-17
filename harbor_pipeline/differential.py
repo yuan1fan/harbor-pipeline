@@ -1,4 +1,4 @@
-"""Render and run the T01-T12 differential experiment matrix.
+"""Render and run the configured differential experiment matrix.
 
 The matrix is a ladder: every step is its own Harbor job, and a blocking step
 that misses an expectation stops the remaining steps. Results are mapped back
@@ -21,7 +21,7 @@ from .trials import Expectation, build_trial_record, evaluate_expectation
 from .util import PipelineError, digest
 
 # Probes that are realised by a different mechanism than a PoC payload.
-_SPECIAL_PROBES = {"seed", "control", "fault"}
+_SPECIAL_PROBES = {"seed", "fault"}
 
 NEGATIVE_EXPERIMENTS = ("T05", "T06", "T07", "T10")
 
@@ -58,15 +58,14 @@ def plan_matrix_steps(*, repeats: int, include_optional: bool = True) -> list[Ma
 
     The first T03 decides most candidates in one trial, then the first T04
     proves the differential. Repeats are confirmation, so they run after every
-    distinct check has passed; T11/T12 are advisory (they lower the quality
-    score but do not block release) and run last.
+    distinct check has passed. T12 runs last; its fault-classification verdict
+    is checked separately as framework health and still blocks release.
 
     T01/T02 are deliberately absent: their health/business check runs inside
     every T03/T04 verifier invocation, so the verdict is derived from those
     records instead of starting two extra targets (see
-    ``CvePipeline._derive_health_verdicts``). T05/T06/T07/T10 are absent
-    because their payloads are framework constants and run once per verifier
-    template in ``verifier_check.verifier_regression_checks``.
+    ``CvePipeline._derive_health_verdicts``). T05/T06/T07/T10 use fixed
+    negative payloads against each candidate. T09 runs separately when enabled.
     """
     if repeats < 1:
         raise PipelineError("repeats must be positive")
@@ -79,7 +78,6 @@ def plan_matrix_steps(*, repeats: int, include_optional: bool = True) -> list[Ma
     steps.append(MatrixStep("negatives", NEGATIVE_EXPERIMENTS, 1, True))
     if include_optional:
         steps.extend([
-            MatrixStep("t11", ("T11",), 1, False),
             MatrixStep("t12", ("T12",), 1, False),
         ])
     return steps
@@ -103,6 +101,7 @@ class MatrixResult:
     derived_records: list[dict] = field(default_factory=list)
     validation_signature: str | None = None
     seed_errors: list[str] = field(default_factory=list)
+    cold_rebuild: bool = False
 
     def record_for(self, experiment_id: str) -> dict | None:
         for record in self.records:
@@ -145,6 +144,7 @@ class MatrixResult:
             "schema_version": SCHEMA_VERSION,
             "validation_signature": self.validation_signature,
             "seed_errors": list(self.seed_errors),
+            "cold_rebuild": self.cold_rebuild,
             "job_name": self.job.job_name if self.job else None,
             "job_dir": str(self.job.job_dir) if self.job else None,
             "jobs": [
@@ -223,7 +223,6 @@ def _render_case(
     verifier_image: str | None = None,
 ) -> MatrixCase:
     variant = experiment.variant if experiment.variant in {"vulnerable", "fixed"} else "vulnerable"
-    controlled = experiment.id == "T08"
     fault = experiment.id == "T12"
     probe = experiment.probe
     if probe in _SPECIAL_PROBES:
@@ -235,7 +234,6 @@ def _render_case(
         probe=probe,
         network_mode=network_mode,
         allowed_hosts=allowed_hosts,
-        controlled=controlled,
         fault=fault,
         overrides=overrides,
         synthesis=synthesis,
@@ -261,14 +259,6 @@ def _selected_experiments(
         if experiment.probe == "seed":
             continue
         if not include_optional and not experiment.mandatory_for_release:
-            continue
-        # A synthesized target has no framework-owned controlled variant: the
-        # application code comes from the model, so there is no deterministic
-        # way to remove a single precondition. Rendering T08 would run the
-        # vulnerable build under fixed-variant expectations and report a leak
-        # that the control was supposed to prevent. The experiment is optional
-        # for release, so record it as not applicable instead of mis-scoring it.
-        if synthesis is not None and experiment.probe == "control":
             continue
         selected.append(experiment)
     return tuple(selected)

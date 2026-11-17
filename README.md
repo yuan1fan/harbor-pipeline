@@ -4,7 +4,7 @@
 
 > **0.2 版本说明（2026-11-06）**：本版增加了运行时依赖身份、候选级负例、随机 listing 答案、断言证据引用、T09 干净重建、分层质量抽样、独立复核字段、精确镜像归档，以及 `server_request` 与 `service_unavailable` 两类目标。旧版 `RELEASED` 产物不能直接混入 0.2 数据集，需要按新协议重新验收。
 >
-> `quality_tier=A` 只表示备选 PoC 通过，不代表独立专家认证；真实正确率见 `quality` 报告的独立复核统计，未复核时明确写 `null`。
+> 当前验收已移除 T08、T11；T09 冷重建默认关闭，可显式开启。不再按备选 PoC 划分 A/B 质量档；真实正确率见 `quality` 报告的独立复核统计，未复核时明确写 `null`。
 
 ---
 
@@ -46,7 +46,7 @@ flowchart TD
 
 - **统一校验，按来源分流**：初次补全与 author 申请复核都验证来源及 ref 身份；复核另需对应申请 ID、回应具体发现。通过后才区分首次启动或恢复 author，两个出口不代表两套 ref 标准。证据完整仍不等于 CVE 机制已被证明。
 - **Author → resolver → author**：author 提交 `request-evidence-review` 后结束当前调用。框架核对本地引用并调用 resolver；提案缺失或校验失败时，把具体错误反馈给同一 resolver 会话，在修正额度内继续。通过后刷新输入并恢复 author；换对时增加 revision，使旧 spec、构建记录、probe、matrix 进度及 solver 结果失效。保留原对也必须解释并重新 probe。
-- **普通返工按输入复用**：构建输入与镜像 ID 匹配时复用镜像；执行输入相同时只补跑失败或未完成的试次。T09 已完成的独立冷构建结果可续用，缺失的种子仍执行 `--no-cache`。只改题面文字仍需重新试解和审查。
+- **普通返工按输入复用**：构建输入与镜像 ID 匹配时复用镜像；执行输入相同时只补跑失败或未完成的试次。启用 T09 时，已完成的独立冷构建结果可续用，缺失的轮次仍执行 `--no-cache`。只改题面文字仍需重新试解和审查。
 - **开关与边界**：resolver 由 `evidence_resolver` 控制；复核申请、提案修正和 author 返工分别受 `max_evidence_reviews`、`max_repairs`、`author_max_resumes` 限制。`solver_review = false` 会跳过 solver/reviewer。Reviewer 是无工具的结构化模型调用；题目 reward 仍由固定 verifier 产生。
 - **失败与恢复**：候选启动/健康检查、PoC、负例、归因和题面问题先反馈 author，固定 verifier 与准入阈值保持不变。框架自身的负例自检或 T12 故障注入检查失败不会交给 author 改判题器。临时网络、限流、资源与运行异常重试失败阶段；已完成的有效 solver、构建和试次按原有签名复用。
 - **停止与续跑**：`QUARANTINED` 保存检查点及恢复原因。无效凭据、缺少运行工具、框架自检失败等外部阻塞不自动空转；修正环境后再次显式运行，可在剩余额度内恢复。预算耗尽和没有可执行恢复方式时停止；明确不支持仍进入 `UNSUPPORTED`。错误记录的 `recovery.action` 区分 `author`、`retry`、`blocked`、`stop`，分派过程保存在 `recovery-log.json`。
@@ -105,7 +105,7 @@ flowchart TD
   - `bundle.json`：元数据（product/versions/preconditions/root_cause/impact/goal/assertions）
   - `target/`：靶机应用源码，agent 用原生 `Read`/`Edit` 修改
   - `target-fixed/`：fixed variant 专属文件
-  - `poc/reference.py`、`poc/alternate.py`：两套参考利用
+  - `poc/reference.py`：参考利用脚本
   - `inputs/`：只读的 `discovery.json`、`spec.json` 与原始证据
 - harness：使用原生 `claude -p`，保留 `Read/Write/Edit/Grep/Glob` 和 `WebSearch/WebFetch`；`--setting-sources ""` 不加载用户／项目配置，`--restricted` 下通过 `--tools` 显式启用这些工具，Bash 仍仅允许 `harbor-author`。
 - 上下文：由 Claude Code 原生多轮对话、prompt caching 和 auto-compaction 管理；不再每步重发所有文件。
@@ -223,7 +223,6 @@ Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建
 | `validate` | 组装 bundle，跑 schema、`normalize_bundle`、依赖真实性、read-back 检查 |
 | `build` | 只构建 vulnerable/fixed 两个 **target** 镜像；agent 镜像全局共享，verifier 按 variant 薄构建（Harbor 必须把 `tests/` 烘进 verifier 镜像） |
 | `probe` | 直连 compose 跑真实 `tests/verify.py`：target + observer（file_write）+ verifier main |
-| `probe --alternate` | 用备选 PoC 作为 submitted，验证另一条等价 payload |
 | `exec -- <cmd>` / `exec --variant fixed -- <cmd>` | 在最后一次构建的对应 variant 镜像内执行（`--network none`），用于检查运行现场或库源码 |
 | `shell -- <cmd>` | 在持久 author 沙箱中执行通用命令；`target/`、`target-fixed/`、`poc/` 可写，`inputs/` 只读，不挂载 Docker socket 或宿主凭据 |
 | `debug --variant vulnerable\|fixed start\|exec\|logs\|stop` | 启动并反复检查持久调试靶机；vulnerable 和 fixed 可分别调试 |
@@ -239,7 +238,7 @@ Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建
 
 1. 用真实的 `build_spec` + `freeze` 生成 `CveSpec`。
 2. 渲染固定的 instruction、`task.toml`、`verify.py`（agent 无法修改这些文件）。
-3. 构建 target 镜像和 variant 专属的薄 verifier 镜像，跑完整 T01–T12；agent 使用全局预构建镜像（verifier 不能 pin 通用镜像，否则 `/tests` 为空）。
+3. 构建 target 镜像和 variant 专属的薄 verifier 镜像，运行当前启用的差分矩阵（T09 默认关闭）；agent 使用全局预构建镜像（verifier 不能 pin 通用镜像，否则 `/tests` 为空）。
 4. 最终矩阵失败时，用 `claude --resume <session-id>` 把失败证据发回**同一个会话**，让 agent 在原有上下文里继续修；次数由 `author_max_resumes` 限制。
 5. 无法在 Web 契约下真实复现的 CVE 走 `decline` → `UNSUPPORTED`，不再强行包一层 `:8080` 胶水代码。
 
@@ -256,7 +255,7 @@ Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建
    `solved / fair / guess_work / recommended_mode / missing_context / score / verdict / recommendations`。
 3. `verdict=revise` 或 `score < solver_min_score` 时，把评价发回**同一个 author 会话**，要求加白盒上下文或 hints；`decline` 则判 `UNSUPPORTED`；`release` 才进入 release 阶段。
 
-> 角色边界：**author 和 solver 是原生 Claude Code agent**（多轮、有工具；author 在宿主机受限运行，solver 在 Harbor 容器内运行）。**reviewer 不是 agent**：它是一次无工具的结构化 completion（provider `claude-cli`），只根据给定的 instruction、源码摘录、参考 PoC 和 solver 结果输出 JSON。reviewer 的 `score` 只用于决定是否把评价发回 author 修订，**不参与最终题目评分**；发布仍由固定 verifier 的 T01–T12 和 gates 决定。
+> 角色边界：**author 和 solver 是原生 Claude Code agent**（多轮、有工具；author 在宿主机受限运行，solver 在 Harbor 容器内运行）。**reviewer 不是 agent**：它是一次无工具的结构化 completion（provider `claude-cli`），只根据给定的 instruction、源码摘录、参考 PoC 和 solver 结果输出 JSON。reviewer 的 `score` 只用于决定是否把评价发回 author 修订，**不参与最终题目评分**；发布仍由固定 verifier 的差分矩阵和 gates 决定。
 
 #### 黑盒 vs 白盒
 
@@ -289,7 +288,7 @@ Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建
 
 所有判定来自**固定脚本**和真实容器行为，LLM 不参与打分。
 
-### 3.1 差分矩阵 T01–T12
+### 3.1 差分矩阵
 
 | 测试 | 内容 |
 |---|---|
@@ -299,18 +298,27 @@ Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建
 | T05 | 不提交 PoC → 不得得分 |
 | T06 | 伪造成功输出 → 不得得分 |
 | T07 | bypass / 默认 secret → 不得得分 |
-| T08 | 去掉前置条件后漏洞消失（可选） |
-| T09 | 独立重建多次仍一致 |
+| T09 | 独立无缓存重建，vulnerable / fixed 各三轮（可选，默认关闭） |
 | T10 | 非法 PoC 必须执行失败 |
-| T11 | 备选 PoC 也被接受（质量 A 档） |
 | T12 | 注入 target 启动故障 → 必须归类为 infra error，而不是题目缺陷 |
+
+保留原测试编号，T08、T11 已移除。author 只需提供一个参考 PoC。
+
+需要检查从源码冷重建是否稳定时，在使用的配置文件中显式开启：
+
+```toml
+[pipeline]
+cold_rebuild = true  # 默认 false；不填写也不会执行 T09
+```
+
+开启后，T09 对 vulnerable / fixed 各做三轮 `--no-cache` 构建和参考 PoC 试验，记录实际镜像 ID；缺少轮次、构建失败或结果不一致都会阻止本次验收通过。关闭时不执行这些构建与试次，也不要求 T09 证据。T09 开关纳入验收签名，开启后不能直接复用未执行 T09 的验收结果；输入相同的普通试次仍可续用。
 
 ### 3.2 通过条件
 
 - **必须**：T03 全部成功、T04 全部不泄漏、T05/T06/T07/T10 固定负载全部被拒绝、目标健康、spec/证据一致。
 - **认证题**：verifier 会额外用**去掉凭据**的同一参考 PoC 再打一次；仍然成功则判失败（说明认证不是必需前置条件）。
-- **质量档**：T11 通过 = A，否则 B；没有 100 分加权总分。A 档只表示备选 PoC 通过，不等于独立专家认证。
-- 评分输出：`task_gates`（卡点）、`framework_health`（框架自检）、`quality_tier` / `quality_flags`。
+- **质量输出**：不再划分 A/B 质量档，也没有 100 分加权总分。`quality_tier` 保留为 `null`，兼容读取历史数据；CVE 证据的 `attribution_grade` 是另一项归因检查，发布仍要求 A。
+- 评分输出：`task_gates`（卡点）、`framework_health`（框架自检）、`quality_flags`（证据覆盖和冷重建状态；未开启时为 `cold_rebuild=disabled`）。历史报告中的质量档沿用当时协议，不代表当前规则。
 - 评分器修复后，`recheck` 会校验执行签名：spec、task 文件、镜像 digest、生成器/verifier 代码都一致时才复用已存储的 matrix；否则自动重建并重跑试验。只有 admission 变回 `released` 才解除隔离并进入 release 重放。
 
 ### 3.3 权限与隔离
@@ -330,7 +338,7 @@ Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建
 
 - **目标**：通过 CVE 自身的机制读到目标上的随机 48-hex token。
 - **observable**：PoC 输出中出现该 token。
-- **验证指标**：T04 fixed 不泄漏；T05/T06/T07 不得分；token 随机生成、不写入镜像；T09 重建稳定。
+- **验证指标**：T04 fixed 不泄漏；T05/T06/T07 不得分；token 随机生成、不写入镜像；可选的 T09 检查冷重建稳定性。
 - **primitive**：path traversal、SQLi、SSRF、命令执行、反序列化、XXE、SSTI、auth bypass、信息泄漏等。
 
 ### 4.2 写文件（`file_write`）
@@ -351,7 +359,7 @@ Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建
 - **目标**：让目标服务向指定的非预期目的地发起 HTTP 请求；不需要把 secret 带回来。
 - **observable**：verifier 的 callback listener 收到请求，且请求来源必须是目标容器的地址；路径中带有本次运行的随机 token，参考解和提交解各用不同 token。
 - **PoC 契约**：脚本从 `CALLBACK_URL` 读取带 token 的完整 URL，让目标去请求它，然后 exit 0；PoC 自己直接请求 callback 不算数。
-- **验证指标**：vulnerable 的参考解和提交解都能触发 callback；fixed 版本不触发；T11 备选 PoC 也必须触发；超时/无请求判失败。
+- **验证指标**：vulnerable 的参考解和提交解都能触发 callback；fixed 版本不触发；超时/无请求判失败。
 - **状态**：已实现（2026-11-06）。
 
 ### 4.5 服务不可用（`service_unavailable`）
@@ -419,7 +427,7 @@ harbor_pipeline/          # pipeline 源码
   synthesis.py            # bundle 校验与确定性规格
   repair.py               # legacy one-shot draft + JSON repair（过渡期）
   scenario.py             # 固定 target / verifier / 负例模板
-  differential.py         # T01–T12 差分矩阵
+  differential.py         # 固定差分矩阵及可选冷重建
   evaluator.py            # 卡点 / 框架健康 / 质量档
 schemas/                  # 数据契约
 policies/                 # 验收策略与实验定义
@@ -449,7 +457,7 @@ PowerShell 用 `$env:HARBOR_RUN_DOCKER_TESTS = '1'`。wheel 必须包含 `schema
 - `target.business_probes` 必填：除 `/health`、`/business` 外至少一条正常业务探针，vulnerable 和 fixed 都必须通过。
 - 版本对只能来自上游 ref/依赖 manifest：fixed-only 的应用代码改写、无 `{{REF}}` 的固定版本切换、在注释里伪造版本字符串都会被拒绝。Go/Maven 的依赖身份从构建后的元数据读取，不读 Dockerfile 注释。
 - 白盒 `source/` 只包含 author 的应用源码，排除 `Dockerfile`、`entrypoint.sh`、compose、patch/diff 和隐藏文件；listing 答案在 target 启动时用 `/dev/urandom` 生成，verifier 读取后立即删除，源码和任务元数据中都不含可复用答案。
-- T09 使用 `--no-cache` 重建 vulnerable 与 fixed，并记录实际 image ID；复用预构建镜像不算干净重建。
+- T09 默认关闭；开启后使用 `--no-cache` 重建 vulnerable 与 fixed，并记录实际 image ID；复用预构建镜像不算干净重建。
 - `recheck` 只在执行签名（spec、task 文件、镜像 digest、生成器/verifier 代码）一致时复用旧 matrix；改动 verifier、模板、target 或镜像后必须重建并重跑 trial。
 
 ### 7.3 `quality` 报告
