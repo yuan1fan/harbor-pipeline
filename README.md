@@ -8,6 +8,70 @@
 
 ---
 
+## 流程总览
+
+下图对应当前自动出题主链：`--scenario auto`、`authoring = "agent"`、`run --until release`。Resolver 既可补全初始证据，也可接受 author 在阅读源码、构建或 probe 后发起的证据复核。
+
+使用 GitHub 原生 [Mermaid 渲染](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams#creating-mermaid-diagrams)：在 GitHub 网页上可使用图中的缩放、平移控件查看细节。
+
+```mermaid
+flowchart TD
+    IN(["输入 CVE 候选"]) --> DISC["collect / discovery<br/>收集证据，确定性选择并校验版本对"]
+    DISC --> PAIR{"初始证据与版本对完整？"}
+    PAIR -->|"是"| AUTHOR["Author 原生会话<br/>编写 target、fixed variant 和 PoC"]
+    PAIR -->|"否，且启用 resolver"| RESOLVER["Evidence resolver<br/>补全证据或复核被质疑的版本对"]
+    PAIR -->|"否，且未启用 resolver"| UNSUPPORTED(["UNSUPPORTED"])
+    RESOLVER --> CHECK{"框架校验提案<br/>来源、ref 身份与修复依据"}
+    CHECK -->|"初次补全通过"| AUTHOR
+    CHECK -->|"author 复核通过"| APPLY["应用复核结果并刷新 author 输入<br/>换对：revision + 1，失效旧构建与验证<br/>原对成立：保留解释，要求重新 probe"]
+    APPLY -->|"resume 同一个 author 会话"| AUTHOR
+    CHECK -->|"初始配对仍不可用 / 明确不支持"| UNSUPPORTED
+    CHECK -->|"author 复核失败或提案无效"| QUARANTINED(["QUARANTINED"])
+
+    AUTHOR --> LOCAL["harbor-author 内循环<br/>validate / build / probe / exec / debug"]
+    LOCAL -->|"修订源码或 PoC"| AUTHOR
+    AUTHOR -->|"源码或日志表明版本 / 补丁有误"| REQUEST["request-evidence-review<br/>校验本地 citations，绑定当前版本对"]
+    REQUEST --> RESOLVER
+    AUTHOR -->|"decline"| UNSUPPORTED
+    LOCAL -->|"submit"| FREEZE["freeze → generate<br/>冻结 CveSpec，生成题面与固定 verifier"]
+
+    FREEZE --> BUILD["正式 build<br/>构建或复用匹配的镜像，核验运行时身份"]
+    BUILD --> MATRIX["固定差分矩阵与准入评估<br/>T03 / T04 → 重复与负例<br/>T09 冷构建 → T11 / T12"]
+    BUILD -->|"可修复构建问题"| REPAIR{"仍有 author 修订额度？"}
+    MATRIX -->|"可修复题目问题"| REPAIR
+    REPAIR -->|"有：携带失败证据，resume"| AUTHOR
+    REPAIR -->|"无"| QUARANTINED
+    MATRIX -->|"未过其他准入门 / 基础设施故障"| QUARANTINED
+
+    MATRIX -->|"通过"| SOLVER_ON{"启用 solver_review？"}
+    SOLVER_ON -->|"是"| SOLVER["Solver 在 Harbor 中真实试解"]
+    SOLVER -->|"有效试解结果"| REVIEW{"Reviewer 结构化审查<br/>可解性、公平性、CVE 机制归因"}
+    SOLVER -->|"执行异常"| QUARANTINED
+    REVIEW -->|"要求修订 / 低分 / 归因未获支持"| REPAIR
+    REVIEW -->|"decline"| UNSUPPORTED
+    REVIEW -->|"release 且满足审查门槛"| RELEASE["release<br/>打包、审计，并从发布包重放验证"]
+    SOLVER_ON -->|"否"| RELEASE
+    RELEASE -->|"全部通过"| DONE(["RELEASED"])
+
+    classDef agent fill:#eef2ff,stroke:#6366f1,color:#172554
+    classDef evidence fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+    classDef check fill:#f0fdf4,stroke:#16a34a,color:#14532d
+    classDef pending fill:#fff7ed,stroke:#ea580c,color:#7c2d12
+    classDef terminal fill:#fef2f2,stroke:#dc2626,color:#7f1d1d
+    class AUTHOR,LOCAL,SOLVER,REVIEW agent
+    class DISC,RESOLVER,CHECK,REQUEST,APPLY evidence
+    class FREEZE,BUILD,MATRIX,RELEASE,DONE check
+    class REPAIR,QUARANTINED pending
+    class UNSUPPORTED terminal
+```
+
+- **Author → resolver → author 是实际的回退路径**：author 提交 `request-evidence-review` 后结束当前调用，框架验证本地引用，再调用 resolver。复核结果通过框架校验后，刷新输入并通过 `--resume` 继续同一个 author 会话；配对改变时还会增加 revision，并使旧 spec、构建记录、probe、matrix 进度及 solver 结果失效。原对成立也必须重新 probe；复核失败不能继续使用被质疑的旧对。
+- **普通返工按输入复用**：构建输入与镜像 ID 匹配时复用镜像；执行输入相同时只补跑失败或未完成的试次。T09 已完成的独立冷构建结果可续用，缺失的种子仍执行 `--no-cache`。只改题面文字仍需重新试解和审查。
+- **开关与边界**：resolver 由 `evidence_resolver` 控制；证据复核和 author 返工分别受 `max_evidence_reviews`、`author_max_resumes` 等预算限制。`solver_review = false` 会跳过 solver/reviewer。Reviewer 是无工具的结构化模型调用；题目 reward 仍由固定 verifier 产生。
+- **失败与恢复**：图中展示主要回退分支；各阶段的基础设施错误、证据不足、预算耗尽或未通过准入会按错误类别进入 `QUARANTINED`，明确不支持进入 `UNSUPPORTED`。可重试的隔离候选在再次运行时按限额恢复；`UNSUPPORTED` 经修正后须显式 requeue 到新 run。证据配对完整本身不等于 CVE 机制已经得到证明。
+
+流程入口与回退逻辑见 [pipeline.py](harbor_pipeline/pipeline.py)，版本对校验见 [discovery_refs.py](harbor_pipeline/discovery_refs.py)，验证续跑见 [execution_progress.py](harbor_pipeline/execution_progress.py)。
+
 ## 1. 来源（Evidence Sources）
 
 一次 `collect` 只从以下来源抓取，全部经过 **https + 主机白名单 + 公网 IP 校验 + DNS pinning**：
