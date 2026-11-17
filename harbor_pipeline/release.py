@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -32,6 +33,12 @@ class ReleaseResult:
     manifest_path: Path
     audit_path: Path
     dataset_entry: dict
+
+    @classmethod
+    def from_json(cls, data: dict, *, root: Path | None = None):
+        root = root or Path(data["root"])
+        return cls(root, root / "task", root / "evaluation.json", root / "build-manifest.json",
+                   root / "audit.zip", {**data["dataset_entry"], "location": str(root / "task")})
 
     def to_json(self) -> dict:
         return {
@@ -96,10 +103,10 @@ def build_release(
     seed: int | None = 0,
 ) -> ReleaseResult:
     """Copy the immutable vulnerable task and write contracts plus an audit zip."""
-    root = run_dir / "release"
-    if root.exists():
-        shutil.rmtree(root)
-    root.mkdir(parents=True, exist_ok=True)
+    root = run_dir / "release-staging" / f"r{revision}-{uuid.uuid4().hex[:12]}"
+    if not root.resolve().is_relative_to(run_dir.resolve()):
+        raise PipelineError("Release staging path escapes the candidate directory")
+    root.mkdir(parents=True, exist_ok=False)
     released_task = root / "task"
     _copy_tree(task_dir, released_task)
 
@@ -176,7 +183,7 @@ def build_release(
     })
 
     audit_path = root / "audit.zip"
-    _write_audit(audit_path, spec, evidence, evaluation, manifest, matrix_result, root)
+    _write_audit(audit_path, spec, evidence, evaluation, manifest, matrix_result, run_dir)
     return ReleaseResult(
         root=root,
         task_dir=released_task,
@@ -295,6 +302,10 @@ def recheck_from_release(
     if not outcome.trials:
         raise TaskError("infra_error", "Release recheck produced no trial")
     trial = outcome.trials[0]
+    if trial.error_category in {"infra_error", "build_error"} or trial.reward is None:
+        raise TaskError("infra_error", f"Release environment did not produce an assessment: {trial.evidence_status}",
+                        detail={"stage": "release", "trial_dir": str(trial.trial_dir),
+                                "exception": trial.exception, "status": trial.evidence_status})
     return {
         "job_name": outcome.job_name,
         "reward": trial.reward,
@@ -303,6 +314,23 @@ def recheck_from_release(
         "reference_observed": bool((trial.evidence or {}).get("reference_observed")),
         "trial_dir": str(trial.trial_dir),
     }
+
+
+def publish_release(result: ReleaseResult, destination: Path, *, run_dir: Path) -> ReleaseResult:
+    """Rename only this attempt; never delete a prior/locked release directory."""
+    root = run_dir.resolve()
+    for path in (result.root, destination):
+        if path.resolve() == root or not path.resolve().is_relative_to(root):
+            raise PipelineError("Release publication path escapes the candidate directory")
+    if result.root.exists():
+        try:
+            result.root.rename(destination)
+        except OSError as exc:
+            raise TaskError("infra_error", f"Release publication is temporarily locked: {exc}",
+                            detail={"stage": "release", "staging": str(result.root)}) from exc
+    elif not destination.is_dir():
+        raise TaskError("infra_error", "Staged release disappeared before publication", detail={"stage": "release"})
+    return ReleaseResult.from_json(result.to_json(), root=destination)
 
 
 def write_dataset_manifest(entries: list[dict], path: Path) -> Path:
@@ -372,7 +400,7 @@ def _write_audit(
     evaluation: dict,
     manifest: dict,
     matrix_result: dict,
-    root: Path,
+    run_dir: Path,
 ) -> None:
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         payloads = {
@@ -384,7 +412,7 @@ def _write_audit(
         }
         for name, value in payloads.items():
             archive.writestr(name, json.dumps(value, indent=2, sort_keys=True) + "\n")
-        evidence_dir = root.parent / "evidence"
+        evidence_dir = run_dir / "evidence"
         if evidence_dir.is_dir():
             for item in sorted(evidence_dir.rglob("*")):
                 if item.is_file():

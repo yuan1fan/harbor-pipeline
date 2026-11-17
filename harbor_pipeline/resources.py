@@ -10,6 +10,7 @@ import ctypes
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 import uuid
@@ -20,11 +21,12 @@ from pathlib import Path
 
 from .errors import TaskError
 from .state import _pid_alive
-from .util import file_lock, read_json, write_json
+from .util import file_lock, no_window_kwargs, read_json, write_json
 
 ENV_NAME = "HARBOR_PIPELINE_RESOURCES"
 _POLICY: ContextVar[dict | None] = ContextVar("docker_resource_policy", default=None)
 _DEPTH: ContextVar[int] = ContextVar("docker_resource_depth", default=0)
+_PROGRESS: ContextVar[object] = ContextVar("docker_resource_progress", default=None)
 
 
 def configure(settings, *, inherit: bool = False, output_dir: Path | None = None) -> dict:
@@ -37,6 +39,7 @@ def configure(settings, *, inherit: bool = False, output_dir: Path | None = None
             "min_memory_mb": settings.min_free_memory_mb,
             "min_disk_gb": settings.min_free_disk_gb,
             "wait_sec": settings.resource_wait_sec,
+            "wsl_reclaim_memory": settings.wsl_reclaim_memory,
             "prune_images": settings.prune_images,
             "disk_paths": [str(Path(output_dir or settings.output_dir).resolve())],
         }
@@ -95,6 +98,85 @@ def pressure_reason(config: dict) -> str:
     return ""
 
 
+def recover_wsl_memory(config: dict, *, wait_id: str = "") -> None:
+    """Rate-limited clean-cache reclaim; admission still checks host memory.
+
+    No WSL restart and no lowered reserve. Failed/unavailable measurements keep
+    the job queued. Only the head waiter with no running Docker work calls us.
+    """
+    if os.name != "nt" or not config.get("wsl_reclaim_memory"):
+        return
+    # This local recovery must not run for a remote/other Docker endpoint.
+    host = os.environ.get("DOCKER_HOST", "")
+    if host and not host.startswith("npipe:"):
+        return
+    if os.environ.get("DOCKER_CONTEXT", "desktop-linux") not in {"desktop-linux", "default"}:
+        return
+    path = Path(config["directory"]) / "wsl-reclaim.json"
+    with file_lock(path):
+        previous = read_json(path) if path.is_file() else {}
+        attempts = int(previous.get("attempts", 0)) if previous.get("wait_id") == wait_id else 0
+        if attempts >= 2:
+            return
+        if time.time() - previous.get("attempted_at", 0) < 60:
+            return
+        record = {"attempted_at": time.time(), "wait_id": wait_id, "attempts": attempts + 1}
+        write_json(path, record)
+    try:
+        record["host_before_mb"] = available_memory_mb()
+        if record["host_before_mb"] >= config["min_memory_mb"]:
+            record["status"] = "host_recovered"
+            return
+        # The active context can differ from DOCKER_CONTEXT. Verify the actual
+        # engine before touching this machine's Docker Desktop WSL distribution.
+        docker = shutil.which("docker")
+        if not docker:
+            record["status"] = "docker_unavailable"
+            return
+        endpoint = host
+        if not endpoint:
+            context = subprocess.run([docker, "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"],
+                                     capture_output=True, text=True, errors="replace", timeout=5, **no_window_kwargs())
+            endpoint = context.stdout.strip() if context.returncode == 0 else ""
+        endpoint = endpoint.lower().replace("\\", "/")
+        if not endpoint.startswith("npipe:") or not endpoint.endswith(("/dockerdesktoplinuxengine", "/docker_engine")):
+            record["status"] = "not_local_desktop_linux"
+            return
+        engine = subprocess.run([docker, "info", "--format", "{{.OSType}}|{{.OperatingSystem}}"],
+                                capture_output=True, text=True, errors="replace", timeout=5, **no_window_kwargs())
+        if engine.returncode or not engine.stdout.lower().startswith("linux|docker desktop"):
+            record["status"] = "not_local_desktop_linux"
+            return
+        info = subprocess.run(["wsl.exe", "-d", "docker-desktop", "-e", "cat", "/proc/meminfo"],
+                              capture_output=True, text=True, errors="replace", timeout=5, **no_window_kwargs())
+        values = {line.split(":", 1)[0]: int(line.split()[1]) / 1024
+                  for line in info.stdout.splitlines() if ":" in line and len(line.split()) >= 2}
+        reclaimable = max(0, values.get("Cached", 0) + values.get("Buffers", 0)
+                          - values.get("Shmem", 0) - values.get("Dirty", 0) - values.get("Writeback", 0))
+        record.update(wsl_available_mb=values.get("MemAvailable"), clean_cache_estimate_mb=reclaimable)
+        if info.returncode != 0 or values.get("MemAvailable", 0) < config["min_memory_mb"] or reclaimable < 512:
+            record["status"] = "no_reclaimable_headroom"
+        else:
+            reclaimed = subprocess.run(["wsl.exe", "-d", "docker-desktop", "-u", "root", "-e", "sh", "-c",
+                                        "echo 1 > /proc/sys/vm/drop_caches"],
+                                       capture_output=True, text=True, errors="replace", timeout=5, **no_window_kwargs())
+            record["status"] = "requested" if reclaimed.returncode == 0 else "unavailable"
+        record["host_after_mb"] = available_memory_mb()
+    except (OSError, subprocess.SubprocessError, ValueError):
+        record["status"] = "unavailable"
+    finally:
+        write_json(path, record)
+
+
+def _progress(status, **details):
+    callback = _PROGRESS.get()
+    if callback:
+        try:
+            callback(status, **details)
+        except OSError:
+            pass  # Observability must not leak an admission slot on disk errors.
+
+
 @contextmanager
 def docker_work(kind: str, *, units: int = 1, poll_sec: float = 2.0):
     config = policy()
@@ -106,16 +188,21 @@ def docker_work(kind: str, *, units: int = 1, poll_sec: float = 2.0):
         raise TaskError("infra_error", f"{kind} needs {units} Docker slots, configured {config['slots']}")
     path = Path(config["directory"]) / "docker-queue.json"
     token = uuid.uuid4().hex
+    from .processes import identity, alive
     record = {"id": token, "pid": os.getpid(), "kind": kind, "units": units,
-              "capacity": config["slots"], "status": "waiting", "queued_at": time.time()}
+              "created": identity(os.getpid()), "capacity": config["slots"],
+              "status": "waiting", "queued_at": time.time()}
     started = time.monotonic()
     announced = False
     depth_token = None
     try:
         while True:
+            reason = pressure_reason(config)
             with file_lock(path):
                 state = read_json(path) if path.is_file() else {"entries": []}
-                entries = [entry for entry in state["entries"] if _pid_alive(entry["pid"])]
+                entries = [entry for entry in state["entries"]
+                           if (alive(entry["pid"], entry["created"]) if entry.get("created") is not None
+                               else _pid_alive(entry["pid"]))]
                 own = next((entry for entry in entries if entry["id"] == token), None)
                 if own is None:
                     own = dict(record)
@@ -124,16 +211,20 @@ def docker_work(kind: str, *, units: int = 1, poll_sec: float = 2.0):
                 capacity = min([config["slots"], *[entry["capacity"] for entry in entries]])
                 used = sum(entry["units"] for entry in entries if entry["status"] == "running")
                 first = next(entry for entry in entries if entry["status"] == "waiting")
-                reason = pressure_reason(config)
                 ready = first["id"] == token and used + units <= capacity and not reason
                 own["reason"] = reason or f"Docker slots in use: {used}/{capacity}"
                 if ready:
-                    own.update(status="running", admitted_at=time.time(), reason="")
+                    own.update(status="running", admitted_at=time.time(), reason="",
+                               waited_sec=time.monotonic() - started)
                 write_json(path, {"entries": entries})
             if ready:
+                _progress("running", resource_kind=kind, resource_reason="", resource_waited_sec=own["waited_sec"])
                 depth_token = _DEPTH.set(1)
                 yield
                 return
+            _progress("waiting", resource_kind=kind, resource_reason=own["reason"])
+            if first["id"] == token and not used and reason.startswith("available host memory"):
+                recover_wsl_memory(config, wait_id=token)
             if not announced:
                 print(f"[resources] waiting for {kind}: {own['reason']}", file=sys.stderr, flush=True)
                 announced = True
@@ -141,6 +232,7 @@ def docker_work(kind: str, *, units: int = 1, poll_sec: float = 2.0):
                 raise TaskError("infra_error", f"Resource wait timed out for {kind}: {own['reason']}")
             time.sleep(poll_sec)
     finally:
+        _progress("running", resource_kind=kind, resource_reason="")
         if depth_token is not None:
             _DEPTH.reset(depth_token)
         with file_lock(path):

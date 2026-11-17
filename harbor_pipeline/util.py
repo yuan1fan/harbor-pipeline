@@ -131,7 +131,14 @@ def file_lock(path: Path, *, timeout_sec: float = LOCK_TIMEOUT_SEC) -> Iterator[
         else:
             import fcntl
 
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            while True:
+                try:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise PipelineError(f"Timed out waiting for lock {lock_path}")
+                    time.sleep(0.05)
             try:
                 yield
             finally:

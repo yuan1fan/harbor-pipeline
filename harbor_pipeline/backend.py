@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .errors import TaskError
 from .resources import limited
+from .retries import TRANSIENT_BUILD
 from .util import PipelineError, no_window_kwargs, read_json, write_json
 
 _CACHE_RE = re.compile(r"(?im)^\s*(?:=>\s*)?CACHED\s*$")
@@ -191,29 +192,31 @@ def _run(
             command, stdout=handle, stderr=subprocess.STDOUT,
             start_new_session=os.name != "nt", **no_window_kwargs(),
         )
-        try:
-            recovered = _wait_for_build(
-                proc, timeout=timeout, log_path=log_path, recover_export=recover_export,
-            )
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            _kill_tree(proc)
+        from .processes import ProcessTree
+        with ProcessTree(proc):
             try:
-                proc.wait(timeout=15)
+                recovered = _wait_for_build(
+                    proc, timeout=timeout, log_path=log_path, recover_export=recover_export,
+                )
             except subprocess.TimeoutExpired:
-                pass
-            handle.write(b"\nTIMEOUT\n")
-            handle.flush()
-        finally:
-            if proc.poll() is None:
+                timed_out = True
                 _kill_tree(proc)
                 try:
                     proc.wait(timeout=15)
                 except subprocess.TimeoutExpired:
                     pass
-            elif recovered:
-                # Preserve an exit code arriving just after the recovery probe.
-                recovered = None
+                handle.write(b"\nTIMEOUT\n")
+                handle.flush()
+            finally:
+                if proc.poll() is None:
+                    _kill_tree(proc)
+                    try:
+                        proc.wait(timeout=15)
+                    except subprocess.TimeoutExpired:
+                        pass
+                elif recovered:
+                    # Preserve an exit code arriving just after the recovery probe.
+                    recovered = None
         if recovered and proc.poll() is None:
             raise TaskError(
                 "infra_error", "Image exported but the stalled Docker CLI could not be stopped",
@@ -233,7 +236,7 @@ def _run(
             "build_error" if available else "infra_error",
             f"Build exceeded {timeout}s: {' '.join(command[:4])}"
             + ("; Docker daemon is unavailable" if not available else ""),
-            detail={"log": str(log_path), "daemon_available": available},
+            detail={"log": str(log_path), "daemon_available": available, "build_timeout": True},
         )
     with log_path.open("rb") as handle:
         handle.seek(0, 2)
@@ -616,6 +619,10 @@ def build_image(
                         "post_export_hang": True,
                     },
                 ) from exc
+            if (exc.detail or {}).get("build_timeout"):
+                tail = _read_log_tail(log_path)
+                if TRANSIENT_BUILD.search(tail) or not _BUILD_FATAL_AFTER_EXPORT.search(tail):
+                    raise TaskError("infra_error", str(exc), detail={**(exc.detail or {}), "stage": "build"}) from exc
             raise
         if completed.returncode == 0:
             break
@@ -625,12 +632,12 @@ def build_image(
                 "infra_error", f"Docker engine connection failed while building {name}",
                 detail={"log": str(log_path)},
             )
-        if attempt == 0 and _TRANSIENT_BUILD.search(output):
+        if attempt == 0 and (_TRANSIENT_BUILD.search(output) or TRANSIENT_BUILD.search(output)):
             time.sleep(5)
             continue
         tail = output.strip().splitlines()[-8:]
         raise TaskError(
-            "build_error",
+            "infra_error" if TRANSIENT_BUILD.search(output) else "build_error",
             f"docker build failed for {name}: " + " | ".join(tail),
             detail={"log": str(log_path)},
         )

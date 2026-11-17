@@ -21,6 +21,8 @@ import os
 import shutil
 import subprocess
 import threading
+import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -134,6 +136,7 @@ class AgentOutcome:
     error: str = ""
     transcript: list[dict[str, Any]] = field(default_factory=list)
     timed_out: bool = False
+    helper_result: dict[str, Any] | None = None
 
     def trace_tool(self, block: dict[str, Any]) -> None:
         name = str(block.get("name") or "")
@@ -171,6 +174,7 @@ class AgentOutcome:
             "result": self.result_text[-4000:],
             "error": self.error[-4000:],
             "timed_out": self.timed_out,
+            "helper_result": self.helper_result,
             "tools": list(self.transcript),
         }
 
@@ -456,6 +460,9 @@ class ClaudeCodeAgent:
             extra_env=extra_env,
             profile=self.profile,
         )
+        invocation = uuid.uuid4().hex
+        if self.profile.role == "author":
+            env["HARBOR_AUTHOR_SESSION_RUN"] = invocation
         stdout_lines: list[str] = []
         stderr_chunks: list[str] = []
         timed_out = threading.Event()
@@ -495,25 +502,59 @@ class ClaudeCodeAgent:
         err_thread = threading.Thread(target=drain_err, daemon=True)
         err_thread.start()
 
-        def watchdog() -> None:
-            timed_out.set()
-            _kill_process(proc)
-
         trace_path = workspace / ".harbor" / self.profile.trace_name
         trace_path.parent.mkdir(parents=True, exist_ok=True)
-        timer = threading.Timer(self.settings.timeout_sec, watchdog)
-        timer.start()
-        try:
-            assert proc.stdout is not None
-            with trace_path.open("a", encoding="utf-8", newline="\n") as trace:
-                for line in proc.stdout:
-                    stdout_lines.append(line)
-                    _append_live_trace(trace, line)
-            proc.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            _kill_process(proc)
-        finally:
-            timer.cancel()
+        from .processes import ProcessTree, alive, wait_until_idle
+        from .authoring import helper_status
+
+        stopped = threading.Event()
+        pending_at_exit = threading.Event()
+        started = time.monotonic()
+        author = self.profile.role == "author"
+        wait_limit = self.config.pipeline.resource_wait_sec if author else 0
+        wall_deadline = started + self.settings.timeout_sec + wait_limit + (2 * self.config.pipeline.command_timeout_sec if author else 0)
+        with ProcessTree(proc) as tree:
+            def watchdog():
+                last, paused = time.monotonic(), 0.0
+                while not stopped.wait(0.2):
+                    now = time.monotonic()
+                    helper = helper_status(workspace) if author else {}
+                    ours = helper.get("session_token") == invocation and alive(int(helper.get("pid") or 0), helper.get("created"))
+                    if ours:
+                        tree.track(helper["pid"])
+                        if proc.poll() is not None and helper.get("status") in {"waiting", "running"}:
+                            pending_at_exit.set()
+                    # Queue time and finishing an already-started helper do not
+                    # spend model reasoning time. A separate wall cap still holds.
+                    if ours and (helper.get("status") == "waiting" or proc.poll() is not None):
+                        paused += now - last
+                    last = now
+                    if (now >= wall_deadline or paused > wait_limit + (2 * self.config.pipeline.command_timeout_sec if author else 0)
+                            or now - started - paused >= self.settings.timeout_sec):
+                        timed_out.set()
+                        tree.kill()
+                        return
+
+            watcher = threading.Thread(target=watchdog, daemon=True)
+            watcher.start()
+            try:
+                assert proc.stdout is not None
+                with trace_path.open("a", encoding="utf-8", newline="\n") as trace:
+                    for line in proc.stdout:
+                        stdout_lines.append(line)
+                        _append_live_trace(trace, line)
+                proc.wait(timeout=30)
+                if author and not timed_out.is_set():
+                    waited = wait_until_idle(workspace, invocation, deadline=wall_deadline,
+                                             on_tick=lambda helper: tree.track(helper["pid"]))
+                    if waited:
+                        pending_at_exit.set()
+            except (subprocess.TimeoutExpired, TimeoutError):
+                timed_out.set()
+                tree.kill()
+            finally:
+                stopped.set()
+                watcher.join(timeout=2)
             if self.profile.role == "author":
                 from .author_debug import cleanup
                 cleanup(workspace)
@@ -521,6 +562,12 @@ class ClaudeCodeAgent:
         err_thread.join(timeout=5)
         stderr = "".join(stderr_chunks)
         parsed = parse_stream(stdout_lines)
+        helper = helper_status(workspace) if author else {}
+        if helper.get("session_token") == invocation:
+            parsed.helper_result = {**helper, "pending_at_exit": pending_at_exit.is_set()}
+            if helper.get("status") in {"waiting", "running"} and not alive(int(helper.get("pid") or 0), helper.get("created")):
+                parsed.helper_result.update(status="interrupted", error_category="infra_error",
+                                            error="helper exited without a terminal result")
         parsed.exit_code = proc.returncode
         parsed.timed_out = timed_out.is_set()
         if parsed.timed_out:

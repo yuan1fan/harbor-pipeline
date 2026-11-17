@@ -7,10 +7,10 @@ name = "harbor-cve-pipeline"
 version = "0.2.0"
 description = "Evidence-driven CVE task generation and differential validation for Harbor"
 requires-python = ">=3.11"
-dependencies = ["jsonschema>=4.23,<5", "packaging>=24"]
+dependencies = ["jsonschema>=4.23,<5", "packaging>=24", "psutil>=7,<8"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "psutil>=7,<8"]
+dev = ["pytest>=8,<10"]
 
 [project.scripts]
 harbor-pipeline = "harbor_pipeline.cli:main"

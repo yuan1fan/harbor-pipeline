@@ -682,10 +682,13 @@ def _nvd_cache(config, args) -> int:
 def _benchmark(config, args) -> int:
     root = Path(args.output_dir) if args.output_dir else Path(config.pipeline.output_dir)
     run_dir = (root / args.run_id).resolve()
-    releases = sorted(
-        path.parents[2].name
-        for path in run_dir.glob("CVE-*/release/task/task.toml")
-    )
+    release_roots = {path.parents[2].name: path.parents[1]
+                     for path in run_dir.glob("CVE-*/release/task/task.toml")}
+    for record in run_dir.glob("CVE-*/release.json"):
+        published = Path(read_json(record).get("root", ""))
+        if published.resolve().is_relative_to(record.parent.resolve()) and (published / "task/task.toml").is_file():
+            release_roots[record.parent.name] = published
+    releases = sorted(release_roots)
     if args.cve:
         if args.cve not in releases:
             print(f"error: {args.cve} has no released task under {run_dir}", file=sys.stderr)
@@ -700,9 +703,9 @@ def _benchmark(config, args) -> int:
             file=sys.stderr,
         )
         return 2
-    source_task = run_dir / cve_id / "release" / "task"
+    source_task = release_roots[cve_id] / "task"
     task_digest = None
-    manifest_path = run_dir / cve_id / "release" / "build-manifest.json"
+    manifest_path = release_roots[cve_id] / "build-manifest.json"
     if manifest_path.is_file():
         task_digest = str(read_json(manifest_path).get("task_digest") or "")
     task_dir = source_task
