@@ -1,0 +1,74 @@
+[
+  {
+    "cve_id": "CVE-2026-58449",
+    "priority": 10,
+    "project": "neuml/txtai",
+    "group": "recovery",
+    "baseline_state": "QUARANTINED",
+    "notes": "资源准入与后台 helper 生命周期：旧 author 已结束，但 build 仍在排队或运行。",
+    "checks": ["资源排队单独计时；有界回收后仍检查宿主实际内存", "helper 完成后恢复同一 author 会话，不提前生成 generation_error", "同一 workspace 不并行执行重操作"]
+  },
+  {
+    "cve_id": "CVE-2026-59101",
+    "priority": 20,
+    "project": "EstrellaXD/Auto_Bangumi",
+    "group": "recovery",
+    "baseline_state": "QUARANTINED",
+    "notes": "后台任务与运行时要求：旧任务在构建结束前隔离；项目要求 Python >=3.13，实际使用了 3.12。",
+    "checks": ["可获取的 pyproject.toml 要求在构建前反馈", "真实 Python 版本不匹配仍交给 author 修正", "构建结果到达前不把任务判成生成失败"]
+  },
+  {
+    "cve_id": "CVE-2026-60120",
+    "priority": 30,
+    "project": "bagisto/bagisto",
+    "group": "recovery",
+    "baseline_state": "UNSUPPORTED",
+    "notes": "XSS token 生命周期：旧 verifier 删除 /oracle/expected-token 后，bot 读取同一路径失败。",
+    "checks": ["bot 使用独立私有 token 副本并通过健康检查", "verifier 删除自己的副本后 bot 仍能读取", "实际完成漏洞版与修复版差分，不以旧框架错误判 UNSUPPORTED"]
+  },
+  {
+    "cve_id": "CVE-2026-61520",
+    "priority": 40,
+    "project": "SimpleMachines/SMF",
+    "group": "recovery",
+    "baseline_state": "QUARANTINED",
+    "notes": "发布、版本定型与模型服务：旧矩阵通过后发布超时并残留进程；重复 resolver 导致 discovery/spec 漂移，solver 曾被 API 限流。",
+    "checks": ["初始 resolver 提案经过精确配对校验，规范化结果与原始提案均留档", "基础设施重试保持已核定配对；配对变更使旧依赖结果失效", "发布使用独立 staging，超时回收本次子进程；恢复只重试发布", "API 限流有界退避，reviewer 失败保留有效 solver 结果"]
+  },
+  {
+    "cve_id": "CVE-2026-62242",
+    "priority": 50,
+    "project": "codecentric/spring-boot-admin",
+    "group": "recovery",
+    "baseline_state": "VALIDATED",
+    "notes": "冷构建超时边界：旧 T09 冷构建超时被交给 author 改题；审计时该候选尚未发布。",
+    "checks": ["无明确编译错误的超时保留为基础设施故障", "重试只补失败或缺失试次，成功记录不重复计费", "T09 仍满足三个独立种子的 no-cache 构建与两版本验证"]
+  },
+  {
+    "cve_id": "CVE-2026-63092",
+    "priority": 60,
+    "project": "medienbaecker/kirby-modules",
+    "group": "recovery",
+    "baseline_state": "VALIDATING",
+    "notes": "下载故障分类：旧冷构建发生 curl 35 / TLS 错误，却消耗 author 修订；审计时仍在运行。",
+    "checks": ["TLS/连接错误有界重试，保留原版本对与源码输入", "失败仍不可恢复时记录 infra_error，不要求 author 修改漏洞机制", "已完成的矩阵步骤和冷构建种子可续跑"]
+  },
+  {
+    "cve_id": "CVE-2026-5803",
+    "priority": 70,
+    "project": "bigsk1/openai-realtime-ui",
+    "group": "positive_control",
+    "baseline_state": "RELEASED",
+    "notes": "已发布对照与 reviewer 格式纠正：旧 reviewer 多返回 fidelity_note 字段，触发整轮重试。",
+    "checks": ["既有可出题候选能够走完整验收链路", "格式错误最多纠正一次，不升级原有评分或 fidelity 结论", "reviewer 格式失败不重复执行已有有效 solver 试解"]
+  },
+  {
+    "cve_id": "CVE-2026-58468",
+    "priority": 80,
+    "project": "nocobase/nocobase",
+    "group": "evidence_control",
+    "baseline_state": "UNSUPPORTED",
+    "notes": "证据复核对照：author 已发现旧补丁只增加警告、仍会发送请求，resolver 拒绝了原配对。",
+    "checks": ["author 可以基于源码引用回退到 resolver", "不把只增加警告的旧补丁当成阻断请求的修复", "仍无可辩护配对时可维持 UNSUPPORTED；若发现新修复，须补齐来源与真实差分"]
+  }
+]

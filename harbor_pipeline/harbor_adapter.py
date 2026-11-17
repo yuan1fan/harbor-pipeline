@@ -21,6 +21,7 @@ from pathlib import Path
 
 from .errors import TaskError
 from .resources import limited
+from .retries import TRANSIENT_BUILD
 from .util import PipelineError, hidden_console_kwargs, no_window_kwargs, read_json, write_json
 
 HARBOR_VERSION_REQUIRED = "0.23.0"
@@ -107,6 +108,8 @@ def classify_trial(trial: TrialOutcome) -> str | None:
     """
     if trial.exception is not None:
         name = str(trial.exception.get("exception_type") or trial.exception.get("type") or trial.exception.get("name") or "")
+        if "timeout" in name.lower() or TRANSIENT_BUILD.search(str(trial.exception)):
+            return "infra_error"
         if "Build" in name or "Docker" in name or "Image" in name:
             return "build_error"
         return "infra_error"
@@ -279,12 +282,11 @@ class HarborAdapter:
 
         command = [self.locate(), "run", "-c", str(config_path), "-y"]
         started = time.monotonic()
+        from .processes import run_owned
         try:
-            completed = subprocess.run(
-                command,
+            completed = run_owned(
+                command, log_path=log_path,
                 cwd=str(self.run_root),
-                capture_output=True,
-                text=True,
                 timeout=timeout_sec or self.timeout_sec,
                 **hidden_console_kwargs(),
             )
@@ -292,19 +294,17 @@ class HarborAdapter:
         except subprocess.TimeoutExpired as exc:
             stdout = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
             stderr = (exc.stderr or "") if isinstance(exc.stderr, str) else ""
-            log_path.write_text(f"{stdout}\n{stderr}\nTIMEOUT\n", encoding="utf-8")
             raise TaskError(
                 "infra_error",
                 f"Harbor job {name} exceeded {timeout_sec or self.timeout_sec}s",
                 detail={"job_name": name, "log": str(log_path)},
             ) from exc
-        log_path.write_text(f"{stdout}\n{stderr}\n", encoding="utf-8")
         elapsed = time.monotonic() - started
 
         job_dir = self.jobs_dir / name
         result_path = job_dir / "result.json"
         if not result_path.is_file():
-            category = "build_error" if _looks_like_build_failure(stdout + stderr) else "infra_error"
+            category = "build_error" if _looks_like_build_failure(stdout + stderr) and not TRANSIENT_BUILD.search(stdout + stderr) else "infra_error"
             raise TaskError(
                 category,
                 f"Harbor job {name} produced no result.json (exit {returncode})",

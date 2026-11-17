@@ -29,6 +29,8 @@ DEFAULT_BOT_IMAGE = "harbor-pipeline/base-bot:" + hashlib.sha256(
 BOT_IMAGE = os.environ.get("HARBOR_BOT_IMAGE", DEFAULT_BOT_IMAGE)
 BOT_COOKIE_NAME = "harbor_secret"
 BOT_PORT = 8090
+BOT_SECRET_MOUNT = "/bot-oracle"
+BOT_SECRET_FILE = "/bot-oracle/token"
 
 # Shared marker volume for the file-write family. Only the target and the
 # independent observer mount it; the verifier main (where the PoC runs) does

@@ -21,6 +21,8 @@ from .goals import (
     BOT_IMAGE,
     DEFAULT_BOT_IMAGE,
     BOT_PORT,
+    BOT_SECRET_MOUNT,
+    BOT_SECRET_FILE,
     LISTING_DIR,
     LISTING_MOUNT,
     LISTING_NAME_FILE,
@@ -584,6 +586,14 @@ def _synthesis_entrypoint(start_command: str, ctx: ScenarioContext) -> str:
     # Relative alias inside the application root, e.g. "secret/token".
     alias_target = secret_path[len(app_root) :].lstrip("/")
     family_setup = ""
+    if ctx.goal_family == "secret_read" and ctx.goal_primitive == "xss":
+        # This publication is mounted only by the target and bot. The verifier
+        # still consumes/deletes its own token before any untrusted PoC runs.
+        family_setup = f"""mkdir -p {BOT_SECRET_MOUNT}
+chmod 0700 {BOT_SECRET_MOUNT}
+printf '%s' "$SECRET" > {BOT_SECRET_FILE}
+chmod 0600 {BOT_SECRET_FILE}
+"""
     if ctx.goal_family == "file_write":
         family_setup = f"""\
 # The target and the independent observer share this volume. The PoC itself
@@ -745,16 +755,25 @@ _BOT = '''\
 """Admin bot with the per-instance secret cookie."""
 import json
 import os
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
 from playwright.sync_api import sync_playwright
 
 TARGET_URL = os.environ.get("BOT_TARGET_URL", "http://target:8080").rstrip("/")
-SECRET_FILE = os.environ.get("BOT_SECRET_FILE", "/oracle/expected-token")
+SECRET_FILE = os.environ.get("BOT_SECRET_FILE", "/bot-oracle/token")
 COOKIE_NAME = os.environ.get("BOT_COOKIE_NAME", "harbor_secret")
 PORT = int(os.environ.get("BOT_PORT", "8090"))
 TARGET_HOST = urlsplit(TARGET_URL).hostname or "target"
+
+
+def read_secret():
+    with open(SECRET_FILE, encoding="utf-8") as handle:
+        value = handle.read().strip()
+    if not re.fullmatch(r"[0-9a-f]{48}", value):
+        raise ValueError("bot token is missing or malformed")
+    return value
 
 
 class Bot(BaseHTTPRequestHandler):
@@ -775,8 +794,7 @@ class Bot(BaseHTTPRequestHandler):
             parsed = urlsplit(url)
             if parsed.hostname != TARGET_HOST:
                 raise ValueError("bot only visits the target host")
-            with open(SECRET_FILE, encoding="utf-8") as handle:
-                secret = handle.read().strip()
+            secret = read_secret()
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch(
                     args=["--no-sandbox", "--disable-dev-shm-usage"]
@@ -803,6 +821,16 @@ class Bot(BaseHTTPRequestHandler):
 
     def log_message(self, *_args):
         pass
+
+    def do_GET(self):
+        if self.path != "/health":
+            self._send(404, b"not found")
+            return
+        try:
+            read_secret()
+            self._send(200, b"ready")
+        except (OSError, ValueError):
+            self._send(503, b"bot secret is not ready")
 
 
 if __name__ == "__main__":
@@ -905,6 +933,11 @@ def _verifier_compose(
             volume_names.append("ref-oracle-data")
     bots = ""
     if xss:
+        target_mounts.append(f"bot-data:{BOT_SECRET_MOUNT}")
+        volume_names.append("bot-data")
+        if include_reference:
+            reference_mounts.append(f"ref-bot-data:{BOT_SECRET_MOUNT}")
+            volume_names.append("ref-bot-data")
         def bot_service(name: str, target: str, volume: str) -> str:
             build = "    build:\n      context: ./bot\n" if not image and BOT_IMAGE == DEFAULT_BOT_IMAGE else ""
             return f"""  {name}:
@@ -917,22 +950,27 @@ def _verifier_compose(
         condition: service_healthy
     environment:
       BOT_TARGET_URL: "http://{target}:8080"
-      BOT_SECRET_FILE: "/oracle/expected-token"
+      BOT_SECRET_FILE: "{BOT_SECRET_FILE}"
       BOT_COOKIE_NAME: "{BOT_COOKIE_NAME}"
       BOT_PORT: "{BOT_PORT}"
     volumes:
-      - {volume}:/oracle:ro
+      - {volume}:{BOT_SECRET_MOUNT}:ro
       - ./bot.py:/bot.py:ro
     expose:
       - "{BOT_PORT}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:{BOT_PORT}/health')"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
 
 """
-        bots = bot_service("bot", "target", "oracle-data")
-        main_depends += "      bot:\n        condition: service_started\n"
+        bots = bot_service("bot", "target", "bot-data")
+        main_depends += "      bot:\n        condition: service_healthy\n"
         if include_reference:
-            bots += bot_service("bot-reference", "target-reference", "ref-oracle-data")
+            bots += bot_service("bot-reference", "target-reference", "ref-bot-data")
             main_depends += (
-                "      bot-reference:\n        condition: service_started\n"
+                "      bot-reference:\n        condition: service_healthy\n"
             )
     main_volumes = ""
     if main_mounts:
@@ -1005,7 +1043,7 @@ def _with_fixed_target(
             "      target:\n        condition: service_healthy\n",
             "      target-fixed:\n        condition: service_healthy\n",
         )
-    for name in ("marker-data", "listing-data", "oracle-data"):
+    for name in ("marker-data", "listing-data", "oracle-data", "bot-data"):
         services = services.replace(name, "fixed-" + name)
     body, _, volumes = primary.partition("\nvolumes:")
     body = body.replace("  main:\n", "  main:\n    networks: [default, control]\n", 1)
@@ -1016,7 +1054,7 @@ def _with_fixed_target(
     else:
         body = body[:main_end] + "    volumes:\n      - verifier-control:/control\n" + body[main_end:]
     fixed_volumes = secondary.partition("\nvolumes:")[2]
-    for name in ("marker-data", "listing-data", "oracle-data"):
+    for name in ("marker-data", "listing-data", "oracle-data", "bot-data"):
         fixed_volumes = fixed_volumes.replace(name, "fixed-" + name)
     runner_mount = ""
     if listing or not marker:
@@ -1028,6 +1066,7 @@ def _with_fixed_target(
         if xss
         else ""
     )
+    runner_bot = "      bot-fixed:\n        condition: service_healthy\n" if xss else ""
     runner = f"""  fixed-runner:
 {runner_image}    build:
       context: .
@@ -1039,7 +1078,7 @@ def _with_fixed_target(
 {runner_env}    depends_on:
       target-fixed:
         condition: service_healthy
-    expose:
+{runner_bot}    expose:
       - "8099"
     volumes:
       - verifier-control:/control:ro

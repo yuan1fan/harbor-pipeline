@@ -117,6 +117,15 @@ def evidence_review_pending(workspace: Path) -> bool:
     return path.is_file() and read_json(path).get("status") == "requested"
 
 
+def helper_status(workspace: Path) -> dict:
+    try:
+        data = read_json(Path(workspace) / JOB_STATE_FILE)
+        helper = data.get("helper") if isinstance(data, dict) else None
+        return helper if isinstance(helper, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
 def discovery_identity(discovery: Discovery) -> str:
     """Build-affecting identity, independent of provenance IDs and notes."""
     return digest({"package": discovery.build_package, "ecosystem": discovery.build_ecosystem,

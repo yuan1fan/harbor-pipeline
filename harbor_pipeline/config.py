@@ -33,6 +33,7 @@ class Settings:
     min_free_memory_mb: int = 4096
     min_free_disk_gb: int = 15
     resource_wait_sec: int = 7200
+    wsl_reclaim_memory: bool = True
     resource_disk_paths: list[str] = field(default_factory=list)
     archive_images: bool = False
     max_repairs: int = 2
@@ -154,7 +155,7 @@ def load_config(path: Path | None = None) -> Config:
         raise PipelineError("resource_dir must be a nonempty local directory")
     if not isinstance(settings.resource_disk_paths, list) or any(not isinstance(p, str) or not p for p in settings.resource_disk_paths):
         raise PipelineError("resource_disk_paths must be a list of paths")
-    for name in ("archive_images", "prune_images", "solver_review", "evidence_resolver", "require_harbor_lint", "inherit_claude_settings"):
+    for name in ("archive_images", "prune_images", "solver_review", "evidence_resolver", "require_harbor_lint", "inherit_claude_settings", "wsl_reclaim_memory"):
         if not isinstance(getattr(settings, name), bool):
             raise PipelineError(f"{name} must be a boolean")
     for name in ("workers", "trial_workers", "trials", "min_trials", "max_calls", "max_total_tokens", "max_context_bytes", "command_timeout_sec"):

@@ -166,16 +166,16 @@ def test_recovery_rejects_unproven_image(tmp_path, monkeypatch, output):
     assert not iid.exists()
 
 
-@pytest.mark.parametrize("log_text", [
-    "#4 [3/4] RUN make\n#4 still compiling\n",
-    EXPORT_LOG.replace("#10 unpacking to docker.io/example/target:latest 0.2s done\n", ""),
-    EXPORT_LOG.replace("0.2s done", "0.2s"),
-    EXPORT_LOG.replace("#10 unpacking", "#11 unpacking"),
-    EXPORT_LOG.replace("#10 DONE 1.2s\n", ""),
-    EXPORT_LOG + "ERROR: failed to solve: manifest rejected\n",
+@pytest.mark.parametrize("log_text,category", [
+    ("#4 [3/4] RUN make\n#4 still compiling\n", "infra_error"),
+    (EXPORT_LOG.replace("#10 unpacking to docker.io/example/target:latest 0.2s done\n", ""), "infra_error"),
+    (EXPORT_LOG.replace("0.2s done", "0.2s"), "infra_error"),
+    (EXPORT_LOG.replace("#10 unpacking", "#11 unpacking"), "infra_error"),
+    (EXPORT_LOG.replace("#10 DONE 1.2s\n", ""), "infra_error"),
+    (EXPORT_LOG + "ERROR: failed to solve: manifest rejected\n", "build_error"),
 ])
 def test_incomplete_or_failed_export_keeps_full_build_timeout(
-    build_env, stalled_cli, monkeypatch, log_text,
+    build_env, stalled_cli, monkeypatch, log_text, category,
 ):
     def start(command, **kwargs):
         proc = stalled_cli.Process(command, **kwargs)
@@ -186,7 +186,7 @@ def test_incomplete_or_failed_export_keeps_full_build_timeout(
     monkeypatch.setattr(backend.subprocess, "run", lambda *a, **k: pytest.fail("must not inspect an unfinished export"))
     with pytest.raises(TaskError) as caught:
         backend.build_image(**build_env, timeout_sec=60)
-    assert caught.value.category.code == "build_error"
+    assert caught.value.category.code == category
     assert stalled_cli.processes[0].killed_at == 60
     assert "TIMEOUT" in build_env["log_path"].read_text()
     assert "RECOVERED_POST_EXPORT" not in build_env["log_path"].read_text()

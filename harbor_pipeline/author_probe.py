@@ -27,6 +27,8 @@ from .goals import (
     BOT_IMAGE,
     DEFAULT_BOT_IMAGE,
     BOT_PORT,
+    BOT_SECRET_MOUNT,
+    BOT_SECRET_FILE,
     LISTING_MOUNT,
     MARKER_DIR,
     MARKER_PATH,
@@ -217,6 +219,9 @@ def compose_text(
         volume_names.extend(("oracle-data", "ref-oracle-data"))
     bots = ""
     if xss:
+        target_mounts.append(f"bot-data:{BOT_SECRET_MOUNT}")
+        reference_mounts.append(f"ref-bot-data:{BOT_SECRET_MOUNT}")
+        volume_names.extend(("bot-data", "ref-bot-data"))
         def bot_service(name: str, target: str, volume: str) -> str:
             return f"""  {name}:
     image: {BOT_IMAGE}
@@ -228,21 +233,26 @@ def compose_text(
         condition: service_healthy
     environment:
       BOT_TARGET_URL: "http://{target}:8080"
-      BOT_SECRET_FILE: "/oracle/expected-token"
+      BOT_SECRET_FILE: "{BOT_SECRET_FILE}"
       BOT_COOKIE_NAME: "{BOT_COOKIE_NAME}"
       BOT_PORT: "{BOT_PORT}"
     volumes:
-      - {volume}:/oracle:ro
+      - {volume}:{BOT_SECRET_MOUNT}:ro
       - {_posix(tests_dir / "bot.py")}:/bot.py:ro
     expose:
       - "{BOT_PORT}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:{BOT_PORT}/health')"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
 
 """
-        bots = bot_service("bot", "target", "oracle-data")
-        bots += bot_service("bot-reference", "target-reference", "ref-oracle-data")
-        main_depends += "      bot:\n        condition: service_started\n"
+        bots = bot_service("bot", "target", "bot-data")
+        bots += bot_service("bot-reference", "target-reference", "ref-bot-data")
+        main_depends += "      bot:\n        condition: service_healthy\n"
         main_depends += (
-            "      bot-reference:\n        condition: service_started\n"
+            "      bot-reference:\n        condition: service_healthy\n"
         )
     target_volumes = ""
     if target_mounts:

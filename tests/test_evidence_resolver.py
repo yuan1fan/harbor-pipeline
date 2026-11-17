@@ -104,6 +104,18 @@ def _write_run(tmp_path: Path, discovery=None, evidence=None):
     return run_dir, discovery, evidence
 
 
+def _package_metadata(run_dir, evidence):
+    from harbor_pipeline.sources import EvidenceCollector
+    from harbor_pipeline.util import digest
+    collector = EvidenceCollector(SourceSettings(), run_dir, sources=list(evidence["sources"]))
+    for version in ("1.2.3", "1.2.4"):
+        url = f"https://pypi.org/pypi/acme/{version}/json"
+        body = json.dumps({"info": {"name": "acme", "version": version}}).encode()
+        collector.record(url, "release_notes", "registry identity", FetchResult(
+            url=url, final_url=url, status=200, body=body, sha256=digest(body), media_type="application/json"))
+    evidence.update(collector.save("CVE-2026-99999"))
+
+
 def test_workspace_has_read_only_inputs_and_external_helper(tmp_path):
     run_dir, discovery, evidence = _write_run(tmp_path)
     workspace = evidence_resolver.prepare_workspace(
@@ -192,6 +204,7 @@ def test_proposal_accepts_supported_pair_and_rejects_equal_refs():
 
 def test_apply_proposal_updates_discovery_and_reloads_evidence(tmp_path):
     run_dir, discovery, evidence = _write_run(tmp_path)
+    _package_metadata(run_dir, evidence)
     resolved, refreshed = evidence_resolver.apply_proposal(
         discovery=discovery,
         proposal=_proposal(),
@@ -507,6 +520,7 @@ def test_pipeline_applies_resolver_proposal(tmp_path, monkeypatch):
         config=config, cve_id="CVE-2026-99999", run_id="r1", scenario="auto"
     )
     _write_sources(pipeline.store.root, evidence)
+    _package_metadata(pipeline.store.root, evidence)
     pipeline._collect_auto(pipeline.store.create())
 
     assert pipeline.discovery.vulnerable_ref == "1.2.3"

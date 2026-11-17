@@ -28,7 +28,7 @@ from .agent import (
     ClaudeCodeAgent,
     build_agent_settings,
 )
-from .config import Config
+from .config import Config, SourceSettings
 from .discovery import Discovery
 from .util import PipelineError, read_json, write_json
 
@@ -315,7 +315,7 @@ Write `reconciliation.json`:
   "component": "component",
   "vulnerable": {{"kind": "package_version", "value": "1.2.3", "ecosystem": "pypi", "package": "real-package-name"}},
   "fixed": {{"kind": "package_version", "value": "1.2.4", "ecosystem": "pypi", "package": "real-package-name"}},
-  "fix_commit": "full-or-abbreviated-sha",
+  "fix_commit": "full-40-character-sha",
   "fix_source_id": "src-7-upstream-commit",
   "reason": "why this pair is the supported one",
   "citations": [
@@ -476,6 +476,7 @@ def apply_proposal(
     run_dir: Path,
     persist: bool = True,
     review_request: dict | None = None,
+    settings: SourceSettings | None = None,
 ) -> tuple[Discovery, dict]:
     """Apply a validated proposal to the immutable discovery facts."""
     issues = validate_proposal(
@@ -506,6 +507,10 @@ def apply_proposal(
         fix_source_id=str(proposal.get("fix_source_id") or discovery.fix_source_id or "") or None,
         notes=tuple(notes),
     )
+    from .discovery_refs import verify_proposed_pair
+    refreshed, resolved = verify_proposed_pair(settings or SourceSettings(), run_dir, evidence, resolved)
+    if not resolved.is_complete:
+        raise PipelineError("resolver proposal did not produce a verified, typed version pair")
     resolved = replace(resolved, selection_trace=(*discovery.selection_trace, {
         "rule": "resolver_proposal", "outcome": "selected", "reason": reason or "validated resolver proposal",
         "source_ids": [resolved.fix_source_id] if resolved.fix_source_id else [],
@@ -519,6 +524,14 @@ def apply_proposal(
     # the old dict do not silently validate against a stale source list.
     refreshed = read_json(Path(run_dir) / "evidence-index.json")
     return resolved, refreshed
+
+
+def canonical_proposal(proposal: dict, resolved: Discovery) -> dict:
+    """Accepted refs are typed and resolved; keep the raw agent proposal separately."""
+    result = {key: value for key, value in proposal.items() if key not in {"vulnerable_ref", "fixed_ref"}}
+    result.update(vulnerable=resolved.vulnerable.to_json(), fixed=resolved.fixed.to_json(),
+                  fix_commit=resolved.fix_commit, fix_source_id=resolved.fix_source_id)
+    return result
 
 
 class EvidenceResolver:
@@ -680,12 +693,16 @@ def resolve_run(
                 proposal=outcome.proposal or {},
                 evidence=current_evidence,
                 run_dir=run_dir,
+                settings=config.sources,
             )
             result["applied"] = True
+            result["resolver"]["raw_proposal"] = outcome.proposal
+            result["resolver"]["proposal"] = canonical_proposal(outcome.proposal or {}, resolved)
             result["discovery"] = resolved.to_json()
             result["evidence_sources"] = len(refreshed.get("sources", []))
         except PipelineError as exc:
             result["applied"] = False
             result["apply_error"] = str(exc)
+            result["resolver"]["status"] = "invalid_proposal"
     write_json(run_dir / "resolver-result.json", result)
     return result

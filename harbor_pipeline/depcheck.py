@@ -17,6 +17,9 @@ from __future__ import annotations
 
 import json
 import re
+import tomllib
+from dataclasses import replace
+from urllib.parse import quote
 
 from .config import SourceSettings
 from .registry import lookup, version_exists
@@ -27,6 +30,43 @@ _PY_IMAGE = re.compile(r"^python:(\d+)\.(\d+)")
 _NODE_IMAGE = re.compile(r"^node:(\d+)")
 _GO_IMAGE = re.compile(r"^golang:(\d+)(?:\.(\d+))?")
 _GO_MOD_GO = re.compile(r"^\s*go\s+(\d+\.\d+)", re.MULTILINE)
+
+
+def _python_project_requirements(bundle, settings):
+    """Read declared Python requirements before an expensive source build."""
+    target = bundle.get("target") or {}
+    language, runtime = _base_runtime(target.get("base_image", ""))
+    if language != "python":
+        return []
+    files = target.get("files") or {}
+    documents = [("target/pyproject.toml", files["pyproject.toml"])] if "pyproject.toml" in files else []
+    product = bundle.get("product") or {}
+    repo = str(product.get("name") or "")
+    dockerfile = str(files.get("Dockerfile") or "").lower()
+    source_build = any(host + repo.lower() in dockerfile for host in ("github.com/", "raw.githubusercontent.com/"))
+    if not documents and source_build and product.get("ecosystem") == "generic" and re.fullmatch(r"[\w.-]+/[\w.-]+", repo):
+        versions = bundle.get("versions") or {}
+        for ref in dict.fromkeys(versions.get(key) for key in ("vulnerable_ref", "fixed_ref")):
+            if not ref:
+                continue
+            url = f"https://raw.githubusercontent.com/{repo}/{quote(str(ref), safe='')}/pyproject.toml"
+            try:
+                result = fetch(url, replace(settings, max_bytes=min(settings.max_bytes, 256_000),
+                                            timeout_sec=min(settings.timeout_sec, 10)))
+                if result.status == 200:
+                    documents.append((url, result.body.decode("utf-8")))
+            except Exception:  # Metadata unavailable is not evidence of incompatibility.
+                continue
+    issues = []
+    for origin, body in documents:
+        try:
+            doc = tomllib.loads(body)
+            requires = str((doc.get("project") or {}).get("requires-python") or "")
+        except (ValueError, TypeError):
+            continue
+        if requires and _python_compatible(requires, runtime) is False:
+            issues.append(f"{origin} requires Python {requires}, but {target.get('base_image')} provides Python {runtime}. Choose a compatible base image.")
+    return issues
 
 
 def _base_runtime(base_image: str) -> tuple[str, str]:
@@ -146,7 +186,7 @@ def check_bundle(bundle: dict, settings: SourceSettings) -> list[str]:
         and any(str(filename).endswith((".go", "go.mod")) for filename in target_files)
     ):
         ecosystem = "go"
-    issues: list[str] = []
+    issues: list[str] = _python_project_requirements(bundle, settings)
     if ecosystem not in {"pypi", "npm", "go", "maven"} or not name:
         return issues
 

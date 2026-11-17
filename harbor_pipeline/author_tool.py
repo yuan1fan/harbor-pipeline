@@ -14,7 +14,9 @@ import json
 import os
 import shlex
 import sys
+import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -153,9 +155,12 @@ def _counters(ctx: ToolContext) -> dict:
 
 
 def _job_start(ctx: ToolContext, kind: str, **extra: Any) -> None:
+    path = ctx.workspace / JOB_STATE_FILE
+    previous = read_json(path) if path.is_file() else {}
     write_json(
-        ctx.workspace / JOB_STATE_FILE,
+        path,
         {
+            **({"helper": previous["helper"]} if previous.get("helper") else {}),
             "kind": kind,
             "status": "running",
             "pid": os.getpid(),
@@ -175,6 +180,60 @@ def _job_finish(ctx: ToolContext, state: str, **extra: Any) -> None:
 def _job_status(ctx: ToolContext) -> dict:
     path = ctx.workspace / JOB_STATE_FILE
     return read_json(path) if path.is_file() else {}
+
+
+@contextmanager
+def _helper_operation(ctx, command):
+    """One workspace mutation at a time, including nested build/probe calls."""
+    from .processes import identity
+    from .resources import _PROGRESS
+
+    lock = file_lock(ctx.workspace / ".harbor/helper", timeout_sec=0)
+    try:
+        lock.__enter__()
+    except PipelineError as exc:
+        raise PipelineError("Another harbor-author command is still running. End this session so the pipeline can wait and resume it with the result.") from exc
+    path = ctx.workspace / JOB_STATE_FILE
+    helper = {"pid": os.getpid(), "created": identity(os.getpid()), "command": command,
+              "operation_id": uuid.uuid4().hex,
+              "session_token": os.environ.get("HARBOR_AUTHOR_SESSION_RUN", ""),
+              "status": "running", "started_at": utc_now_text(), "waited_sec": 0.0}
+    wait_started = None
+
+    def update(status, **extra):
+        nonlocal wait_started
+        now = time.monotonic()
+        if status == "waiting" and wait_started is None:
+            wait_started = now
+        elif status != "waiting" and wait_started is not None:
+            helper["waited_sec"] += now - wait_started
+            wait_started = None
+        helper.update(status=status, heartbeat_at=utc_now_text(), **extra)
+        data = read_json(path) if path.is_file() else {}
+        if (data.get("helper") or {}).get("operation_id") != helper["operation_id"]:
+            data = {"kind": command, "status": "running", "pid": helper["pid"]}
+        if status in {"succeeded", "failed"}:
+            helper["error_category"] = extra.get("error_category") or data.get("error_category") or helper.get("error_category")
+            helper["error"] = extra.get("error") or data.get("error") or helper.get("error")
+        write_json(path, {**data, "helper": dict(helper)})
+
+    callback = _PROGRESS.set(update)
+    code = [1]
+    try:
+        update("running")
+        yield lambda result: code.__setitem__(0, result)
+    except TaskError as exc:
+        update("failed", error_category=exc.category.code, error=str(exc))
+        raise
+    except PipelineError as exc:
+        update("failed", error_category="budget_exhausted" if "budget exhausted" in str(exc).lower() else None, error=str(exc))
+        raise
+    finally:
+        try:
+            update("succeeded" if code[0] == 0 else "failed", exit_code=code[0], finished_at=utc_now_text())
+        finally:
+            _PROGRESS.reset(callback)
+            lock.__exit__(None, None, None)
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +395,7 @@ def cmd_build(ctx: ToolContext, *, variant: str = "both", quiet: bool = False) -
         except TaskError as exc:
             _job_finish(
                 ctx, "failed", stage="build", variant=name,
-                error=str(exc)[-3000:], log=str(log_path),
+                error=str(exc)[-3000:], error_category=exc.category.code, log=str(log_path),
             )
             if not quiet:
                 _print(
@@ -713,84 +772,93 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _dispatch(ctx, args):
+    from .resources import policy as resource_policy
+    if args.subcommand in {"build", "probe"} and resource_policy().get("slots"):
+        # Debug targets are disposable; retaining both while starting a
+        # full probe doubles the candidate's target memory footprint.
+        from . import author_debug
+        for kind in ("vulnerable", "fixed"):
+            author_debug.stop(ctx.workspace, kind)
+    if args.subcommand in {"shell", "debug", "cleanup"}:
+        from . import author_debug
+        if args.subcommand == "cleanup":
+            author_debug.cleanup(ctx.workspace)
+            _print({"ok": True})
+            return 0
+        _charge(ctx, "execs")
+        command = list(args.command)
+        if command and command[0] == "--":
+            command = command[1:]
+        if args.subcommand == "shell":
+            if not command:
+                raise PipelineError("shell needs a command after --")
+            runtime_image = {
+                "configured": ctx.config.pipeline.author_sandbox_image,
+                "python": "python:3.12-slim-bookworm", "node": "node:24-bookworm-slim",
+                "go": "golang:1.25-bookworm", "java": "maven:3.9-eclipse-temurin-17",
+            }[args.runtime]
+            author_debug.start(ctx.workspace, kind="scratch", image=runtime_image,
+                               network=ctx.config.pipeline.author_sandbox_network)
+            result = author_debug.execute(ctx.workspace, "scratch", shlex.join(command), timeout=args.timeout)
+        elif args.action == "start":
+            state = read_json(ctx.workspace / BUILD_STATE_FILE)
+            built = (state.get("variants") or {}).get(args.variant) or {}
+            image = built.get("image_digest") or built.get("image_ref")
+            if not image:
+                raise PipelineError(f"Build {args.variant} before starting its debug service")
+            result = author_debug.start(ctx.workspace, kind=args.variant, image=image)
+        elif args.action == "exec":
+            if not command:
+                raise PipelineError("debug exec needs a command after --")
+            result = author_debug.execute(ctx.workspace, args.variant, shlex.join(command), timeout=args.timeout)
+        elif args.action == "logs":
+            result = author_debug.logs(ctx.workspace, args.variant)
+        else:
+            result = author_debug.stop(ctx.workspace, args.variant)
+        _print(result)
+        return 0 if result.get("ok") else 1
+    if args.subcommand == "validate":
+        return cmd_validate(ctx)
+    if args.subcommand == "build":
+        return cmd_build(ctx, variant=args.variant)
+    if args.subcommand == "probe":
+        return cmd_probe(ctx, alternate=args.alternate)
+    if args.subcommand == "exec":
+        command = list(args.command)
+        if command and command[0] == "--":
+            command = command[1:]
+        if not command:
+            _print({"ok": False, "error": "exec needs a command after --"})
+            return 2
+        # The shell already split the agent's command into argv. Re-quote
+        # each argument so `node -e "..."` reaches the container as one
+        # shell string instead of losing its quotes.
+        return cmd_exec(ctx, shlex.join(command), args.timeout, args.variant)
+    if args.subcommand == "registry":
+        return cmd_registry(ctx, args.ecosystem, args.name)
+    if args.subcommand == "submit":
+        return cmd_submit(ctx)
+    if args.subcommand == "decline":
+        return cmd_decline(ctx, args.reason)
+    if args.subcommand == "request-evidence-review":
+        return cmd_request_evidence_review(ctx, args.file)
+    if args.subcommand == "status":
+        return cmd_status(ctx)
+    _print({"ok": False, "error": f"unknown command {args.subcommand!r}"})
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         ctx = _load_context()
-        from .resources import policy as resource_policy
-        if args.subcommand in {"build", "probe"} and resource_policy().get("slots"):
-            # Debug targets are disposable; retaining both while starting a
-            # full probe doubles the candidate's target memory footprint.
-            from . import author_debug
-            for kind in ("vulnerable", "fixed"):
-                author_debug.stop(ctx.workspace, kind)
-        if args.subcommand in {"shell", "debug", "cleanup"}:
-            from . import author_debug
-            if args.subcommand == "cleanup":
-                author_debug.cleanup(ctx.workspace)
-                _print({"ok": True})
-                return 0
-            _charge(ctx, "execs")
-            command = list(args.command)
-            if command and command[0] == "--":
-                command = command[1:]
-            if args.subcommand == "shell":
-                if not command:
-                    raise PipelineError("shell needs a command after --")
-                runtime_image = {
-                    "configured": ctx.config.pipeline.author_sandbox_image,
-                    "python": "python:3.12-slim-bookworm", "node": "node:24-bookworm-slim",
-                    "go": "golang:1.25-bookworm", "java": "maven:3.9-eclipse-temurin-17",
-                }[args.runtime]
-                author_debug.start(ctx.workspace, kind="scratch", image=runtime_image,
-                                   network=ctx.config.pipeline.author_sandbox_network)
-                result = author_debug.execute(ctx.workspace, "scratch", shlex.join(command), timeout=args.timeout)
-            elif args.action == "start":
-                state = read_json(ctx.workspace / BUILD_STATE_FILE)
-                built = (state.get("variants") or {}).get(args.variant) or {}
-                image = built.get("image_digest") or built.get("image_ref")
-                if not image:
-                    raise PipelineError(f"Build {args.variant} before starting its debug service")
-                result = author_debug.start(ctx.workspace, kind=args.variant, image=image)
-            elif args.action == "exec":
-                if not command:
-                    raise PipelineError("debug exec needs a command after --")
-                result = author_debug.execute(ctx.workspace, args.variant, shlex.join(command), timeout=args.timeout)
-            elif args.action == "logs":
-                result = author_debug.logs(ctx.workspace, args.variant)
-            else:
-                result = author_debug.stop(ctx.workspace, args.variant)
-            _print(result)
-            return 0 if result.get("ok") else 1
-        if args.subcommand == "validate":
-            return cmd_validate(ctx)
-        if args.subcommand == "build":
-            return cmd_build(ctx, variant=args.variant)
-        if args.subcommand == "probe":
-            return cmd_probe(ctx, alternate=args.alternate)
-        if args.subcommand == "exec":
-            command = list(args.command)
-            if command and command[0] == "--":
-                command = command[1:]
-            if not command:
-                _print({"ok": False, "error": "exec needs a command after --"})
-                return 2
-            # The shell already split the agent's command into argv. Re-quote
-            # each argument so `node -e "..."` reaches the container as one
-            # shell string instead of losing its quotes.
-            return cmd_exec(ctx, shlex.join(command), args.timeout, args.variant)
-        if args.subcommand == "registry":
-            return cmd_registry(ctx, args.ecosystem, args.name)
-        if args.subcommand == "submit":
-            return cmd_submit(ctx)
-        if args.subcommand == "decline":
-            return cmd_decline(ctx, args.reason)
-        if args.subcommand == "request-evidence-review":
-            return cmd_request_evidence_review(ctx, args.file)
         if args.subcommand == "status":
             return cmd_status(ctx)
-        _print({"ok": False, "error": f"unknown command {args.subcommand!r}"})
-        return 2
+        with _helper_operation(ctx, args.subcommand) as complete:
+            result = _dispatch(ctx, args)
+            complete(result)
+            return result
     except PipelineError as exc:
         _print({"ok": False, "error": str(exc)})
         return 1

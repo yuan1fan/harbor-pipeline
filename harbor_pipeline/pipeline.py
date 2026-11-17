@@ -52,7 +52,7 @@ from .errors import TaskError
 from .evaluator import GOAL_PASSING, EvaluationOutcome, evaluate
 from .generator import GeneratedTask, inspect_task, render_task
 from .harbor_adapter import Capabilities, HarborAdapter, TrialOutcome
-from .release import build_release, recheck_from_release, verify_release
+from .release import ReleaseResult, build_release, publish_release, recheck_from_release, verify_release
 from .trials import Expectation, build_trial_record
 from .verifier_check import verifier_regression_checks
 from . import registry as registry_mod
@@ -966,15 +966,26 @@ class CvePipeline:
             except (PipelineError, OSError):
                 parsed = None
 
+        previous = parsed
         if parsed is not None:
-            evidence, parsed = discovery_mod.complete_missing_refs(
-                self.config.sources, self.store.root, existing, parsed
-            )
+            if any(item.get("rule") == "resolver_proposal" for item in parsed.selection_trace):
+                # A resolver-selected pair is pinned. Revalidate exactly that
+                # pair; missing proof must not silently choose another release.
+                from .discovery_refs import verify_proposed_pair
+                try:
+                    evidence, parsed = verify_proposed_pair(self.config.sources, self.store.root, existing, parsed)
+                except (PipelineError, OSError, ValueError) as exc:
+                    raise TaskError("evidence_insufficient", f"Saved resolver pair could not be revalidated: {exc}") from exc
+            else:
+                evidence, parsed = discovery_mod.complete_missing_refs(
+                    self.config.sources, self.store.root, existing, parsed
+                )
         else:
             evidence, parsed = discovery_mod.collect(
                 self.config.sources, self.store.root, self.cve_id
             )
         validate("evidence-index", evidence)
+        self._invalidate_discovery_change(previous, parsed)
         self.store.write_artifact("evidence-index.json", evidence)
         self.store.write_artifact("discovery.json", parsed.to_json())
         self.discovery = parsed
@@ -1008,13 +1019,42 @@ class CvePipeline:
             )
         return evidence
 
+    def _invalidate_discovery_change(self, before, after):
+        """Never keep a spec/image/validation from a different accepted pair."""
+        frozen = self.store.path("cve-spec.json")
+        mismatch = False
+        if frozen.is_file() and after.is_complete:
+            versions = read_json(frozen).get("versions") or {}
+            mismatch = versions.get("fix_commit") != after.fix_commit
+            for role in ("vulnerable", "fixed"):
+                ref = getattr(after, role)
+                value = versions.get(role + "_ref")
+                mismatch |= not value or value not in {ref.value, ref.resolved_commit}
+        changed = before is not None and authoring.discovery_identity(before) != authoring.discovery_identity(after)
+        has_outputs = frozen.exists() or self.store.path("synthesis.json").exists()
+        if not mismatch and not (changed and (before.is_complete or has_outputs)):
+            return
+        job = self.store.load()
+        if job.state == "RELEASED":
+            raise TaskError("evidence_insufficient", "Published version pairs are immutable; use a new run")
+        history = self.store.path("discovery-revisions", f"r{job.revision}-{uuid.uuid4().hex[:12]}")
+        write_json(history / "change.json", {"before": before.to_json() if before else None,
+                   "after": after.to_json(), "frozen_pair_mismatch": mismatch})
+        if job.state not in {"DISCOVERED", "EVIDENCE_READY", "REPAIRING"}:
+            job = self.store.transition(job, "REPAIRING", "accepted evidence pair changed")
+        job.revision += 1
+        self.store.save(job)
+        self._invalidate_evidence_pair(history)
+        workspace = authoring.workspace_for(self.store.root)
+        for name in (authoring.SUBMISSION_FILE, authoring.DECLINED_FILE):
+            (workspace / name).unlink(missing_ok=True)
+
     def _resolve_evidence(self, discovery, evidence: dict, *, review_request: dict | None = None) -> tuple[object, dict]:
         """Run the bounded evidence resolver for an incomplete discovery.
 
-        The resolver is optional and only sees the evidence snapshot. A
-        provider/timeout failure falls through to the existing unsupported
-        classification; a proposal must still be re-validated by the same
-        deterministic freeze/depcheck gates.
+        Service failures are infrastructure, and missing/invalid proposals are
+        insufficient evidence. Only an explicit unsupported verdict uses that
+        terminal state. Every accepted proposal passes exact ref verification.
         """
         try:
             outcome = evidence_resolver.EvidenceResolver(self.config).resolve(
@@ -1033,9 +1073,7 @@ class CvePipeline:
                     "error": f"{type(exc).__name__}: {exc}",
                 },
             )
-            if review_request:
-                raise TaskError("infra_error", f"Author-requested evidence review failed: {exc}") from exc
-            return discovery, evidence
+            raise TaskError("infra_error", f"Evidence resolver failed: {exc}") from exc
         self.store.write_artifact("resolver-result.json", outcome.to_json())
         try:
             ledger = self._ledger()
@@ -1069,34 +1107,33 @@ class CvePipeline:
                 detail={"resolver": outcome.to_json()},
             )
         if outcome.status != "proposed":
-            if review_request:
-                category = "infra_error" if outcome.status in {"infra_error", "auth_error", "provider_error", "timeout"} else "evidence_insufficient"
-                raise TaskError(category, outcome.error or f"Evidence review ended with {outcome.status}; the challenged pair was not accepted")
-            return discovery, evidence
+            category = "infra_error" if outcome.status in {"infra_error", "auth_error", "provider_error", "timeout"} else "evidence_insufficient"
+            raise TaskError(category, outcome.error or f"Evidence resolver ended with {outcome.status}; no pair was accepted")
         try:
             resolved, refreshed = evidence_resolver.apply_proposal(
                 discovery=discovery,
                 proposal=outcome.proposal or {},
                 evidence=read_json(self.store.root / "evidence-index.json"),
                 run_dir=self.store.root,
-                persist=not bool(review_request),
+                persist=False,
                 review_request=review_request,
+                settings=self.config.sources,
             )
-            if review_request:
-                from .discovery_refs import verify_proposed_pair
-
-                refreshed, resolved = verify_proposed_pair(self.config.sources, self.store.root, refreshed, resolved)
         except (PipelineError, OSError, ValueError) as exc:
             self.store.write_artifact(
                 "resolver-result.json",
-                {**outcome.to_json(), "apply_error": str(exc)},
+                {**outcome.to_json(), "status": "invalid_proposal", "apply_error": str(exc)},
             )
-            if review_request:
-                raise TaskError("evidence_insufficient", f"Evidence review proposal rejected: {exc}") from exc
-            return discovery, evidence
+            self.store.write_artifact("evidence-index.json", read_json(self.store.path("evidence-index.json")))
+            raise TaskError("evidence_insufficient", f"Evidence resolver proposal rejected: {exc}") from exc
         self.store.write_artifact("evidence-index.json", refreshed)
+        self.store.write_artifact("resolver-result.json", {
+            **outcome.to_json(), "raw_proposal": outcome.proposal,
+            "proposal": evidence_resolver.canonical_proposal(outcome.proposal or {}, resolved),
+        })
         if review_request:
             return resolved, refreshed
+        self._invalidate_discovery_change(discovery, resolved)
         self.discovery = resolved
         self.store.write_artifact("discovery.json", resolved.to_json())
         return resolved, refreshed
@@ -1211,6 +1248,22 @@ class CvePipeline:
             outcome = self._run_author_session_once(workspace, prompt=prompt, resume=resume)
             resume = outcome.session_id or resume
             if not authoring.evidence_review_pending(workspace.root):
+                helper = outcome.helper_result or {}
+                if (workspace.status() == "none" and helper.get("status") in {"failed", "interrupted"}
+                        and helper.get("error_category") in {"infra_error", "budget_exhausted"}):
+                    raise TaskError(helper["error_category"], "Author helper could not continue: " + str(helper.get("error") or "unavailable"),
+                                    detail={"author_helper": helper})
+                job = self.store.load()
+                job_resumes = int(job.attempts.get("author_job_resume", 0))
+                if (outcome.status == "completed" and outcome.helper_result
+                        and helper.get("status") in {"succeeded", "failed"} and workspace.status() == "none"
+                        and resume and job_resumes < self.config.pipeline.author_max_resumes):
+                    job.attempts["author_job_resume"] = job_resumes + 1
+                    self.store.save(job)
+                    prompt = authoring.resume_prompt("Your last helper result is available. Read .harbor/job.json for its result. "
+                        "Do not start another copy of a still-running command. Fix a concrete build error or continue probing and submit.\n" +
+                        json.dumps(outcome.helper_result, ensure_ascii=False))
+                    continue
                 return outcome
 
     def _run_author_session_once(
@@ -1381,7 +1434,7 @@ class CvePipeline:
         """Archive old metadata and discard verdicts tied to the challenged pair."""
         names = ("synthesis.json", "synthesis-notes.json", "cve-spec.json", "image-set.json",
                  "task-manifest.json", "trials.json", "evaluation.json", "solver-result.json",
-                 "solver-review.json", "release.json", "repair-overlay.json", "matrix/progress.json")
+                 "solver-review.json", "release.json", "release-stage.json", "repair-overlay.json", "matrix/progress.json")
         if not pair_changed:
             names = ("synthesis.json", "synthesis-notes.json")
         root = self.store.root.resolve()
@@ -1557,6 +1610,7 @@ class CvePipeline:
             "evaluation.json",
             "solver-review.json",
             "release.json",
+            "release-stage.json",
         ):
             try:
                 self.store.path(name).unlink()
@@ -2139,50 +2193,60 @@ class CvePipeline:
             == digest(solver_task.files.get("instruction.md", ""))
         ):
             solver_review_mod.require_valid_solver(existing.get("solver") or {})
+            self._require_review_verdict(existing)
             return existing
-        solver = solver_review_mod.run_solver(
-            self.adapter,
-            solver_dir,
-            self.config,
-            cve_id=self.cve_id,
-        )
-        solver_cost = sum(
-            float((trial.get("usage") or {}).get("cost_usd") or 0.0)
-            for trial in (solver.get("trials") or [])
-        )
-        if solver_cost:
+        solver_input = digest({"files": solver_task.files, "model": vars(self.config.model_for("solver")),
+                               "limits": {k: v for k, v in vars(self.config.pipeline).items() if k.startswith("solver_")}})
+        solver = None
+        try:
+            previous = self.store.read_artifact("solver-result.json")
+            if previous.get("input_sha256") == solver_input:
+                solver_review_mod.require_valid_solver(previous)
+                solver = previous
+        except (PipelineError, OSError, ValueError):
+            pass
+        if solver is None:
+            from .retries import retry_model
+            attempts = []
+
+            def run_solver():
+                result = solver_review_mod.run_solver(self.adapter, solver_dir, self.config, cve_id=self.cve_id)
+                attempts.append(result)
+                recorded = {**result, "input_sha256": solver_input, "infrastructure_attempts": attempts[:-1]}
+                self.store.write_artifact("solver-result.json", recorded)
+                solver_review_mod.require_valid_solver(recorded)
+                return recorded
+
             try:
-                self._ledger().charge("usd", solver_cost)
-            except PipelineError:
-                pass
-        self.store.write_artifact("solver-result.json", solver)
+                solver = retry_model(run_solver, settings=self.config.model_for("solver"), directory=self.config.pipeline.resource_dir)
+            finally:
+                solver_cost = sum(float((trial.get("usage") or {}).get("cost_usd") or 0)
+                                  for result in attempts for trial in result.get("trials", []))
+                if solver_cost:
+                    try:
+                        self._ledger().charge("usd", solver_cost)
+                    except PipelineError as exc:
+                        raise TaskError("budget_exhausted", str(exc)) from exc
         solver_review_mod.require_valid_solver(solver)
         presentation = (
             dict((self.synthesis.bundle.get("presentation") or {}))
             if self.synthesis
             else {}
         )
-        review = solver_review_mod.solver_review(
-            solver_task,
-            solver,
-            self.config,
-            presentation=presentation,
-            evidence_context=evidence_context,
-        )
+        try:
+            review = solver_review_mod.solver_review(
+                solver_task, solver, self.config, presentation=presentation, evidence_context=evidence_context,
+            )
+        except TaskError as exc:
+            self._charge_review_usage((exc.detail or {}).get("review_usage") or {})
+            raise
         review["input_sha256"] = review_input
         self.store.write_artifact("solver-review.json", review)
-        usage = review.get("usage") or {}
-        ledger = self._ledger()
-        try:
-            ledger.charge("calls", 1)
-            ledger.charge("tokens", float(usage.get("input_tokens") or 0) + float(usage.get("output_tokens") or 0))
-            cost = usage.get("cost_usd")
-            if cost is None:
-                cost = usage.get("usd")
-            if cost is not None:
-                ledger.charge("usd", float(cost))
-        except PipelineError as exc:
-            raise TaskError("budget_exhausted", str(exc)) from exc
+        self._charge_review_usage(review.get("usage") or {})
+        self._require_review_verdict(review)
+        return review
+
+    def _require_review_verdict(self, review):
         verdict = review["review"].get("verdict")
         score = int(review["review"].get("score") or 0)
         if verdict == "decline":
@@ -2197,7 +2261,62 @@ class CvePipeline:
                 + str(review["review"].get("reason") or "")[:1000],
                 detail={"solver_review": review},
             )
-        return review
+    def _charge_review_usage(self, usage):
+        ledger = self._ledger()
+        try:
+            ledger.charge("calls", max(1, int(usage.get("calls", 1))))
+            ledger.charge("tokens", float(usage.get("input_tokens") or 0) + float(usage.get("output_tokens") or 0))
+            cost = usage.get("cost_usd", usage.get("usd"))
+            if cost is not None:
+                ledger.charge("usd", float(cost))
+        except PipelineError as exc:
+            raise TaskError("budget_exhausted", str(exc)) from exc
+
+    def _release_key(self, spec, evidence, task, image_set, outcome):
+        from .validation_evidence import validation_signature
+        from . import release as release_module
+        discovery_path = self.store.path("discovery.json")
+        pair = authoring.discovery_identity(discovery_mod.Discovery.from_json(read_json(discovery_path))) if discovery_path.is_file() else None
+        return digest({
+            "execution": validation_signature(spec, task, image_set), "pair": pair,
+            "trials": self.store.read_artifact("trials.json"),
+            "evidence": evidence, "evaluation": outcome.evaluation,
+            "revision": self.store.load().revision, "profile": vars(self.profile),
+            "review": self.store.read_artifact("solver-review.json") if self.config.pipeline.solver_review else None,
+            "review_limits": {k: v for k, v in vars(self.config.pipeline).items() if k.startswith("solver_")},
+            "release_code": digest(Path(release_module.__file__).read_bytes()),
+        })
+
+    def _resume_release(self):
+        """Resume a staged publication only while all prior evidence still matches."""
+        try:
+            checkpoint = self.store.read_artifact("release-stage.json")
+            self._ensure_synthesis()
+            spec, evidence = self.store.read_artifact("cve-spec.json"), self._evidence()
+            images = self.store.read_artifact("image-set.json")
+            manifest, trials = self.store.read_artifact("task-manifest.json"), self.store.read_artifact("trials.json")
+            outcome = _reload_evaluation(self.store.read_artifact("evaluation.json"))
+            job = self.store.load()
+            task = render_task(spec, scenario_name=self.scenario, variant="vulnerable", probe="reference",
+                               network_mode=self.network_mode, overrides=self._task_overlay(),
+                               synthesis=self.synthesis, revision=job.revision)
+            from .validation_evidence import validation_signature
+            if (not outcome.admitted or trials.get("aborted_at") or trials.get("seed_errors")
+                    or trials.get("validation_signature") != validation_signature(spec, task, images)
+                    or _tree_digest(self.store.path("task")) != manifest.get("tree_digest")
+                    or checkpoint.get("input_sha256") != self._release_key(spec, evidence, task, images, outcome)):
+                return None
+            matrix = _reload_matrix(trials)
+        except (PipelineError, OSError, ValueError, KeyError, TypeError):
+            return None
+        if job.state not in {"REPAIRING", "GENERATED", "BUILT", "VALIDATING", "VALIDATED"}:
+            return None
+        for source, target in (("REPAIRING", "GENERATED"), ("GENERATED", "BUILT"),
+                               ("BUILT", "VALIDATING"), ("VALIDATING", "VALIDATED")):
+            if job.state == source:
+                job = self.store.transition(job, target, "reuse verified inputs; resume release only")
+        released = self.release(spec, evidence, task, images, matrix, outcome, job)
+        return self._report(self.store.load(), task, images, outcome, released, matrix)
 
     def release(
         self,
@@ -2237,28 +2356,57 @@ class CvePipeline:
                     f"Solver review verdict is {verdict!r}, not 'release'",
                     detail={"solver_review": review},
                 )
-        result = build_release(
-            spec=spec,
-            evidence=evidence,
-            evaluation=outcome.evaluation,
-            matrix_result=matrix.to_json() if hasattr(matrix, "to_json") else matrix,
-            task=task,
-            task_dir=self.store.path("task"),
-            image_set=image_set,
-            run_dir=self.store.root,
-            revision=job.revision,
-            harbor_version=self.capabilities.harbor_version,
-        )
+        key = self._release_key(spec, evidence, task, image_set, outcome)
+        checkpoint = {}
+        try:
+            checkpoint = self.store.read_artifact("release-stage.json")
+        except PipelineError:
+            pass
+        result = None
+        if checkpoint.get("input_sha256") == key:
+            saved = checkpoint.get("result") or {}
+            root = Path(saved.get("root", ""))
+            if not root.is_dir() and checkpoint.get("destination"):
+                root = Path(checkpoint["destination"])
+            if root.resolve().is_relative_to(self.store.root.resolve()) and root.is_dir():
+                result = ReleaseResult.from_json(saved, root=root)
+        if result is None:
+            result = build_release(
+                spec=spec, evidence=evidence, evaluation=outcome.evaluation,
+                matrix_result=matrix.to_json() if hasattr(matrix, "to_json") else matrix,
+                task=task, task_dir=self.store.path("task"), image_set=image_set,
+                run_dir=self.store.root, revision=job.revision, harbor_version=self.capabilities.harbor_version,
+            )
+            checkpoint = {"input_sha256": key, "result": result.to_json(), "status": "staged"}
+            self.store.write_artifact("release-stage.json", checkpoint)
         issues = verify_release(result.root, expected_digest=image_set["target_digest"])
         if issues:
             raise TaskError("grader_failure", "Release package failed recheck: " + "; ".join(issues))
-        recheck = recheck_from_release(self.adapter, result.root, n_concurrent=self.workers)
+        from .retries import retry_infrastructure
+        recheck = checkpoint.get("recheck")
+        if not recheck:
+            try:
+                recheck = retry_infrastructure(lambda: recheck_from_release(self.adapter, result.root, n_concurrent=self.workers))
+            except TaskError as exc:
+                exc.detail = {**(exc.detail or {}), "stage": "release"}
+                raise
         if recheck.get("reward") != 1.0:
             raise TaskError(
                 "oracle_failure",
                 f"Release recheck did not reproduce the goal: {recheck}",
                 detail=recheck,
             )
+        checkpoint.update(recheck=recheck, status="verified")
+        if not checkpoint.get("destination"):
+            destination = self.store.path("release")
+            if destination.exists():
+                destination = self.store.path(f"release-r{job.revision}-{uuid.uuid4().hex[:12]}")
+            checkpoint["destination"] = str(destination)
+        self.store.write_artifact("release-stage.json", checkpoint)
+        if result.root != Path(checkpoint["destination"]):
+            result = publish_release(result, Path(checkpoint["destination"]), run_dir=self.store.root)
+        checkpoint.update(result=result.to_json(), status="published")
+        self.store.write_artifact("release-stage.json", checkpoint)
         record = {**result.to_json(), "recheck": recheck}
         if self.config.pipeline.archive_images:
             from .image_archive import archive_release_images
@@ -2397,6 +2545,10 @@ class CvePipeline:
 
     def _advance(self, until: str) -> PipelineReport:
         job = self.store.load()
+        if until == "release" and self.store.path("release-stage.json").is_file():
+            resumed = self._resume_release()
+            if resumed is not None:
+                return resumed
         evidence = self.collect(job)
         if until == "collect":
             return self._report(self.store.load(), None, None, None, None, None)
@@ -2412,11 +2564,13 @@ class CvePipeline:
         if until == "generate":
             return self._report(self.store.load(), task, None, None, None, None)
         job = self.store.load()
-        image_set = self.build(spec, task, job)
+        from .retries import retry_infrastructure
+        image_set = retry_infrastructure(lambda: self.build(spec, task, self.store.load()), attempts=2)
         if until == "build":
             return self._report(self.store.load(), task, image_set, None, None, None)
         job = self.store.load()
-        matrix, outcome = self.validate(spec, evidence, task, image_set, job)
+        matrix, outcome = retry_infrastructure(
+            lambda: self.validate(spec, evidence, task, image_set, self.store.load()), attempts=2)
         failure = self._matrix_repair_error(matrix, outcome)
         if failure is not None:
             # The target is up and the graders behave, but the reference exploit

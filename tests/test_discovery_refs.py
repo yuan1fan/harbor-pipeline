@@ -234,8 +234,9 @@ def test_empty_successful_patch_is_not_reused_as_complete_checkpoint(tmp_path, m
 
     monkeypatch.setattr(discovery, "collect", collect)
     monkeypatch.setattr(evidence_resolver.EvidenceResolver, "resolve", resolve)
-    with pytest.raises(TaskError, match="No public upstream fix"):
+    with pytest.raises(TaskError, match="no_proposal") as caught:
         pipeline._collect_auto(pipeline.store.create())
+    assert caught.value.category.code == "evidence_insufficient"
     assert recollected == [True] and calls == [True]
 
 
@@ -261,8 +262,9 @@ def test_pipeline_checkpoint_runs_rules_then_cc_if_still_incomplete(tmp_path, mo
         assert pipeline.discovery.vulnerable_ref == VULN and calls == []
         assert read_json(pipeline.store.root / "discovery.json")["vulnerable"]["value"] == VULN
     else:
-        with pytest.raises(TaskError, match="No concrete"):
+        with pytest.raises(TaskError, match="no_proposal") as caught:
             pipeline._collect_auto(job)
+        assert caught.value.category.code == "evidence_insufficient"
         assert len(calls) == 1
 
 
