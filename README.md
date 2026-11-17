@@ -10,74 +10,39 @@
 
 ## 流程总览
 
-下图展示自动出题及有额度的恢复流程：`--scenario auto`、`authoring = "agent"`、`run --until release`。Resolver 既可补全初始证据，也可接受 author 的证据复核申请；两种入口通过相同的基础 ref 校验，再按调用来源启动或恢复 author。
+主线是：**找版本 → 出题 → 测试验收 → 模型试解 → 质量审查 → 发布**。
+证据不足或版本选错时，由 Resolver 补充核查；题目需要修改时，交回 Author。
 
 ```mermaid
-%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "wrappingWidth": 240, "padding": 24, "nodeSpacing": 50, "rankSpacing": 60}}}%%
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "wrappingWidth": 200, "padding": 20, "nodeSpacing": 35, "rankSpacing": 40}}}%%
 flowchart TD
-    IN(["新候选 / 检查点续跑"]) --> DISC["collect / discovery<br/>收集或复用证据<br/>选择并校验版本对"]
-    DISC --> PAIR{"初始证据与版本对完整？"}
-    PAIR -->|"是"| AUTHOR["Author 原生会话<br/>构建真实漏洞与修复端<br/>编写场景与 PoC"]
-    PAIR -->|"否，且启用 resolver"| RESOLVER["Evidence resolver<br/>补全证据或复核版本对"]
-    PAIR -->|"否，且未启用 resolver"| UNSUPPORTED(["UNSUPPORTED"])
-    RESOLVER --> CHECK{"框架统一校验提案<br/>证据引用、ref 身份<br/>修复引用与 Git 关系"}
-    CHECK -->|"通过"| ORIGIN{"此次调用来源？"}
-    ORIGIN -->|"初次补全：启动 author"| AUTHOR
-    ORIGIN -->|"author 申请复核"| APPLY["应用结果，刷新输入<br/>换对：revision + 1<br/>旧构建与验证失效<br/>原对成立：解释并重跑 probe"]
-    APPLY -->|"resume 同一会话"| AUTHOR
-    CHECK -->|"明确不支持"| UNSUPPORTED
-    CHECK -->|"提案缺失或校验失败"| CORRECT{"仍有提案修正额度？"}
-    CORRECT -->|"有：反馈错误并 resume"| RESOLVER
-    CORRECT -->|"无"| QUARANTINED(["QUARANTINED<br/>保存检查点与停止原因"])
-    CHECK -->|"服务异常"| RECOVERY{"故障恢复判定"}
+    CVE(["输入 CVE"]) --> DISC["Discovery<br/>查证据、选版本对"]
+    DISC -->|"证据完整"| AUTHOR["Author<br/>制作场景与参考解"]
+    AUTHOR --> CHECK{"固定测试验收<br/>验证漏洞与修复"}
+    CHECK -->|"通过"| SOLVER["Solver<br/>在 Harbor 中试解"]
+    SOLVER -->|"试解结果"| REVIEW{"Reviewer<br/>审查题目质量与归因"}
+    REVIEW -->|"通过"| RELEASE(["打包重放，发布题目"])
 
-    AUTHOR --> LOCAL["harbor-author 内循环<br/>validate / build / probe<br/>exec / debug"]
-    LOCAL -->|"修订源码或 PoC"| AUTHOR
-    AUTHOR -->|"发现版本或补丁矛盾"| REQUEST["request-evidence-review<br/>校验本地 citations<br/>绑定当前版本对"]
-    REQUEST --> RESOLVER
-    AUTHOR -->|"decline"| UNSUPPORTED
-    AUTHOR -->|"会话执行异常"| RECOVERY
-    LOCAL -->|"submit"| FREEZE["freeze → generate<br/>冻结 CveSpec，生成题面<br/>生成固定 verifier"]
+    DISC -.->|"需补证据"| RESOLVER["Resolver<br/>补全或纠正版本对"]
+    AUTHOR -.->|"版本对有误"| RESOLVER
+    RESOLVER -->|"校验通过"| AUTHOR
+    CHECK -.->|"需要修题"| AUTHOR
+    REVIEW -.->|"需要修题"| AUTHOR
 
-    FREEZE --> BUILD["正式 build<br/>构建或复用匹配的镜像<br/>核验运行时身份"]
-    FREEZE -->|"断言或生成文件有误"| REPAIR
-    BUILD --> MATRIX["固定差分矩阵与准入评估<br/>T03 / T04 → 重复与负例<br/>T09 冷构建 → T11 / T12"]
-    BUILD -->|"可修复构建问题"| REPAIR{"仍有 author 修订额度？"}
-    BUILD -->|"基础设施异常"| RECOVERY
-    MATRIX -->|"题目准入失败<br/>含健康、负例、归因问题"| REPAIR
-    REPAIR -->|"有：反馈证据并 resume"| AUTHOR
-    REPAIR -->|"无"| QUARANTINED
-    MATRIX -->|"缺测、基础设施<br/>或框架自检失败"| RECOVERY
-    DISC -->|"来源暂不可用"| RECOVERY
-    RECOVERY -->|"题目可修复"| REPAIR
-    RECOVERY -->|"临时故障且有重试额度"| RETRY["退避等待<br/>保留已完成的构建和试次"]
-    RETRY -->|"按检查点续跑失败阶段"| IN
-    RECOVERY -->|"外部阻塞或额度耗尽"| QUARANTINED
-    QUARANTINED -.->|"仅外部阻塞：修好后显式重跑"| IN
-
-    MATRIX -->|"通过"| SOLVER_ON{"启用 solver_review？"}
-    SOLVER_ON -->|"是"| SOLVER["Solver 真实试解<br/>运行于 Harbor"]
-    SOLVER -->|"有效试解结果"| REVIEW{"Reviewer 结构化审查<br/>可解性与公平性<br/>CVE 机制归因"}
-    SOLVER -->|"执行异常"| RECOVERY
-    REVIEW -->|"要求修订或低分<br/>或归因未获支持"| REPAIR
-    REVIEW -->|"decline"| UNSUPPORTED
-    REVIEW -->|"格式或服务错误"| RECOVERY
-    REVIEW -->|"release 且满足审查门槛"| RELEASE["release：打包与审计<br/>从发布包重放验证"]
-    SOLVER_ON -->|"否"| RELEASE
-    RELEASE -->|"全部通过"| DONE(["RELEASED"])
-    RELEASE -->|"重放异常"| RECOVERY
-
-    classDef agent fill:#eef2ff,stroke:#6366f1,color:#172554
-    classDef evidence fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
-    classDef check fill:#f0fdf4,stroke:#16a34a,color:#14532d
-    classDef pending fill:#fff7ed,stroke:#ea580c,color:#7c2d12
-    classDef terminal fill:#fef2f2,stroke:#dc2626,color:#7f1d1d
-    class AUTHOR,LOCAL,SOLVER,REVIEW agent
-    class DISC,RESOLVER,CHECK,ORIGIN,REQUEST,APPLY evidence
-    class FREEZE,BUILD,MATRIX,RELEASE,DONE check
-    class REPAIR,CORRECT,RECOVERY,RETRY,QUARANTINED pending
-    class UNSUPPORTED terminal
+    classDef agent fill:#f5f3ff,stroke:#8b5cf6,color:#4c1d95
+    classDef automatic fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a
+    classDef output fill:#ecfdf5,stroke:#10b981,color:#064e3b
+    class AUTHOR,RESOLVER,SOLVER,REVIEW agent
+    class DISC,CHECK automatic
+    class RELEASE output
 ```
+
+实线表示主流程，虚线表示补充证据或返工。**训练时的 reward 由固定 verifier 计算，Reviewer 负责题目质量审查。**
+
+图中省略了通用异常处理：临时故障在原阶段重试；外部阻塞或额度耗尽时保存检查点并隔离；明确不支持则停止。默认包含试解和审查，`solver_review = false` 可跳过这两步。
+
+<details>
+<summary>展开：校验、重试与预算规则</summary>
 
 - **统一校验，按来源分流**：初次补全与 author 申请复核都验证来源及 ref 身份；复核另需对应申请 ID、回应具体发现。通过后才区分首次启动或恢复 author，两个出口不代表两套 ref 标准。证据完整仍不等于 CVE 机制已被证明。
 - **Author → resolver → author**：author 提交 `request-evidence-review` 后结束当前调用。框架核对本地引用并调用 resolver；提案缺失或校验失败时，把具体错误反馈给同一 resolver 会话，在修正额度内继续。通过后刷新输入并恢复 author；换对时增加 revision，使旧 spec、构建记录、probe、matrix 进度及 solver 结果失效。保留原对也必须解释并重新 probe。
@@ -87,6 +52,8 @@ flowchart TD
 - **停止与续跑**：`QUARANTINED` 保存检查点及恢复原因。无效凭据、缺少运行工具、框架自检失败等外部阻塞不自动空转；修正环境后再次显式运行，可在剩余额度内恢复。预算耗尽和没有可执行恢复方式时停止；明确不支持仍进入 `UNSUPPORTED`。错误记录的 `recovery.action` 区分 `author`、`retry`、`blocked`、`stop`，分派过程保存在 `recovery-log.json`。
 
 流程入口与回退逻辑见 [pipeline.py](harbor_pipeline/pipeline.py)，版本对校验见 [discovery_refs.py](harbor_pipeline/discovery_refs.py)，验证续跑见 [execution_progress.py](harbor_pipeline/execution_progress.py)。
+
+</details>
 
 ### 每题、每阶段、每轮的耗时与用量
 
