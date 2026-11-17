@@ -17,7 +17,7 @@ from harbor_pipeline.agent import (
 )
 from harbor_pipeline.config import Config, ModelSettings
 from harbor_pipeline.generator import render_task
-from harbor_pipeline.goals import LISTING_DIR, MARKER_PATH
+from harbor_pipeline.goals import SECRET_DIR, MARKER_PATH
 from harbor_pipeline.util import digest
 
 from test_auto_synthesis import CVE, _bundle, _discovery, _write_evidence
@@ -375,12 +375,18 @@ def test_probe_compose_marker_and_internal_network(tmp_path: Path):
     assert "marker-data" not in main
 
 
-def test_probe_compose_listing_mounts_main(tmp_path: Path):
+def test_probe_compose_name_secret_uses_oracle_volume(tmp_path: Path):
     tests = tmp_path / "tests"
     tests.mkdir()
     spec = _spec()
-    spec["task_goal"]["family"] = "directory_listing"
-    spec["task_goal"]["target_asset"] = LISTING_DIR
+    spec["task_goal"].update(
+        family="secret_read",
+        type="secret_disclosure",
+        primitive="directory_enumeration",
+        secret_location="file_name",
+        target_asset=SECRET_DIR,
+        observable="The 48-hex token appears inside an enumerated filename.",
+    )
     text = author_probe.compose_text(
         spec=spec,
         target_image="target:1",
@@ -390,7 +396,8 @@ def test_probe_compose_listing_mounts_main(tmp_path: Path):
         submitted_poc=tmp_path / "ref.py",
         variant="vulnerable",
     )
-    assert "listing-data:/listing" in text
+    assert "oracle-data:/oracle" in text
+    assert "listing-data" not in text
     assert "LISTING_NAME" not in text
     assert "internal: true" in text
 

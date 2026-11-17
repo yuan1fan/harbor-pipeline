@@ -30,7 +30,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from .errors import TaskError
-from .goals import CALLBACK_PATH, MARKER_PATH, SECRET_PATH, SERVICE_ASSET, goal_family
+from .goals import (
+    CALLBACK_PATH,
+    MARKER_PATH,
+    SECRET_PATH,
+    SERVICE_ASSET,
+    goal_family,
+    secret_location,
+    target_asset,
+)
 from .scenario import (
     _BYPASS_POC,
     _FAKE_POC,
@@ -42,7 +50,6 @@ from .scenario import (
 # The stub target's secret. Any 48 lowercase hex characters work; the value is
 # never compared with a real task secret because the check is framework-level.
 STUB_SECRET = "e5f29c1cdd66b851c1af4064912ad46a2c8f17ec4d7d7617"
-STUB_LISTING = "0123456789abcdef0123456789abcdef.txt"
 STUB_NONCE = "0f9e8d7c6b5a4938271605f4e3d2c1b0a9f8e7d6c5b4a39281706f5e4d3c2b1a"
 
 _STUB_REFERENCE = '''#!/usr/bin/env python3
@@ -76,19 +83,6 @@ request = urllib.request.Request(
 )
 urllib.request.urlopen(request, timeout=5).read()
 print(nonce)
-'''
-
-_STUB_LISTING_REFERENCE = '''#!/usr/bin/env python3
-import os
-import urllib.request
-
-host = os.environ.get("TARGET_HOST", "target")
-port = os.environ.get("TARGET_PORT", "8080")
-print(
-    urllib.request.urlopen(
-        f"http://{host}:{port}/listing", timeout=5
-    ).read().decode("utf-8").strip()
-)
 '''
 
 _STUB_SERVER_REQUEST_REFERENCE = '''#!/usr/bin/env python3
@@ -148,8 +142,6 @@ def _handler(business_path: str, business_body: str, state: dict):
                 body = b"crashed"
             elif self.path == "/secret":
                 body = STUB_SECRET.encode("ascii")
-            elif self.path == "/listing":
-                body = STUB_LISTING.encode("ascii")
             elif self.path.startswith("/fetch?"):
                 query = urllib.parse.parse_qs(
                     urllib.parse.urlsplit(self.path).query
@@ -259,13 +251,8 @@ def _verifier_script(spec: dict, *, synthetic: bool) -> str:
         auth_user="stub-user",
         auth_password="stub-password",
         auth_token="stub-token",
-        listing_name=STUB_LISTING if family == "directory_listing" else "",
-        target_asset=(
-            MARKER_PATH if family == "file_write"
-            else CALLBACK_PATH if family == "server_request"
-            else SERVICE_ASSET if family == "service_unavailable"
-            else SECRET_PATH
-        ),
+        secret_location=secret_location(spec),
+        target_asset=target_asset(spec, family),
     )
     return _verify_script(ctx)
 
@@ -280,7 +267,6 @@ def _run_one(
     business_path: str,
     business_body: str,
     observer_url: str,
-    expected_listing: str = "",
     reference_host: str = "127.0.0.1",
     bot_url: str = "",
 ) -> dict:
@@ -311,8 +297,6 @@ def _run_one(
         "VERIFY_EVIDENCE_PATH": str(evidence_path),
         "VERIFY_OBSERVER_URL": observer_url,
         "VERIFY_REFERENCE_OBSERVER_URL": observer_url,
-        "VERIFY_EXPECTED_LISTING": expected_listing,
-        "VERIFY_EXPECTED_LISTING_REF": expected_listing,
         "VERIFY_EXPECTED_SECRET": STUB_SECRET,
         "VERIFY_EXPECTED_SECRET_REF": STUB_SECRET,
         **({"BOT_URL": bot_url, "VERIFY_REFERENCE_BOT_URL": bot_url} if bot_url else {}),
@@ -396,7 +380,6 @@ def _execute(
             reference = workdir / "reference_poc.py"
             reference.write_text({
                 "file_write": _STUB_WRITE_REFERENCE,
-                "directory_listing": _STUB_LISTING_REFERENCE,
                 "server_request": _STUB_SERVER_REQUEST_REFERENCE,
                 "service_unavailable": _STUB_UNAVAILABLE_REFERENCE,
                 "xss": _STUB_XSS_REFERENCE,
@@ -430,7 +413,6 @@ def _execute(
                     business_path=business_path,
                     business_body=business_body,
                     observer_url=observer_url,
-                    expected_listing=STUB_LISTING if family == "directory_listing" else "",
                     reference_host=reference_host,
                     bot_url=bot_url,
                 )

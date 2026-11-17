@@ -10,6 +10,7 @@ from typing import Any
 from . import SCHEMA_VERSION
 from .contracts import freeze_digest, validate
 from .errors import TaskError
+from .goals import migrate_listing_goal, secret_location
 from .util import PipelineError
 
 CONFIRMED = "confirmed"
@@ -29,6 +30,7 @@ def freeze(raw: dict, policy_version: str, *, frozen_at: str | None = None) -> d
     and verifier different credentials.
     """
     spec = copy.deepcopy(raw)
+    spec["task_goal"] = migrate_listing_goal(spec.get("task_goal") or {})
     for key in ("frozen_digest", "frozen_at", "policy_version", "schema_version"):
         spec.pop(key, None)
     spec["schema_version"] = SCHEMA_VERSION
@@ -102,7 +104,6 @@ def check_spec_consistency(spec: dict) -> list[str]:
     expected_type = {
         "secret_read": {"file_read", "secret_disclosure"},
         "file_write": {"file_write"},
-        "directory_listing": {"directory_listing"},
         "server_request": {"server_request"},
         "service_unavailable": {"service_unavailable"},
     }.get(family)
@@ -117,7 +118,6 @@ def check_spec_consistency(spec: dict) -> list[str]:
     keywords = {
         "secret_read": ("secret", "token", "read"),
         "file_write": ("marker", "write"),
-        "directory_listing": ("filename", "listing", "name"),
         "server_request": ("callback", "request", "url"),
         "service_unavailable": ("unavailable", "health", "crash", "availability"),
     }.get(family, ("secret", "token", "read"))
@@ -125,6 +125,12 @@ def check_spec_consistency(spec: dict) -> list[str]:
         issues.append(
             f"{family} goal needs an observable containing one of {keywords}"
         )
+    try:
+        location = secret_location(spec)
+        if family == "secret_read" and location != "file_content" and goal.get("type") != "secret_disclosure":
+            issues.append("filename/directory enumeration must use secret_disclosure, not file_read")
+    except (PipelineError, TaskError) as exc:
+        issues.append(str(exc))
     pre = spec.get("preconditions", {})
     identity = str(pre.get("auth_identity") or "none")
     scheme = str(pre.get("auth_scheme") or "")

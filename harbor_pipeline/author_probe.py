@@ -29,7 +29,6 @@ from .goals import (
     BOT_PORT,
     BOT_SECRET_MOUNT,
     BOT_SECRET_FILE,
-    LISTING_MOUNT,
     MARKER_DIR,
     MARKER_PATH,
     auth_material,
@@ -160,13 +159,11 @@ def compose_text(
 ) -> str:
     """Render the probe topology for one variant.
 
-    The verifier main never mounts the marker volume, and the listing volume is
-    mounted only where the real verifier expects it, matching Harbor's separate
-    verifier environment.
+    The verifier main never mounts the marker volume. All secret-read layouts
+    use the same private oracle volume and per-instance token.
     """
     family = goal_family(spec)
     marker = family == "file_write"
-    listing = family == "directory_listing"
     primitive = str((spec.get("task_goal") or {}).get("primitive") or "")
     xss = family == "secret_read" and primitive == "xss"
     env_block = ""
@@ -207,12 +204,7 @@ def compose_text(
         main_depends += (
             "      observer-reference:\n        condition: service_started\n"
         )
-    if listing:
-        target_mounts.append(f"listing-data:{LISTING_MOUNT}")
-        reference_mounts.append(f"ref-listing-data:{LISTING_MOUNT}")
-        main_mounts.extend(("listing-data:/listing", "ref-listing-data:/listing-ref"))
-        volume_names.extend(("listing-data", "ref-listing-data"))
-    if not marker and not listing:
+    if not marker:
         target_mounts.append("oracle-data:/oracle")
         reference_mounts.append("ref-oracle-data:/oracle")
         main_mounts.extend(("oracle-data:/oracle", "ref-oracle-data:/oracle-ref"))
@@ -279,7 +271,6 @@ def compose_text(
         '      TARGET_HOST: "target"',
         '      TARGET_PORT: "8080"',
         '      VERIFY_REFERENCE_HOST: "target-reference"',
-        '      VERIFY_REFERENCE_LISTING_FILE: "/listing-ref/expected"',
         '      VERIFY_REFERENCE_SECRET_FILE: "/oracle-ref/expected-token"',
         '      VERIFY_REFERENCE_OBSERVER_URL: "http://observer-reference:8081"',
     ]

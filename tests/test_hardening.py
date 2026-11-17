@@ -19,10 +19,12 @@ from test_auto_synthesis import _bundle, _discovery, _write_evidence
 from test_goal_families import _synthesis
 
 
-def verifier(tmp_path, *, family="secret_read", paired=False):
+def verifier(tmp_path, *, family="secret_read", paired=False,
+             secret_location="file_content", goal_primitive=""):
     ctx = ScenarioContext(cve_id="CVE-0000-0000", product="demo", variant="vulnerable",
         probe="reference", version="1.0", secret_path="/opt/app/secret/token",
         spec_digest="a" * 64, attribution_grade="A", goal_family=family,
+        goal_primitive=goal_primitive, secret_location=secret_location,
         paired_verification=paired)
     namespace = {"__name__": "test_verifier"}
     exec(compile(_verify_script(ctx), "verify.py", "exec"), namespace)
@@ -147,24 +149,33 @@ def test_compose_gives_reference_and_submission_separate_targets():
     assert "  target-fixed:\n" in paired
 
 
-def test_old_listing_answer_is_rejected_on_a_new_instance(tmp_path):
-    ns = verifier(tmp_path, family="directory_listing")
-    ns["_EXPECTED_LISTING"] = "new-instance.txt"
-    ns["_EXPECTED_LISTING_REF"] = "new-instance.txt"
-    ns["run_restricted"] = lambda path, **kw: ("new-instance.txt" if path == ns["REFERENCE_PATH"] else "previous-instance.txt", "", 0)
+def test_name_secret_verifier_requires_the_token_not_just_a_filename(tmp_path):
+    ns = verifier(tmp_path, secret_location="file_name",
+                  goal_primitive="directory_enumeration")
+    good = "entry_" + ("a" * 48) + ".txt"
+    bad = "entry_" + ("b" * 48) + ".txt"
+    ns["run_restricted"] = lambda path, **kw: (
+        good if path == ns["REFERENCE_PATH"] else bad, "", 0
+    )
     assert ns["verify_one"]()["reward"] == 0
 
 
-def test_white_box_does_not_contain_a_listing_answer_or_entrypoint():
+def test_white_box_does_not_contain_a_secret_entry_answer_or_entrypoint():
     spec = fixtures.cve_spec()
-    spec["task_goal"].update(family="directory_listing", type="directory_listing")
-    synthesis = _synthesis("directory_listing")
+    spec["task_goal"].update(
+        family="secret_read", type="secret_disclosure",
+        primitive="directory_enumeration", secret_location="file_name",
+        target_asset="/opt/app/secret",
+        observable="The 48-hex token appears inside an enumerated filename.",
+    )
+    synthesis = _synthesis("secret_read")
     synthesis.bundle = {"presentation": {"mode": "white_box", "source_paths": ["app.py"]}}
     task = render_task(spec, scenario_name="synthesized", variant="vulnerable", synthesis=synthesis)
     exposed = {k: v for k, v in task.files.items() if k.startswith("environment/source/")}
     assert list(exposed) == ["environment/source/app.py"]
-    assert "LISTING_NAME:-" not in task.files["environment/target/entrypoint.sh"]
-    assert "LISTING_NAME:" not in task.files["environment/docker-compose.yaml"]
+    assert 'SECRET_ENTRY="entry_$SECRET.txt"' in task.files["environment/target/entrypoint.sh"]
+    assert "LISTING_NAME" not in task.files["environment/target/entrypoint.sh"]
+    assert "LISTING_NAME" not in task.files["environment/docker-compose.yaml"]
     assert "tests/fixed-target/entrypoint.sh" in task.files
 
 

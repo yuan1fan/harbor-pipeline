@@ -80,21 +80,28 @@ finally:
     assert container(script, image=BOT_IMAGE, memory="1g")["cookie_callback_observed"]
 
 
-def test_listing_answer_rotates_even_with_a_supplied_old_name():
-    script = "ENTRY=" + repr(_synthesis_entrypoint("true", context(goal_family="directory_listing"))) + "\n" + r'''
-import json, subprocess, os
+def test_secret_entry_name_rotates_per_instance():
+    script = "ENTRY=" + repr(_synthesis_entrypoint("true", context(
+        goal_family="secret_read", goal_primitive="directory_enumeration",
+        secret_location="file_name",
+    ))) + "\n" + r'''
+import json, re, subprocess, os
 from pathlib import Path
 Path('/entry.sh').write_text(ENTRY)
 names=[]
 for _ in range(2):
-    subprocess.run(['sh','/entry.sh'],env=dict(os.environ,LISTING_NAME='known.txt'),check=True)
-    names.append(Path('/listing/expected').read_text())
-print(json.dumps({'names':names,'mode':oct(Path('/listing').stat().st_mode & 0o777)}))
+    for old in Path('/opt/app/secret').glob('entry_*'):
+        old.unlink()
+    subprocess.run(['sh','/entry.sh'], env=dict(os.environ), check=True)
+    entries=[p.name for p in Path('/opt/app/secret').glob('entry_*.txt')]
+    assert len(entries) == 1, entries
+    names.append(entries[0])
+tokens=[re.fullmatch(r'entry_([0-9a-f]{48})\.txt', name).group(1) for name in names]
+print(json.dumps({'names':names,'tokens':tokens}))
 '''
     result = container(script)
     assert len(set(result["names"])) == 2
-    assert "known.txt" not in result["names"]
-    assert result["mode"] == "0o700"
+    assert len(set(result["tokens"])) == 2
 
 
 def test_real_replay_user_is_checked_against_both_targets():

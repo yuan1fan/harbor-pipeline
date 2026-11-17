@@ -11,7 +11,7 @@ from harbor_pipeline.authoring import author_contract
 from harbor_pipeline.author_probe import compose_text as probe_compose_text
 from harbor_pipeline.differential import MatrixResult
 from harbor_pipeline.generator import render_task
-from harbor_pipeline.goals import LISTING_DIR, MARKER_PATH, auth_material
+from harbor_pipeline.goals import SECRET_DIR, MARKER_PATH, auth_material
 from harbor_pipeline.verifier_check import verifier_regression_checks
 from harbor_pipeline.trials import Expectation
 
@@ -86,21 +86,50 @@ def test_normalize_file_write_forces_marker_and_integrity(tmp_path: Path):
     assert bundle["impact"]["cia"]["integrity"] == "high"
 
 
-def test_normalize_directory_listing_forces_type_and_asset(tmp_path: Path):
+def test_normalize_name_disclosure_forces_secret_disclosure_and_low_impact(tmp_path: Path):
     body = _bundle()
     body["task_goal"] = {
-        "family": "directory_listing",
-        "primitive": "path_traversal",
-        "observable": "The random filename appears in the PoC output.",
+        "family": "secret_read",
+        "primitive": "directory_enumeration",
+        "secret_location": "file_name",
+        "observable": "The 48-hex token appears inside an enumerated filename.",
     }
     body["impact"]["cia"] = {
         "confidentiality": "none", "integrity": "none", "availability": "none",
     }
     bundle, _, issues = _normalize(tmp_path, body)
     assert issues == []
-    assert bundle["task_goal"]["type"] == "directory_listing"
-    assert bundle["task_goal"]["target_asset"] == LISTING_DIR
+    assert bundle["task_goal"]["type"] == "secret_disclosure"
+    assert bundle["task_goal"]["secret_location"] == "file_name"
+    assert bundle["task_goal"]["target_asset"] == SECRET_DIR
     assert bundle["impact"]["cia"]["confidentiality"] == "low"
+
+
+def test_name_disclosure_rejects_a_file_read_primitive(tmp_path: Path):
+    body = _bundle()
+    body["task_goal"] = {
+        "family": "secret_read",
+        "primitive": "file_read",
+        "secret_location": "file_name",
+        "observable": "The 48-hex token appears inside an enumerated filename.",
+    }
+    _, _, issues = _normalize(tmp_path, body)
+    assert any("directory_enumeration" in issue for issue in issues)
+
+
+def test_legacy_directory_listing_draft_is_migrated(tmp_path: Path):
+    body = _bundle()
+    body["task_goal"] = {
+        "family": "directory_listing",
+        "primitive": "file_read",
+        "observable": "The random filename appears in the PoC output.",
+    }
+    bundle, _, issues = _normalize(tmp_path, body)
+    assert issues == []
+    assert bundle["task_goal"]["family"] == "secret_read"
+    assert bundle["task_goal"]["primitive"] == "directory_enumeration"
+    assert bundle["task_goal"]["secret_location"] == "file_name"
+    assert bundle["task_goal"]["type"] == "secret_disclosure"
 
 
 def test_normalize_accepts_authenticated_precondition(tmp_path: Path):
@@ -288,13 +317,14 @@ def test_render_auth_puts_credentials_in_instruction_and_target_env():
     assert "noauth_observed" in verify
 
 
-def test_render_listing_publishes_name_and_mounts_it_only_for_the_verifier():
+def test_render_name_secret_creates_entry_and_uses_oracle():
     goal = {
-        "family": "directory_listing",
-        "type": "directory_listing",
-        "primitive": "path_traversal",
-        "target_asset": LISTING_DIR,
-        "observable": "The random filename appears in the PoC output.",
+        "family": "secret_read",
+        "type": "secret_disclosure",
+        "primitive": "directory_enumeration",
+        "secret_location": "file_name",
+        "target_asset": SECRET_DIR,
+        "observable": "The 48-hex token appears inside an enumerated filename.",
     }
     pre = {
         "network_reachable": True,
@@ -307,17 +337,23 @@ def test_render_listing_publishes_name_and_mounts_it_only_for_the_verifier():
     }
     task = render_task(
         _spec(goal, pre), scenario_name="synthesized", variant="vulnerable",
-        synthesis=_synthesis("directory_listing"),
+        synthesis=_synthesis("secret_read"),
     )
     entrypoint = task.files["environment/target/entrypoint.sh"]
-    assert "/listing/expected" in entrypoint
+    assert 'SECRET_ENTRY="entry_$SECRET.txt"' in entrypoint
+    assert "/oracle/expected-token" in entrypoint
+    assert "/listing/expected" not in entrypoint
     compose = task.files["tests/docker-compose.yaml"]
-    assert "listing-data:/listing" in compose
-    # The expected filename must not be embedded in the verifier source.
+    assert "oracle-data:/oracle" in compose
+    assert "listing-data" not in compose
+    # The verifier must not embed the per-instance answer.
     assert "0123456789abcdef" not in task.files["tests/verify.py"]
+    instruction = task.files["instruction.md"]
+    assert "directory enumeration" in instruction.lower()
+    assert "entry name" in instruction.lower()
 
 
-def test_verifier_negatives_hold_for_write_and_listing_families(tmp_path: Path):
+def test_verifier_negatives_hold_for_write_name_and_other_families(tmp_path: Path):
     pre = {
         "network_reachable": True,
         "auth_identity": "none",
@@ -332,10 +368,11 @@ def test_verifier_negatives_hold_for_write_and_listing_families(tmp_path: Path):
          "target_asset": MARKER_PATH, "observable": "marker write"},
         pre,
     )
-    listing_spec = _spec(
-        {"family": "directory_listing", "type": "directory_listing",
-         "primitive": "path_traversal", "target_asset": LISTING_DIR,
-         "observable": "random filename listing"},
+    name_spec = _spec(
+        {"family": "secret_read", "type": "secret_disclosure",
+         "primitive": "directory_enumeration", "secret_location": "file_name",
+         "target_asset": SECRET_DIR,
+         "observable": "The 48-hex token appears inside an enumerated filename."},
         pre,
     )
     request_spec = _spec(
@@ -350,7 +387,7 @@ def test_verifier_negatives_hold_for_write_and_listing_families(tmp_path: Path):
          "observable": "The target health endpoint becomes unavailable during the attack."},
         pre,
     )
-    for spec in (write_spec, listing_spec, request_spec, unavailable_spec):
+    for spec in (write_spec, name_spec, request_spec, unavailable_spec):
         results = verifier_regression_checks(spec, synthetic=True)
         assert results["T05"]["status"] == "artifact_missing"
         assert results["T06"]["status"] == "goal_failed"
@@ -413,12 +450,12 @@ def test_i1_is_family_aware():
         {"confidentiality": "none", "integrity": "high", "availability": "none"},
     ) == "pass"
     assert _i1_status(
-        {"family": "directory_listing", "type": "directory_listing",
-         "observable": "The listing reveals the random filename."},
+        {"family": "secret_read", "type": "secret_disclosure",
+         "observable": "The 48-hex token appears inside an enumerated filename."},
         {"confidentiality": "low", "integrity": "none", "availability": "none"},
     ) == "pass"
-    # A listing goal claiming high confidentiality without disclosing content is
-    # still coherent; a write goal without integrity is not.
+    # A name-only disclosure can legitimately retain low confidentiality; a
+    # write goal without integrity is not coherent.
     assert _i1_status(
         {"family": "file_write", "type": "file_write",
          "observable": "The marker is written with the nonce."},
@@ -450,12 +487,15 @@ def test_scoped_npm_ref_prefix_is_stripped():
     assert synthesis_mod._clean_version_ref("maven", "g:a", "g:a:1.2.3") == "1.2.3"
 
 
-def test_author_contract_maps_xss_primitive_to_secret_read_family():
+def test_author_contract_merges_name_disclosure_into_secret_read():
     contract = author_contract(CVE)
-    assert "exactly five valid families" in contract
+    assert "exactly four valid families" in contract
     assert "`xss` is **not** a family; it is only a valid `primitive`." in contract
     assert "For an `xss` primitive, `family` MUST still be `secret_read`" in contract
     assert 'Never emit `family: "xss"`' in contract
+    assert "secret_location" in contract
+    assert "directory_enumeration" in contract
+    assert "retired" in contract and "directory_listing" in contract
 
 
 def test_an_advisory_without_an_end_to_end_exploit_is_unsupported():

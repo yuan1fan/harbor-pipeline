@@ -537,7 +537,7 @@ def _dimension_i(
     if family == "secret_read":
         coherent = (
             goal.get("type") in {"file_read", "secret_disclosure"}
-            and cia.get("confidentiality") == "high"
+            and cia.get("confidentiality") in {"low", "high"}
             and any(word in observable for word in ("secret", "token"))
         )
     elif family == "file_write":
@@ -545,12 +545,6 @@ def _dimension_i(
             goal.get("type") == "file_write"
             and cia.get("integrity") == "high"
             and any(word in observable for word in ("marker", "write"))
-        )
-    elif family == "directory_listing":
-        coherent = (
-            goal.get("type") == "directory_listing"
-            and cia.get("confidentiality") in {"low", "high"}
-            and any(word in observable for word in ("filename", "listing", "name"))
         )
     elif family == "server_request":
         coherent = (
@@ -575,7 +569,7 @@ def _dimension_i(
     items = [
         # Each family pairs one goal type with the impact axis it actually
         # changes: a token read is confidentiality, a forced marker write is
-        # integrity, and a filename listing is at most a low disclosure.
+        # integrity. Name disclosure can retain a low confidentiality rating.
         Item("I1-goal-impact", "pass" if coherent else "fail",
              f"family={family} goal={goal.get('type')} "
              f"primitive={goal.get('primitive', 'unknown')} "

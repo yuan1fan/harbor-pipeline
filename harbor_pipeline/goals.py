@@ -14,10 +14,14 @@ import hashlib
 import os
 from pathlib import Path
 
+from .errors import TaskError
+from .util import PipelineError
+
 # The framework-owned token. It is always created, even when the goal is not a
 # token read, so the target contract stays uniform and a PoC cannot satisfy a
-# write/listing goal by reading it.
+# write goal by reading it.
 SECRET_PATH = "/opt/app/secret/token"
+SECRET_DIR = "/opt/app/secret"
 SECRET_MOUNT = "/oracle"
 SECRET_NAME_FILE = "/oracle/expected-token"
 
@@ -39,13 +43,7 @@ BOT_SETUP_FILE = "/bot-oracle/setup.json"
 MARKER_PATH = "/marker/pwned"
 MARKER_DIR = "/marker"
 
-# Directory whose randomly named child is the directory-listing observable.
-LISTING_DIR = "/opt/app/secret"
-# Shared volume where the target publishes the expected filename. The verifier
-# reads and deletes it before running any PoC, so the untrusted PoC cannot
-# learn the answer from the verifier container.
-LISTING_MOUNT = "/listing"
-LISTING_NAME_FILE = "/listing/expected"
+SECRET_LOCATIONS = ("file_content", "file_name", "directory_name")
 
 # Shared marker for the server-request family.
 CALLBACK_PATH = "/callback"
@@ -58,7 +56,6 @@ SERVICE_ASSET = "/health"
 GOAL_FAMILIES: tuple[str, ...] = (
     "secret_read",
     "file_write",
-    "directory_listing",
     "server_request",
     "service_unavailable",
 )
@@ -70,7 +67,37 @@ AUTH_SCHEMES: tuple[str, ...] = ("none", "http_basic", "bearer_token")
 def goal_family(spec: dict) -> str:
     goal = spec.get("task_goal") or {}
     family = str(goal.get("family") or "secret_read").strip()
+    if family == "directory_listing":
+        raise TaskError("generation_error", "Legacy directory_listing tasks require re-authoring and a new frozen spec: "
+                        "use secret_read with secret_location=file_name or directory_name and print the 48-hex token.")
     return family if family in GOAL_FAMILIES else "secret_read"
+
+
+def secret_location(spec: dict) -> str:
+    goal = spec.get("task_goal") or {}
+    location = str(goal.get("secret_location") or "file_content")
+    if location not in SECRET_LOCATIONS:
+        raise PipelineError(f"unknown secret_location: {location!r}")
+    if goal_family(spec) != "secret_read" and "secret_location" in goal:
+        raise PipelineError("secret_location is only valid for secret_read")
+    if goal.get("primitive") == "xss" and location != "file_content":
+        raise PipelineError("XSS secret_read uses the bot cookie; secret_location must stay file_content")
+    if location != "file_content" and goal.get("primitive") != "directory_enumeration":
+        raise PipelineError(
+            "secret_location=file_name/directory_name requires primitive='directory_enumeration'; "
+            "do not describe a name-only disclosure as arbitrary file reading"
+        )
+    return location
+
+
+def migrate_listing_goal(goal: dict) -> dict:
+    """Migrate a draft, never a frozen runtime contract or its old verdicts."""
+    if goal.get("family") != "directory_listing":
+        return dict(goal)
+    return {**goal, "family": "secret_read", "type": "secret_disclosure",
+            "primitive": "directory_enumeration",
+            "secret_location": goal.get("secret_location") or "file_name", "target_asset": SECRET_DIR,
+            "observable": "The PoC extracts and prints the per-instance 48-hex secret token from an enumerated file or directory name; file-content access is not required."}
 
 
 def auth_identity(spec: dict) -> str:
@@ -112,20 +139,12 @@ def auth_material(spec: dict) -> dict[str, str]:
     }
 
 
-def listing_name(spec: dict) -> str:
-    """Framework-owned random filename that only a directory listing reveals."""
-    digest = hashlib.sha256(
-        f"{spec.get('frozen_digest', '')}:listing:v1".encode("utf-8")
-    ).hexdigest()
-    return f"{digest[:32]}.txt"
-
-
 def target_asset(spec: dict, family: str | None = None) -> str:
     family = family or goal_family(spec)
     if family == "file_write":
         return MARKER_PATH
-    if family == "directory_listing":
-        return LISTING_DIR
+    if family == "secret_read" and secret_location(spec) != "file_content":
+        return SECRET_DIR
     if family == "server_request":
         return CALLBACK_PATH
     if family == "service_unavailable":

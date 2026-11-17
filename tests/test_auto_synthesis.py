@@ -555,7 +555,7 @@ def test_normalize_reports_an_undeclared_python_import(tmp_path: Path):
     assert any("starlette" in issue for issue in issues)
 
 
-def test_normalize_forces_high_confidentiality_for_secret_goal(tmp_path: Path):
+def test_normalize_preserves_low_confidentiality_for_secret_goal(tmp_path: Path):
     evidence = _write_evidence(tmp_path)
     body = _bundle()
     body["impact"]["cia"]["confidentiality"] = "low"
@@ -563,8 +563,8 @@ def test_normalize_forces_high_confidentiality_for_secret_goal(tmp_path: Path):
         body, evidence=evidence, discovery=_discovery(), run_dir=tmp_path
     )
     assert issues == []
-    assert bundle["impact"]["cia"]["confidentiality"] == "high"
-    assert any("confidentiality forced to high" in note for note in notes)
+    assert bundle["impact"]["cia"]["confidentiality"] == "low"
+    assert not any("confidentiality forced to high" in note for note in notes)
     spec = synthesis_mod.build_spec(
         synthesis_mod.Synthesis(
             cve_id=CVE,
@@ -580,7 +580,7 @@ def test_normalize_forces_high_confidentiality_for_secret_goal(tmp_path: Path):
         artifact_identity_value=[],
         policy_version=load_policy().policy_version,
     )
-    assert spec["impact"]["cia"]["confidentiality"] == "high"
+    assert spec["impact"]["cia"]["confidentiality"] == "low"
 
 
 def test_normalize_rejects_fixed_build_without_ref(tmp_path: Path):

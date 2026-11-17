@@ -116,13 +116,13 @@
       "properties": {
         "type": {
           "enum": [
-            "file_read", "secret_disclosure", "file_write", "directory_listing",
+            "file_read", "secret_disclosure", "file_write",
             "server_request",
             "service_unavailable"
           ]
         },
         "family": {
-          "enum": ["secret_read", "file_write", "directory_listing",
+          "enum": ["secret_read", "file_write",
                    "server_request",
                    "service_unavailable"]
         },
@@ -131,8 +131,11 @@
             "path_traversal", "file_read", "ssrf", "sql_injection",
             "command_injection", "code_execution", "deserialization", "xxe",
             "template_injection", "auth_bypass", "information_disclosure",
-            "resource_exhaustion", "xss"
+            "directory_enumeration", "resource_exhaustion", "xss"
           ]
+        },
+        "secret_location": {
+          "enum": ["file_content", "file_name", "directory_name"]
         },
         "target_asset": {"type": "string", "minLength": 1},
         "observable": {"type": "string", "minLength": 10}

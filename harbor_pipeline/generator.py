@@ -15,6 +15,7 @@ from .goals import (
     auth_material,
     auth_scheme,
     goal_family,
+    secret_location,
     target_asset,
 )
 from .repair import FRAMEWORK_PATHS, POC_PATH
@@ -150,7 +151,7 @@ def render_task(
         auth_user=material["user"],
         auth_password=material["password"],
         auth_token=material["token"],
-        listing_name="",  # Answers are generated at target startup, never from the spec.
+        secret_location=secret_location(spec),
         target_asset=target_asset(spec, family),
         presentation_mode=presentation_mode,
         presentation_hints=tuple(str(x) for x in (presentation.get("hints") or ())),

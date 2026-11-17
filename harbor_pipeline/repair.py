@@ -182,12 +182,17 @@ Exactly one action per reply, as a JSON object:
   server. Never hard-code it, never read it from a local path, and never use an
   intended feature that works on both builds. The observable depends on
   `task_goal.family` read from the bundle:
-  - `secret_read`: print the per-instance 48-hex token.
+  - `secret_read`: print the per-instance 48-hex token. For `secret_location`
+    `file_content` (default), obtain it from the real vulnerable content path.
+    For `file_name` or `directory_name`, extract it from the upstream listing
+    of `/opt/app/secret/entry_<TOKEN>.txt` or `/opt/app/secret/entry_<TOKEN>/`.
+    Name-only disclosure is sufficient; do not require a download/read API or
+    decline solely because file contents cannot be read. Preserve the selected
+    layout and use primitive `directory_enumeration`; name disclosure uses type
+    `secret_disclosure`.
   - `file_write`: choose a fresh 48-hex nonce, make the target write it to the
     marker path through the vulnerability, and print the same nonce. Do not add
     an intended route that writes the marker.
-  - `directory_listing`: list the protected directory and print the randomly
-    named `.txt` filename, never the file contents.
 - If `preconditions.auth_identity` is not `none`, the target must enforce the
   declared scheme on every route except `/health` and `/business`. The
   framework supplies `APP_USER`/`APP_PASS` or `APP_TOKEN` to the target and
@@ -200,9 +205,9 @@ Exactly one action per reply, as a JSON object:
   uses a different language or a dependency that does not exist, replace it
   with an application that uses the real product package (for example an npm
   package must be exercised from Node, not from an invented Go module).
-- The fixed build must not return the observable. For `secret_read`, a
-  vulnerable listing is not enough: use the library's own download/get call and
-  return its body; do not read the file from disk after the library call.
+- The fixed build must not return the observable. A vulnerable listing is
+  sufficient for `secret_read` with `file_name` or `directory_name`; never add
+  file reads after the library call to make a name-only CVE satisfy the goal.
 - Use `registry` before choosing a version. Never invent one. If a lookup
   fails, do not repeat the same name; use the build log and the bundle's
   recorded versions instead.
