@@ -1,8 +1,8 @@
 """Restricted helper for the evidence-resolver session.
 
-The resolver agent never gets a general shell or a web tool. It can read the
-collected evidence, query a small set of allowlisted registry/GitHub endpoints,
-and submit one reconciliation proposal. All network access goes through
+The resolver uses native web tools for research and this helper to register
+evidence, query allowlisted registry/GitHub endpoints, and submit a
+reconciliation proposal. This helper's network access goes through
 :mod:`harbor_pipeline.sources`, so the existing https/allowlist/public-IP/DNS
 policy still applies.
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 
 from harbor_pipeline import author_probe, author_tool, authoring
 from harbor_pipeline.contracts import load_policy
@@ -95,7 +96,9 @@ def test_prepare_workspace_copies_inputs_and_settings(tmp_path: Path):
     settings = json.loads(workspace.settings_path.read_text(encoding="utf-8"))
     assert settings["model"] == "deepseek-flash[1m]"
     assert "Bash(harbor-author:*)" in settings["permissions"]["allow"]
-    assert "WebFetch" in settings["permissions"]["deny"]
+    for tool in ("WebSearch", "WebFetch"):
+        assert tool in settings["permissions"]["allow"]
+        assert tool not in settings["permissions"]["deny"]
     # The wrapper must stay outside the agent's writable workspace.
     assert (run_dir / "author-bin" / "harbor-author").is_file()
     assert not (workspace.root / "bin" / "harbor-author").exists()
@@ -191,13 +194,14 @@ def test_validate_workspace_reports_placeholder_issues(tmp_path: Path, monkeypat
     assert issues
 
 
-def test_agent_command_is_restricted_and_allowlisted(tmp_path: Path, monkeypatch):
+@pytest.mark.parametrize("role,helper", [("author", "harbor-author"), ("resolver", "harbor-evidence")])
+def test_agent_command_is_restricted_and_allowlisted(tmp_path: Path, monkeypatch, role, helper):
     # The unit test checks argv construction, not a real installation.
     monkeypatch.setattr(
         "harbor_pipeline.agent.shutil.which",
         lambda name: "/usr/bin/claude" if name == "claude" else None,
     )
-    agent = ClaudeCodeAgent(_config(), role="author")
+    agent = ClaudeCodeAgent(_config(), role=role)
     command = agent.command(
         settings_path=tmp_path / "settings.json", contract="contract"
     )
@@ -212,7 +216,10 @@ def test_agent_command_is_restricted_and_allowlisted(tmp_path: Path, monkeypatch
     assert "--disable-slash-commands" in command
     assert "--permission-prompts" in command
     assert "none" in command
-    assert "Bash(harbor-author:*)" in joined
+    assert f"Bash({helper}:*)" in joined
+    for flag in ("--tools", "--allowedTools"):
+        enabled = command[command.index(flag) + 1].split(",")
+        assert "WebSearch" in enabled and "WebFetch" in enabled
     assert "--max-turns" in command
     assert "--max-budget-usd" in command
     assert "--append-system-prompt" in command

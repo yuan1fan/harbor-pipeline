@@ -68,14 +68,14 @@ _DROP_NAMES = {
     "ANTHROPIC_MODEL",
 }
 
-AUTHOR_TOOLS = "Read,Write,Edit,Grep,Glob,Bash"
+AUTHOR_TOOLS = "Read,Write,Edit,Grep,Glob,Bash,WebSearch,WebFetch"
 AUTHOR_ALLOWED_TOOLS = (
-    "Read,Write,Edit,Grep,Glob,"
+    "Read,Write,Edit,Grep,Glob,WebSearch,WebFetch,"
     "Bash(harbor-author:*),Bash(./bin/harbor-author:*),Bash(bash bin/harbor-author:*)"
 )
-RESOLVER_TOOLS = "Read,Write,Edit,Grep,Glob,Bash"
+RESOLVER_TOOLS = "Read,Write,Edit,Grep,Glob,Bash,WebSearch,WebFetch"
 RESOLVER_ALLOWED_TOOLS = (
-    "Read,Write,Edit,Grep,Glob,"
+    "Read,Write,Edit,Grep,Glob,WebSearch,WebFetch,"
     "Bash(harbor-evidence:*),Bash(./bin/harbor-evidence:*),"
     "Bash(bash bin/harbor-evidence:*)"
 )
@@ -199,8 +199,8 @@ def build_agent_settings(
 ) -> dict[str, Any]:
     """Permission set for a native session.
 
-    The allowlist is intentionally narrow: the agent can use its native file
-    tools and can call exactly one helper. Every other Bash command is denied
+    Native file and web tools are available. Shell execution is limited to
+    the role's helper. Every other Bash command is denied
     automatically because the session runs with ``--permission-prompts none``.
     """
     helper = profile.helper_name
@@ -213,13 +213,13 @@ def build_agent_settings(
                 "Edit",
                 "Grep",
                 "Glob",
+                "WebSearch",
+                "WebFetch",
                 f"Bash({helper}:*)",
                 f"Bash(./bin/{helper}:*)",
                 f"Bash(bash bin/{helper}:*)",
             ],
             "deny": [
-                "WebFetch",
-                "WebSearch",
                 "Task",
                 "NotebookEdit",
                 "Read(//**/.claude/**)",
@@ -232,7 +232,7 @@ def build_agent_settings(
             ]
             + (
                 [
-                    # The resolver only needs its helper. Denying the common
+                    # Shell access stays limited to the helper. Denying common
                     # shell readers stops a pipeline such as
                     # ``harbor-evidence show ... | head`` from widening the
                     # surface; ``show --limit`` is the supported form.

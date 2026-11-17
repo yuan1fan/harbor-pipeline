@@ -133,7 +133,9 @@ def test_workspace_has_read_only_inputs_and_external_helper(tmp_path):
     settings = read_json(workspace.settings_path)
     assert settings["model"] == "test-model"
     assert "Bash(harbor-evidence:*)" in settings["permissions"]["allow"]
-    assert "WebFetch" in settings["permissions"]["deny"]
+    for tool in ("WebSearch", "WebFetch"):
+        assert tool in settings["permissions"]["allow"]
+        assert tool not in settings["permissions"]["deny"]
     assert "Write(inputs/**)" in settings["permissions"]["deny"]
     assert "Bash(head:*)" in settings["permissions"]["deny"]
 

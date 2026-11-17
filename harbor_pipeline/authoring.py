@@ -502,6 +502,10 @@ a file (an Edit against a path that does not exist creates it).
 ## Tools
 
 Native Read/Write/Edit/Grep/Glob remain available. Use Edit for precise changes.
+Native WebSearch and WebFetch are available for upstream research and build
+documentation. Web results are research leads, not automatically registered
+evidence. If new findings require correcting the version pair or its evidence,
+request an evidence review so the resolver can fetch and register the sources.
 Each assertion in bundle.json must include an `evidence_quote`: an exact excerpt
 of at least 12 characters from its cited inputs/evidence source. A downloaded
 page alone does not confirm a claim. Quotes are checksum-checked by the helper;

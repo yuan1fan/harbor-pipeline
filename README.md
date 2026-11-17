@@ -107,7 +107,7 @@ flowchart TD
   - `target-fixed/`：fixed variant 专属文件
   - `poc/reference.py`、`poc/alternate.py`：两套参考利用
   - `inputs/`：只读的 `discovery.json`、`spec.json` 与原始证据
-- harness：`claude -p --bare --restricted`，只允许 `Read/Write/Edit/Grep/Glob` 和 `Bash(harbor-author:*)`；其余命令在 `--permission-prompts none` 下自动拒绝。
+- harness：使用原生 `claude -p`，保留 `Read/Write/Edit/Grep/Glob` 和 `WebSearch/WebFetch`；`--setting-sources ""` 不加载用户／项目配置，`--restricted` 下通过 `--tools` 显式启用这些工具，Bash 仍仅允许 `harbor-author`。
 - 上下文：由 Claude Code 原生多轮对话、prompt caching 和 auto-compaction 管理；不再每步重发所有文件。
 - 预算：`--max-turns`、`--max-budget-usd`、会话超时，加上 helper 自己的 build/probe/exec 计数上限。
 
@@ -117,8 +117,8 @@ flowchart TD
 如果固定 discovery 没有得到完整的 vulnerable/fixed 对，`evidence_resolver = true` 会启动一个独立的证据解析会话。完整候选仍直接进入 author；author 检查源码后发现配对有误时，也可以主动申请调用同一个 resolver：
 
 - 工作区：`runs/<run>/<CVE>/resolver/`，只能读 `inputs/`；
-- 工具：`Read/Write/Edit/Grep/Glob` + 仅限 `harbor-evidence` helper（Write/Edit 只用于 `reconciliation.json`）；
-- 禁止 `WebFetch/WebSearch`、任意 shell、Docker、写入 `inputs/`；
+- 工具：`Read/Write/Edit/Grep/Glob`、`WebSearch/WebFetch`，以及 `harbor-evidence` helper（Write/Edit 用于提案）；
+- 网页工具可直接用于找线索和查资料；正式引用的证据仍需通过 helper 抓取、登记和校验。任意 shell、Docker、写入 `inputs/` 仍禁止；
 - helper 所有网络请求仍走 `sources.fetch` 的 https + 主机白名单 + 公网 IP 校验 + DNS pinning；
 - 输出 `reconciliation.json` 提案；`freeze`、`depcheck` 仍然重新验证，agent 不能直接改 spec。
 
@@ -214,9 +214,9 @@ python scripts/run_resolved_tests.py --run-id resolved-20261116-all --workers 2
 
 脚本依次执行 `requeue-resolved → run --until build → run --until validate`，日志和 summary 写到 `work/resolved-tests/<run-id>/`。它不会进入 solver/reviewer/release。`--workers` 控制候选级并发；Docker admission 和模型网关仍会限流，建议从 2–3 开始。`--stop-on-fail` 只在 `--workers 1` 下可用。
 
-### 2.2 `harbor-author` helper（内循环）
+### 2.2 原生 CC 内循环中的 `harbor-author` helper
 
-agent 只能通过 `harbor-author` 接触外部世界：
+Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建、运行和验证题目则通过 `harbor-author` 完成：
 
 | 命令 | 作用 |
 |---|---|
