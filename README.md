@@ -2,13 +2,13 @@
 
 把公开 CVE 证据自动转换成 **Harbor 安全训练题**：每道题包含一个真实漏洞应用、一个参考 PoC、一个修复后版本，以及一套固定的差分测试矩阵。评分不依赖 LLM。
 
-> **0.2 版本说明（2026-11-06）**：本版增加了运行时依赖身份、候选级负例、随机 listing 答案、断言证据引用、T09 干净重建、分层质量抽样、独立复核字段、精确镜像归档，以及 `server_request` 与 `service_unavailable` 两类目标。旧版 `RELEASED` 产物不能直接混入 0.2 数据集，需要按新协议重新验收。
+> **0.2 版本说明（2026-11-06）**：本版增加了运行时依赖身份、候选级负例、secret 名称位置（`secret_location`）、断言证据引用、T09 干净重建、分层质量抽样、独立复核字段、精确镜像归档，以及 `server_request` 与 `service_unavailable` 两类目标。旧版 `RELEASED` 产物不能直接混入 0.2 数据集，需要按新协议重新验收。
 >
 > 当前验收已移除 T08、T11；T09 冷重建默认关闭，可显式开启。不再按备选 PoC 划分 A/B 质量档；真实正确率见 `quality` 报告的独立复核统计，未复核时明确写 `null`。
 
 ---
 
-## 流程总览
+## 1. 流程总览
 
 主线是：**找版本 → 出题 → 测试验收 → 模型试解 → 质量审查 → 发布**。
 证据不足或版本选错时，由 Resolver 补充核查；题目需要修改时，交回 Author。
@@ -55,7 +55,8 @@ flowchart TD
 
 </details>
 
-### 每题、每阶段、每轮的耗时与用量
+<details>
+<summary>展开：耗时与用量统计</summary>
 
 新 worker 会在 `runs/<run>/<CVE>/` 记录以下文件。统计独立于 `budget.json` 的配额控制，不改变现有预算和验收规则。
 
@@ -71,9 +72,18 @@ flowchart TD
 - **不重复计费**：父阶段包含子调用，用量汇总只计算最底层计量记录；不要把所有阶段行直接相加。缓存复用标为 `cached`，本次新增模型用量为零，原调用仍保留在历史里。
 - **缺失与中断**：未返回的用量为 `null`。只保存开始事件的调用显示 `unfinished`；`totals.known` 只是已知部分小计，`totals.missing` 表示缺报次数，不能把缺报当零。费用来自服务／CLI 报告，不是账单核验值。
 
-统计从启用本版本后开始；旧实验未保存的逐轮时间和 token 不补造。`stage-usage.json` 可通过 `harbor_pipeline.telemetry.rebuild(CVE目录)` 从事件重建。文件不保存提示词、模型正文、凭据或异常原文。
+</details>
 
-## 1. 来源（Evidence Sources）
+---
+
+## 2. 主流程
+
+
+### 2.1 discovery 阶段
+
+Discovery 负责把一个 CVE 变成可构建的 vulnerable/fixed 版本对，并收集后续 author 需要的证据。
+
+#### 2.1.1 确定性 discovery
 
 一次 `collect` 只从以下来源抓取，全部经过 **https + 主机白名单 + 公网 IP 校验 + DNS pinning**：
 
@@ -93,36 +103,6 @@ flowchart TD
 
 > 题面（`instruction.md`）由框架生成，**不得包含** CVE id、产品名、修复 commit、修复版本。
 
----
-
-## 2. 出题过程（Native Claude Code Authoring）
-
-### 2.1 一个候选 = 一个原生 Claude Code 会话
-
-不再先让模型一次性盲写草稿、失败后再用自制 JSON action 循环修补。每个候选直接启动一个**原生 Claude Code** 会话：
-
-- 工作区：`runs/<run>/<CVE>/author/`
-  - `bundle.json`：元数据（product/versions/preconditions/root_cause/impact/goal/assertions）
-  - `target/`：靶机应用源码，agent 用原生 `Read`/`Edit` 修改
-  - `target-fixed/`：fixed variant 专属文件
-  - `poc/reference.py`：参考利用脚本
-  - `inputs/`：只读的 `discovery.json`、`spec.json` 与原始证据
-- harness：使用原生 `claude -p`，保留 `Read/Write/Edit/Grep/Glob` 和 `WebSearch/WebFetch`；`--setting-sources ""` 不加载用户／项目配置，`--restricted` 下通过 `--tools` 显式启用这些工具，Bash 仍仅允许 `harbor-author`。
-- 上下文：由 Claude Code 原生多轮对话、prompt caching 和 auto-compaction 管理；不再每步重发所有文件。
-- 预算：`--max-turns`、`--max-budget-usd`、会话超时，加上 helper 自己的 build/probe/exec 计数上限。
-
-### 2.1.1 证据解析 agent（可选：缺失补全与 author 纠正）
-
-`collect` 仍然是确定性的：同样的来源、同样的 allowlist、同样的 sha256。
-如果固定 discovery 没有得到完整的 vulnerable/fixed 对，`evidence_resolver = true` 会启动一个独立的证据解析会话。完整候选仍直接进入 author；author 检查源码后发现配对有误时，也可以主动申请调用同一个 resolver：
-
-- 工作区：`runs/<run>/<CVE>/resolver/`，只能读 `inputs/`；
-- 工具：`Read/Write/Edit/Grep/Glob`、`WebSearch/WebFetch`，以及 `harbor-evidence` helper（Write/Edit 用于提案）；
-- 网页工具可直接用于找线索和查资料；正式引用的证据仍需通过 helper 抓取、登记和校验。任意 shell、Docker、写入 `inputs/` 仍禁止；
-- helper 所有网络请求仍走 `sources.fetch` 的 https + 主机白名单 + 公网 IP 校验 + DNS pinning；
-- 输出 `reconciliation.json` 提案；`freeze`、`depcheck` 仍然重新验证，agent 不能直接改 spec。
-
-helper 支持 `list/show`、`registry`、`github tags/releases/commit/parent`、`fetch` 和 `propose`。
 `discovery.json` 的两个 ref 分别携带类型，不能仅凭 `0.0.14` 的外观判断它是 registry 版本还是 Git tag：
 
 ```json
@@ -135,7 +115,7 @@ helper 支持 `list/show`、`registry`、`github tags/releases/commit/parent`、
 
 上例 SHA 是格式示意。`kind` 支持 `package_version`、`tag`、`commit`、`archive`、`unresolved`。包版本记录 `ecosystem/package`，Git 引用记录仓库和解析出的 commit，发布归档记录 URL 和 SHA-256；来源通过 `source_id` 回溯。旧 `vulnerable_ref/fixed_ref` checkpoint 仍可读取，无法确定类型的旧值保留为 `unresolved` 并重新查证；新 discovery JSON 只写带类型的字段。生成模板和 normalization 会按 ref 类型选择构建方式，源码或归档对使用 `generic`，避免把 SHA/tag 传给 npm、pip 或 Maven。
 
-确定性 discovery 在调用 resolver 前执行以下通用规则：
+确定性 discovery 执行以下通用规则：
 
 - 解析 CNA `packageURL` 中的 PyPI/npm/Maven/Go 身份；使用真实 registry 元数据核对版本及预发布版本拼写。
 - 读取明确 affected 值、简单范围的包含上界、明确 unaffected 版本；排他上界不充当受影响版本，选择版本时同时检查范围下界。
@@ -163,7 +143,17 @@ helper 支持 `list/show`、`registry`、`github tags/releases/commit/parent`、
 - `candidate` / `source_ids`：尝试的引用及证据索引中的来源；`affected_scope` 记录匹配的 CNA 版本声明。
 - 最后一项记录实际输出的 `vulnerable`、`fixed`、`fix_commit`，以及 `mechanism_verified: false`，防止把元数据检查误读为机制证明。
 
-新运行逐条保留实际查询的候选及拒绝原因；OSV 等大型版本列表的范围过滤记录数量、少量示例和原始来源，避免把数百个未采用的版本逐个写入 author 输入。复用已有完整轨迹的 checkpoint 不重复追加；旧 checkpoint 没有选择历史时，只记录本次重新校验和复用事实，不补写未经记录的历史原因。resolver 改写 ref 时也会追加对应的提案记录。
+#### 2.1.2 证据解析 agent （resolver agent）
+
+如果固定 discovery 没有得到完整的 vulnerable/fixed 对，`evidence_resolver = true` 会启动一个独立的证据解析会话。完整候选仍直接进入 author；author 检查源码后发现配对有误时，也可以主动申请调用同一个 resolver：
+
+- 工作区：`runs/<run>/<CVE>/resolver/`，只能读 `inputs/`；
+- 工具：`Read/Write/Edit/Grep/Glob`、`WebSearch/WebFetch`，以及 `harbor-evidence` helper（Write/Edit 用于提案）；
+- 网页工具可直接用于找线索和查资料；正式引用的证据仍需通过 helper 抓取、登记和校验。任意 shell、Docker、写入 `inputs/` 仍禁止；
+- helper 所有网络请求仍走 `sources.fetch` 的 https + 主机白名单 + 公网 IP 校验 + DNS pinning；
+- 输出 `reconciliation.json` 提案；`freeze`、`depcheck` 仍然重新验证，agent 不能直接改 spec。
+
+helper 支持 `list/show`、`registry`、`github tags/releases/commit/parent`、`fetch` 和 `propose`。
 
 author 发现“vulnerable 已修复、fixed 仍有漏洞、补丁针对其他问题或发布包源码不符”时，写一份 `evidence-review-request.json`，提供 `reason` 和本地源码／日志的 `citations`（`path`、逐字匹配的 `quote`）；可附带 `suggested_refs`，不要求 author 已经找到替代版本。随后调用：
 
@@ -177,46 +167,10 @@ helper 核对引用并记录当前版本对身份，author 随即结束会话。
 
 批准修改后，pipeline 增加 revision，归档旧元数据，使旧 spec、synthesis、目标构建记录、probe、matrix 进度和 solver 结果失效，刷新 author 输入并恢复同一个会话。author 的 `target/`、`poc/` 和预算计数保留，需要按新 ref 更新源码并重新构建、验证。若 resolver 以证据说明原对成立，也会把解释交回 author 并要求重新 probe。每题最多 `max_evidence_reviews = 2` 次（可配置为 0 禁用），处理记录保存在 `evidence-reviews/<request_id>/review.json`；已批准但应用中断的修改可恢复，不重复调用 resolver。
 
-手动回放已有 checkpoint：
 
-```bash
-python -m harbor_pipeline -c pipeline.scale.toml resolve-evidence \
-  --cve CVE-2026-2419 --run-dir runs/<run>/CVE-2026-2419 --apply --json
-```
+### 2.2 author agent
 
-### 2.1.2 Requeue 已解析的 `UNSUPPORTED` 候选
-
-`UNSUPPORTED` 是终态，不能被 resolver 偷偷改成可继续状态。resolver 成功后，用显式 requeue 创建新 run：
-
-```bash
-python -m harbor_pipeline -c pipeline.scale.toml requeue-resolved \
-  --cve CVE-2026-79785 \
-  --source-run-dir runs/<old-run>/CVE-2026-79785 \
-  --run-id resolved-YYYYMMDD --json
-```
-
-requeue 会：
-
-- 校验 `resolver-result.json` 是 `proposed`；
-- 校验 discovery 的 vulnerable/fixed/fix commit/source 完整；
-- 跑一次最小 `depcheck`；
-- 把 evidence、discovery、resolver result 复制到新 run；
-- 新 run 从 `EVIDENCE_READY` 开始，history 记录 `requeued after evidence resolver`；
-- 旧 run 保持 `UNSUPPORTED` 不变，便于对比和审计。
-
-之后才能对新 run 执行 `run ... --until build` 或 `--until validate`。
-
-批量跑已经解析的 9 个候选：
-
-```bash
-python scripts/run_resolved_tests.py --run-id resolved-20261116-all --workers 2
-```
-
-脚本依次执行 `requeue-resolved → run --until build → run --until validate`，日志和 summary 写到 `work/resolved-tests/<run-id>/`。它不会进入 solver/reviewer/release。`--workers` 控制候选级并发；Docker admission 和模型网关仍会限流，建议从 2–3 开始。`--stop-on-fail` 只在 `--workers 1` 下可用。
-
-### 2.2 原生 CC 内循环中的 `harbor-author` helper
-
-Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建、运行和验证题目则通过 `harbor-author` 完成：
+Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建、运行和验证题目则通过 `harbor-author` 工具完成：
 
 | 命令 | 作用 |
 |---|---|
@@ -243,6 +197,45 @@ Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建
 5. 无法在 Web 契约下真实复现的 CVE 走 `decline` → `UNSUPPORTED`，不再强行包一层 `:8080` 胶水代码。
 
 > 过渡期保留 `authoring = "legacy"`，可回退到旧的 one-shot draft + JSON repair 链路；canary 与重跑对比通过后删除。
+
+#### 2.3.1 差分矩阵
+
+所有判定来自**固定脚本**和真实容器行为，LLM 不参与打分。
+
+| 测试 | 内容 |
+|---|---|
+| T01 / T02 | vulnerable / fixed 健康检查与业务路由 |
+| T03 | 参考 PoC 在 vulnerable 上成功（可重复） |
+| T04 | 同一 PoC 在 fixed 上**不**成功 |
+| T05 | 不提交 PoC → 不得得分 |
+| T06 | 伪造成功输出 → 不得得分 |
+| T07 | bypass / 默认 secret → 不得得分 |
+| T09 | 独立无缓存重建，vulnerable / fixed 各三轮（可选，默认关闭） |
+| T10 | 非法 PoC 必须执行失败 |
+| T12 | 注入 target 启动故障 → 必须归类为 infra error，而不是题目缺陷 |
+
+需要检查从源码冷重建是否稳定时，在使用的配置文件中显式开启：
+
+```toml
+[pipeline]
+cold_rebuild = true  # 默认 false；不填写也不会执行 T09
+```
+
+开启后，T09 对 vulnerable / fixed 各做三轮 `--no-cache` 构建和参考 PoC 试验，记录实际镜像 ID；缺少轮次、构建失败或结果不一致都会阻止本次验收通过。关闭时不执行这些构建与试次，也不要求 T09 证据。T09 开关纳入验收签名，开启后不能直接复用未执行 T09 的验收结果；输入相同的普通试次仍可续用。
+
+#### 2.3.2 通过条件
+
+- **必须**：T03 全部成功、T04 全部不泄漏、T05/T06/T07/T10 固定负载全部被拒绝、目标健康、spec/证据一致。
+- **认证题**：verifier 会额外用**去掉凭据**的同一参考 PoC 再打一次；仍然成功则判失败（说明认证不是必需前置条件）。
+- 评分输出：`task_gates`（卡点）、`framework_health`（框架自检）、`quality_flags`（证据覆盖和冷重建状态；未开启时为 `cold_rebuild=disabled`）。历史报告中的质量档沿用当时协议，不代表当前规则。
+- 评分器修复后，`recheck` 会校验执行签名：spec、task 文件、镜像 digest、生成器/verifier 代码都一致时才复用已存储的 matrix；否则自动重建并重跑试验。只有 admission 变回 `released` 才解除隔离并进入 release 重放。
+
+#### 2.3.3 权限与隔离
+
+- 不可信 PoC 以非特权 `replay` 用户、独立进程组运行，超时 `killpg`。
+- `/tests` 对 PoC 只读；`/logs/verifier` 与 `/logs/artifacts` 权限隔离。
+- verifier 独立镜像、独立环境，不复用 target 容器。
+- **参考 PoC 与提交 PoC 不共享 target 实例**：参考解运行在 `target-reference`，提交解运行在 `target`；两者各有独立的 oracle/marker 卷。参考解留下的文件、数据库记录或配置变化不会成为提交解的捷径。fixed 侧只重放提交解，已由 `target-fixed` 覆盖。
 
 ### 2.4 解题 Agent 反馈回路（solver review）
 
@@ -272,89 +265,33 @@ Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建
 
 两个任务在 black-box 下都退化成“枚举路由/深度”的猜谜；白盒 + 针对性提示后，solver 都能从源码推理出利用链，reviewer 也认为路径可推导而非猜测。
 
-#### 规模批次（`solver_review = false`）
-
-| 批次 | 候选 | RELEASED (tier A) | UNSUPPORTED | QUARANTINED |
-|---|---|---|---|---|
-| r5 | 10 | 8 | 2（advisory 明确非端到端 / 容器验证后无法提供攻击者字节） | 0 |
-| r6 | 10 | 9 | 1（只暴露目录名、过滤文件，当前 listing 契约无法观察） | 0 |
-| **合计** | **20** | **17（85%）** | **3（15%）** | **0** |
-
-剔除不适合 Web 契约的 3 题后，可支持题目的发布率为 **17/17**；全部 tier A 且有完整 release 包。该批次为控成本关闭了 solver review，白盒/黑盒由 author 自判（17 题中 12 白盒、5 黑盒），后续应抽样开启 review，复核 hints 是否过强。
 
 ---
 
-## 3. 验证（Fixed Verifier, No LLM Scoring）
+## 3. 题目分类（Goal Families）
 
-所有判定来自**固定脚本**和真实容器行为，LLM 不参与打分。
+按**漏洞后果**分类，而不是按 CWE。当前有四个 family：`secret_read`、`file_write`、`server_request`、`service_unavailable`。
 
-### 3.1 差分矩阵
+### 3.1 读取 secret（`secret_read`）
 
-| 测试 | 内容 |
-|---|---|
-| T01 / T02 | vulnerable / fixed 健康检查与业务路由 |
-| T03 | 参考 PoC 在 vulnerable 上成功（可重复） |
-| T04 | 同一 PoC 在 fixed 上**不**成功 |
-| T05 | 不提交 PoC → 不得得分 |
-| T06 | 伪造成功输出 → 不得得分 |
-| T07 | bypass / 默认 secret → 不得得分 |
-| T09 | 独立无缓存重建，vulnerable / fixed 各三轮（可选，默认关闭） |
-| T10 | 非法 PoC 必须执行失败 |
-| T12 | 注入 target 启动故障 → 必须归类为 infra error，而不是题目缺陷 |
-
-保留原测试编号，T08、T11 已移除。author 只需提供一个参考 PoC。
-
-需要检查从源码冷重建是否稳定时，在使用的配置文件中显式开启：
-
-```toml
-[pipeline]
-cold_rebuild = true  # 默认 false；不填写也不会执行 T09
-```
-
-开启后，T09 对 vulnerable / fixed 各做三轮 `--no-cache` 构建和参考 PoC 试验，记录实际镜像 ID；缺少轮次、构建失败或结果不一致都会阻止本次验收通过。关闭时不执行这些构建与试次，也不要求 T09 证据。T09 开关纳入验收签名，开启后不能直接复用未执行 T09 的验收结果；输入相同的普通试次仍可续用。
-
-### 3.2 通过条件
-
-- **必须**：T03 全部成功、T04 全部不泄漏、T05/T06/T07/T10 固定负载全部被拒绝、目标健康、spec/证据一致。
-- **认证题**：verifier 会额外用**去掉凭据**的同一参考 PoC 再打一次；仍然成功则判失败（说明认证不是必需前置条件）。
-- **质量输出**：不再划分 A/B 质量档，也没有 100 分加权总分。`quality_tier` 保留为 `null`，兼容读取历史数据；CVE 证据的 `attribution_grade` 是另一项归因检查，发布仍要求 A。
-- 评分输出：`task_gates`（卡点）、`framework_health`（框架自检）、`quality_flags`（证据覆盖和冷重建状态；未开启时为 `cold_rebuild=disabled`）。历史报告中的质量档沿用当时协议，不代表当前规则。
-- 评分器修复后，`recheck` 会校验执行签名：spec、task 文件、镜像 digest、生成器/verifier 代码都一致时才复用已存储的 matrix；否则自动重建并重跑试验。只有 admission 变回 `released` 才解除隔离并进入 release 重放。
-
-### 3.3 权限与隔离
-
-- 不可信 PoC 以非特权 `replay` 用户、独立进程组运行，超时 `killpg`。
-- `/tests` 对 PoC 只读；`/logs/verifier` 与 `/logs/artifacts` 权限隔离。
-- verifier 独立镜像、独立环境，不复用 target 容器。
-- **参考 PoC 与提交 PoC 不共享 target 实例**：参考解运行在 `target-reference`，提交解运行在 `target`；两者各有独立的 oracle/listing/marker 卷。参考解留下的文件、数据库记录或配置变化不会成为提交解的捷径。fixed 侧只重放提交解，已由 `target-fixed` 覆盖。
-
----
-
-## 4. 题目分类（Goal Families）
-
-按**漏洞后果**分类，而不是按 CWE。每个 family 有独立的 observable 和负例。
-
-### 4.1 读取 secret（`secret_read`）
-
-- **目标**：通过 CVE 自身的机制读到目标上的随机 48-hex token。
+- **目标**：通过 CVE 自身的机制取得并打印目标上的随机 48-hex token。
 - **observable**：PoC 输出中出现该 token。
-- **验证指标**：T04 fixed 不泄漏；T05/T06/T07 不得分；token 随机生成、不写入镜像；可选的 T09 检查冷重建稳定性。
-- **primitive**：path traversal、SQLi、SSRF、命令执行、反序列化、XXE、SSTI、auth bypass、信息泄漏等。
+- **secret 位置**：`task_goal.secret_location` 决定 token 的布置方式：
+  - `file_content`（默认）：token 写入 `/opt/app/secret/token`，PoC 必须通过 CVE 读取其内容；
+  - `file_name`：框架额外创建 `/opt/app/secret/entry_<TOKEN>.txt`，PoC 通过目录枚举得到文件名并提取 token；
+  - `directory_name`：框架额外创建 `/opt/app/secret/entry_<TOKEN>/`，PoC 通过目录枚举得到目录名并提取 token。
+- **名称披露**：`file_name` / `directory_name` 使用 `primitive: "directory_enumeration"`，`type` 为 `secret_disclosure`。这类题只要求枚举名称，不要求、也不允许再补一个文件内容读取接口；fixed 版本只需阻止同一枚举请求。取得人工布置的 token 不代表 CVE 的真实影响一定是 high，confidentiality 可以是 low。
+- **验证指标**：T04 fixed 不泄漏；T05/T06/T07 不得分；token 随机生成、不写入镜像；可选的 T09 检查冷重建稳定性。verifier 只匹配最终 48-hex token，不关心它来自文件内容还是名称。
+- **primitive**：path traversal、directory enumeration、SQLi、SSRF、命令执行、反序列化、XXE、SSTI、auth bypass、信息泄漏、XSS 等。
 
-### 4.2 写文件（`file_write`）
+### 3.2 写文件（`file_write`）
 
 - **目标**：让 target 把攻击者控制的内容写到预期目录之外。
 - **observable**：target 写出 marker 文件；独立 observer 读回的内容等于 PoC 打印的 48-hex nonce。
 - **验证指标**：PoC 运行在 verifier main，**不挂载** marker volume，无法直接写 marker；observer 只读；fixed 版本不产生 marker；T05/T06 无写不得分。
 - **适用**：arbitrary write、zip-slip、import/extract 路径穿越等。
 
-### 4.3 列目录（`directory_listing`）
-
-- **目标**：列出预期之外的目录，得到一个框架随机生成的文件名。
-- **observable**：PoC 输出该随机 `.txt` 文件名（不是文件内容）。
-- **验证指标**：期望文件名由 target 在启动时发布到共享 volume；verifier 在运行任何 PoC **之前**读取并删除发布文件，PoC 无法从 verifier 容器或 `/tests` 中直接拿到答案；fixed 版本不返回该列表。
-
-### 4.4 让目标发起请求（`server_request`）
+### 3.3 让目标发起请求（`server_request`）
 
 - **目标**：让目标服务向指定的非预期目的地发起 HTTP 请求；不需要把 secret 带回来。
 - **observable**：verifier 的 callback listener 收到请求，且请求来源必须是目标容器的地址；路径中带有本次运行的随机 token，参考解和提交解各用不同 token。
@@ -362,7 +299,7 @@ cold_rebuild = true  # 默认 false；不填写也不会执行 T09
 - **验证指标**：vulnerable 的参考解和提交解都能触发 callback；fixed 版本不触发；超时/无请求判失败。
 - **状态**：已实现（2026-11-06）。
 
-### 4.5 服务不可用（`service_unavailable`）
+### 3.4 服务不可用（`service_unavailable`）
 
 - **目标**：在规定攻击预算内，让原本健康的 target 无法继续提供 `/health` 服务；针对服务端 crash、hang 或资源耗尽，不适用于客户端或安装期 DoS。
 - **observable**：攻击前 health/business 正常；攻击期间连续 3 次 health 探测失败；攻击停止后仍有恢复观察窗口。fixed 版本必须在同样攻击下保持健康。
@@ -370,7 +307,7 @@ cold_rebuild = true  # 默认 false；不填写也不会执行 T09
 - **排除基础设施故障**：攻击前不健康、参考解无法触发、攻击后业务恢复、或 fixed 同样不可用，都不能算题目成功；T12 故障注入仍用于区分 harness 故障。
 - **状态**：已实现（2026-11-06），复用独立 target 实例与 `run_attack` 的健康采样流程。
 
-### 4.6 XSS / Admin Bot（`secret_read`，已实现）
+### 3.5 XSS / Admin Bot（`secret_read`，已实现）
 
 - **目标**：注入的脚本在 admin bot 的会话中执行，并把 bot 的 cookie secret 回传给 verifier。
 - **bot**：在公开的 `mcr.microsoft.com/playwright/python:v1.48.0-jammy` 上预安装匹配的 `playwright==1.48.0`，按需构建并复用框架 bot 镜像（可用 `HARBOR_BOT_IMAGE` 指定已准备的运行镜像）。bot 从 `/oracle/expected-token` 读取本次 token，写入非 HttpOnly 的 `harbor_secret` cookie，只访问 target host。
@@ -383,7 +320,7 @@ cold_rebuild = true  # 默认 false；不填写也不会执行 T09
 
 ---
 
-## 5. 快速开始
+## 4. 快速开始
 
 ```bash
 # 环境
@@ -414,7 +351,7 @@ python -m harbor_pipeline -c pipeline.repair2.toml recheck \
 
 ---
 
-## 6. 目录
+## 5. 目录
 
 ```
 harbor_pipeline/          # pipeline 源码
@@ -435,10 +372,11 @@ tests/                    # 单元与集成测试
 docs/                     # 设计与运维文档
 ```
 
+---
 
-## 7. 质量度量、校验与交付
+## 6. 质量度量、校验与交付
 
-### 7.1 开发与测试
+### 6.1 开发与测试
 
 ```bash
 python -m pip install -e ".[dev]"
@@ -451,16 +389,16 @@ python -m harbor_pipeline -c examples/canary.toml run --cve CVE-2024-23334 --pro
 
 PowerShell 用 `$env:HARBOR_RUN_DOCKER_TESTS = '1'`。wheel 必须包含 `schemas/`、`policies/`、Harbor task schema 与 verifier 资源；CI 在 Windows/Linux 上构建 wheel 后用 `tests/check_wheel.py` 脱离源码目录导入验证。
 
-### 7.2 author 的 0.2 约束
+### 6.2 author 的 0.2 约束
 
 - 每条 assertion 必须带 `evidence_quote`，且是引用来源文件中的**精确摘录**；仅引用一个抓取成功的来源不再自动记为 `confirmed`。来源文件被改动后 checksum 校验会失败。
 - `target.business_probes` 必填：除 `/health`、`/business` 外至少一条正常业务探针，vulnerable 和 fixed 都必须通过。
 - 版本对只能来自上游 ref/依赖 manifest：fixed-only 的应用代码改写、无 `{{REF}}` 的固定版本切换、在注释里伪造版本字符串都会被拒绝。Go/Maven 的依赖身份从构建后的元数据读取，不读 Dockerfile 注释。
-- 白盒 `source/` 只包含 author 的应用源码，排除 `Dockerfile`、`entrypoint.sh`、compose、patch/diff 和隐藏文件；listing 答案在 target 启动时用 `/dev/urandom` 生成，verifier 读取后立即删除，源码和任务元数据中都不含可复用答案。
+- 白盒 `source/` 只包含 author 的应用源码，排除 `Dockerfile`、`entrypoint.sh`、compose、patch/diff 和隐藏文件；`file_name` / `directory_name` 的 secret entry 在 target 启动时用 `/dev/urandom` 生成，oracle token 由 verifier 读取后立即删除，源码和任务元数据中都不含可复用答案。
 - T09 默认关闭；开启后使用 `--no-cache` 重建 vulnerable 与 fixed，并记录实际 image ID；复用预构建镜像不算干净重建。
 - `recheck` 只在执行签名（spec、task 文件、镜像 digest、生成器/verifier 代码）一致时复用旧 matrix；改动 verifier、模板、target 或镜像后必须重建并重跑 trial。
 
-### 7.3 `quality` 报告
+### 6.3 `quality` 报告
 
 ```bash
 python -m harbor_pipeline quality --run-dir runs/scale-20261106-r5   --output work/quality-r5.json --sample-size 30 --seed 0
@@ -474,7 +412,7 @@ python -m harbor_pipeline quality --run-dir runs/scale-20261106-r5   --output wo
 
 复核必须绑定 `task_digest`，不能只按 CVE id 复用旧结论；不一致或重复的复核会被拒绝。
 
-### 7.4 数据集合并
+### 6.4 数据集合并
 
 ```bash
 python -m harbor_pipeline dataset-merge   --input runs/shard-0/dataset-manifest.json runs/shard-1/dataset-manifest.json   --output work/dataset-v2.json
@@ -482,7 +420,7 @@ python -m harbor_pipeline dataset-merge   --input runs/shard-0/dataset-manifest.
 
 划分先归一化项目/包身份（含 `_`/`-` 等别名），再按仓库、patch commit、CVE alias 和 task digest 建连通分量，最后整体分到 train/validation/test（数据集版本 `2026.11.2`）。旧协议 manifest 会被归档到 `dataset-history/` 并标为 `excluded_legacy`，不会被静默并入新数据集。
 
-### 7.5 离线镜像归档
+### 6.5 离线镜像归档
 
 ```bash
 python -m harbor_pipeline archive-release   --release-dir runs/RUN/CVE-2024-23334/release --output-dir work/canary-archive
