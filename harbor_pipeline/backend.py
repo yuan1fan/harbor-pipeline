@@ -16,6 +16,7 @@ import subprocess
 import time
 import uuid
 import xml.etree.ElementTree as ElementTree
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -39,14 +40,19 @@ _DOCKER_CONNECTION_ERROR = re.compile(
     r"failed to receive status: rpc error: code = Unavailable"
 )
 # Docker Desktop occasionally leaves the builder session open after BuildKit
-# has already exported and tagged the image. These markers prove that the
-# image is usable even when ``docker build`` never wrote its iidfile.
+# has already exported and tagged the image. These markers trigger an identity
+# check; the log alone does not prove that the tag belongs to this build.
 _COMPLETED_EXPORT = re.compile(
-    r"(?im)^#\d+\s+(?:naming to|unpacking to)\b.*?\bdone\s*$"
+    r"(?im)^#(?P<vertex>\d+)[ \t]+(?P<action>naming to|unpacking to)\b[^\r\n]*\bdone[ \t]*\r?$"
 )
 _BUILD_FATAL_AFTER_EXPORT = re.compile(
     r"(?i)ERROR:|failed to solve|failed to build|did not complete successfully"
 )
+_BUILD_ATTEMPT_LABEL = "harbor-pipeline.build-attempt"
+_EXPORT_POLL_SEC = 2.0
+_EXPORT_GRACE_SEC = 15.0
+_EXPORT_RETRY_SEC = 10.0
+_EXPORT_INSPECT_TIMEOUT_SEC = 5.0
 
 
 @dataclass
@@ -60,6 +66,7 @@ class ImageBuild:
     duration_sec: float
     log_path: Path
     cached: bool = False
+    reused: bool = False
     dependencies: dict[str, str] = field(default_factory=dict)
     runtime_identity: dict = field(default_factory=dict)
 
@@ -72,6 +79,7 @@ class ImageBuild:
             "duration_sec": round(self.duration_sec, 2),
             "log": str(self.log_path),
             "cached": self.cached,
+            "reused": self.reused,
             "dependencies": dict(self.dependencies),
             "runtime_identity": dict(self.runtime_identity),
         }
@@ -114,7 +122,11 @@ def _kill_tree(proc: subprocess.Popen) -> None:
             )
         else:
             try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                # Only a group created for this child is ours to terminate.
+                if os.getpgid(proc.pid) == proc.pid:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                else:
+                    proc.kill()
             except (ProcessLookupError, PermissionError):
                 proc.kill()
     except Exception:  # noqa: BLE001 - best-effort teardown
@@ -124,18 +136,65 @@ def _kill_tree(proc: subprocess.Popen) -> None:
             pass
 
 
-def _run(command: list[str], *, timeout: int, log_path: Path) -> subprocess.CompletedProcess:
+def _wait_for_build(
+    proc: subprocess.Popen, *, timeout: int, log_path: Path,
+    recover_export: Callable[[float], str | None] | None,
+) -> str | None:
+    """Allow normal work its full budget, but probe a completed export early."""
+    if recover_export is None:
+        proc.wait(timeout=timeout)
+        return None
+    deadline = time.monotonic() + timeout
+    exported_at = None
+    next_probe = 0.0
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(proc.args, timeout)
+        try:
+            proc.wait(timeout=min(_EXPORT_POLL_SEC, remaining))
+            return None
+        except subprocess.TimeoutExpired:
+            pass
+        now = time.monotonic()
+        if now >= deadline:
+            raise subprocess.TimeoutExpired(proc.args, timeout)
+        if not _log_shows_completed_export(log_path):
+            exported_at = None
+            continue
+        if exported_at is None:
+            exported_at = now
+        if now - exported_at < _EXPORT_GRACE_SEC or now < next_probe:
+            continue
+        recovered = recover_export(deadline - now)
+        next_probe = time.monotonic() + _EXPORT_RETRY_SEC
+        # A real exit (especially a failure) takes precedence over recovery.
+        # Also recheck the log for errors arriving during image inspection.
+        if proc.poll() is not None:
+            return None
+        if recovered and _log_shows_completed_export(log_path):
+            return recovered
+
+
+def _run(
+    command: list[str], *, timeout: int, log_path: Path,
+    recover_export: Callable[[float], str | None] | None = None,
+) -> subprocess.CompletedProcess:
     """Stream build output to disk; keep only a bounded diagnostic tail in RAM."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     timed_out = False
+    recovered = None
     with log_path.open("wb") as handle:
         handle.write((f"$ {' '.join(command)}\n\n").encode("utf-8"))
         handle.flush()
         proc = subprocess.Popen(
-            command, stdout=handle, stderr=subprocess.STDOUT, **no_window_kwargs(),
+            command, stdout=handle, stderr=subprocess.STDOUT,
+            start_new_session=os.name != "nt", **no_window_kwargs(),
         )
         try:
-            proc.wait(timeout=timeout)
+            recovered = _wait_for_build(
+                proc, timeout=timeout, log_path=log_path, recover_export=recover_export,
+            )
         except subprocess.TimeoutExpired:
             timed_out = True
             _kill_tree(proc)
@@ -148,6 +207,26 @@ def _run(command: list[str], *, timeout: int, log_path: Path) -> subprocess.Comp
         finally:
             if proc.poll() is None:
                 _kill_tree(proc)
+                try:
+                    proc.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    pass
+            elif recovered:
+                # Preserve an exit code arriving just after the recovery probe.
+                recovered = None
+        if recovered and proc.poll() is None:
+            raise TaskError(
+                "infra_error", "Image exported but the stalled Docker CLI could not be stopped",
+                detail={"log": str(log_path), "post_export_hang": True},
+            )
+        if recovered and not _log_shows_completed_export(log_path):
+            recovered = None
+        if recovered:
+            handle.write((
+                f"\nRECOVERED_POST_EXPORT {recovered}: verified this build's image; "
+                "stopped stalled Docker CLI\n"
+            ).encode("utf-8"))
+            handle.flush()
     if timed_out:
         available = daemon_available(command[0])
         raise TaskError(
@@ -160,7 +239,7 @@ def _run(command: list[str], *, timeout: int, log_path: Path) -> subprocess.Comp
         handle.seek(0, 2)
         handle.seek(max(0, handle.tell() - 100_000))
         tail = handle.read().decode("utf-8", errors="replace")
-    return subprocess.CompletedProcess(command, proc.returncode, tail, "")
+    return subprocess.CompletedProcess(command, 0 if recovered else proc.returncode, tail, "")
 
 
 @limited("inspect")
@@ -375,27 +454,43 @@ def _read_log_tail(path: Path, limit: int = 100_000) -> str:
 def _log_shows_completed_export(path: Path) -> bool:
     """Return true when BuildKit finished tagging and unpacking the image."""
     text = _read_log_tail(path)
-    matches = list(_COMPLETED_EXPORT.finditer(text))
-    if not matches or "naming to" not in text.lower() or "unpacking to" not in text.lower():
-        return False
-    # A later fatal error may still make the tag unusable.
-    return not _BUILD_FATAL_AFTER_EXPORT.search(text[matches[-1].end():])
+    named = {}
+    for match in _COMPLETED_EXPORT.finditer(text):
+        vertex = match["vertex"]
+        if match["action"].lower() == "naming to":
+            named[vertex] = match.start()
+        elif vertex in named:
+            # Require completion of the same export vertex, not just a tag
+            # followed by an unpack still in progress (or another stage).
+            finished = re.search(rf"(?m)^#{vertex}[ \t]+DONE\b", text[match.end():])
+            if finished and not _BUILD_FATAL_AFTER_EXPORT.search(text[named[vertex]:]):
+                return True
+    return False
 
 
-def _recover_image_after_export(docker: str, image_ref: str, iid_file: Path, log_path: Path) -> str | None:
-    """Recover an image whose CLI session hung after a successful export."""
+def _recover_image_after_export(
+    docker: str, image_ref: str, iid_file: Path, log_path: Path, *,
+    attempt_id: str, timeout_sec: float = _EXPORT_INSPECT_TIMEOUT_SEC,
+) -> str | None:
+    """Recover only an image labeled by this exact build attempt."""
     if not _log_shows_completed_export(log_path):
         return None
     try:
         result = subprocess.run(
-            [docker, "image", "inspect", "--format", "{{.Id}}", image_ref],
-            capture_output=True, text=True, errors="replace", timeout=30,
+            [docker, "image", "inspect", "--format",
+             '{{.Id}} {{index .Config.Labels "' + _BUILD_ATTEMPT_LABEL + '"}}', image_ref],
+            capture_output=True, text=True, errors="replace",
+            timeout=min(timeout_sec, _EXPORT_INSPECT_TIMEOUT_SEC),
             **no_window_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    image_id = (result.stdout or "").strip()
-    if result.returncode != 0 or not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+    parts = (result.stdout or "").split()
+    if (result.returncode != 0 or len(parts) != 2 or parts[1] != attempt_id
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", parts[0])):
+        return None
+    image_id = parts[0]
+    if not _log_shows_completed_export(log_path):
         return None
     try:
         iid_file.write_text(image_id + "\n", encoding="ascii")
@@ -417,6 +512,8 @@ def build_image(
     build_args: dict[str, str] | None = None,
     product: str | None = None,
     product_ref: str | None = None,
+    reuse: bool = False,
+    on_build: Callable[[], None] | None = None,
 ) -> ImageBuild:
     if not context.is_dir():
         raise TaskError("build_error", f"Missing build context {context}")
@@ -434,6 +531,7 @@ def build_image(
     command = [
         docker,
         "build",
+        "--progress=plain",
         "--iidfile",
         str(iid_file),
         "-t",
@@ -450,23 +548,61 @@ def build_image(
         # reported as "(devel)" in build info and therefore never appears in
         # the dependency list.
         build_args = {**(build_args or {}), "HARBOR_SOURCE_REF": product_ref}
+    from .build_cache import build_signature, reuse_image
+    cache_path = log_path.with_name(log_path.name + ".image.json")
+    signature = None
+    if reuse and not no_cache:
+        signature = build_signature(
+            docker, context, dockerfile, build_args=build_args or {},
+            product=product, product_ref=product_ref,
+        )
+        cached = reuse_image(docker, cache_path, signature, image_ref) if signature else None
+        if cached:
+            iid_file.write_text(cached["image_digest"] + "\n", encoding="ascii")
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write(f"\nREUSED_IMAGE {cached['image_digest']} inputs={signature}\n")
+            return ImageBuild(
+                name=name, context=context, dockerfile=dockerfile, image_ref=image_ref,
+                image_digest=cached["image_digest"], architecture=cached["architecture"],
+                duration_sec=0.0, log_path=log_path, cached=True, reused=True,
+                dependencies=dict(cached.get("dependencies") or {}),
+                runtime_identity=dict(cached.get("runtime_identity") or {}),
+            )
+    if on_build is not None:
+        on_build()
     if no_cache:
         command.append("--no-cache")
     for key, value in (build_args or {}).items():
         command.extend(["--build-arg", f"{key}={value}"])
-    command.append(str(context))
     started = time.monotonic()
     completed = None
     for attempt in range(2):
+        # A reused tag/iidfile must never turn a failed new build into success,
+        # including when retrying after a transient registry failure.
+        iid_file.unlink(missing_ok=True)
+        attempt_id = uuid.uuid4().hex
+        attempt_command = [
+            *command, "--label", f"{_BUILD_ATTEMPT_LABEL}={attempt_id}", str(context),
+        ]
+
+        def recover_export(remaining: float) -> str | None:
+            return _recover_image_after_export(
+                docker, image_ref, iid_file, log_path,
+                attempt_id=attempt_id, timeout_sec=remaining,
+            )
+
         try:
-            completed = _run(command, timeout=timeout_sec, log_path=log_path)
+            completed = _run(
+                attempt_command, timeout=timeout_sec, log_path=log_path,
+                recover_export=recover_export,
+            )
         except TaskError as exc:
             if exc.category.code != "build_error":
                 raise
-            recovered = _recover_image_after_export(docker, image_ref, iid_file, log_path)
+            recovered = recover_export(_EXPORT_INSPECT_TIMEOUT_SEC)
             if recovered:
                 completed = subprocess.CompletedProcess(
-                    command, 0, _read_log_tail(log_path), ""
+                    attempt_command, 0, _read_log_tail(log_path), ""
                 )
                 break
             if _log_shows_completed_export(log_path):
@@ -499,7 +635,11 @@ def build_image(
             detail={"log": str(log_path)},
         )
     duration = time.monotonic() - started
-    built_id = iid_file.read_text(encoding="ascii").strip()
+    try:
+        built_id = iid_file.read_text(encoding="ascii").strip()
+    except (OSError, UnicodeError) as exc:
+        raise TaskError("build_error", "Docker did not write a valid immutable image ID",
+                        detail={"log": str(log_path)}) from exc
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", built_id):
         raise TaskError("build_error", "Docker did not write a valid immutable image ID")
     digest, architecture = inspect_image(built_id, dockerfile=dockerfile)
@@ -519,7 +659,7 @@ def build_image(
             cleanup_replaced_images(context)
         except (OSError, ValueError, PipelineError, subprocess.SubprocessError):
             pass  # Terminal cleanup retries; never invalidate a successful build.
-    return ImageBuild(
+    built = ImageBuild(
         name=name,
         context=context,
         dockerfile=dockerfile,
@@ -532,6 +672,15 @@ def build_image(
         dependencies=identity.get("dependencies", {}) if product else dependency_lock(context),
         runtime_identity=identity,
     )
+    if signature and signature == build_signature(
+        docker, context, dockerfile, build_args=build_args or {},
+        product=product, product_ref=product_ref,
+    ):
+        try:
+            write_json(cache_path, {"signature": signature, "image": built.to_json()})
+        except OSError:
+            pass  # A cache write failure must not invalidate a measured build.
+    return built
 
 
 def build_task_images(
@@ -548,6 +697,8 @@ def build_task_images(
     environment_image: str | None = None,
     product: str | None = None,
     product_ref: str | None = None,
+    reuse: bool = False,
+    on_build: Callable[[], None] | None = None,
 ) -> dict:
     """Build the target and verifier images and return an image set.
 
@@ -581,6 +732,7 @@ def build_task_images(
         no_cache=no_cache,
         product=product,
         product_ref=product_ref,
+        reuse=reuse, on_build=on_build,
     )
     tests_context = task_dir / "tests"
     if not tests_context.is_dir():
@@ -594,6 +746,7 @@ def build_task_images(
         log_path=log_dir / "build-verifier.log",
         timeout_sec=timeout_sec,
         no_cache=no_cache,
+        reuse=reuse, on_build=on_build,
     )
     if target_only:
         if not environment_image:
@@ -627,6 +780,7 @@ def build_task_images(
             log_path=log_dir / "build-agent.log",
             timeout_sec=timeout_sec,
             no_cache=no_cache,
+            reuse=reuse, on_build=on_build,
         )
     bot_context = task_dir / "tests" / "bot"
     if (bot_context / "Dockerfile").is_file():

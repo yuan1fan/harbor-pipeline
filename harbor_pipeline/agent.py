@@ -66,10 +66,59 @@ _DROP_NAMES = {
     "ANTHROPIC_MODEL",
 }
 
-TOOL_LIST = "Read,Write,Edit,Grep,Glob,Bash"
-ALLOWED_TOOLS = (
+AUTHOR_TOOLS = "Read,Write,Edit,Grep,Glob,Bash"
+AUTHOR_ALLOWED_TOOLS = (
     "Read,Write,Edit,Grep,Glob,"
     "Bash(harbor-author:*),Bash(./bin/harbor-author:*),Bash(bash bin/harbor-author:*)"
+)
+RESOLVER_TOOLS = "Read,Write,Edit,Grep,Glob,Bash"
+RESOLVER_ALLOWED_TOOLS = (
+    "Read,Write,Edit,Grep,Glob,"
+    "Bash(harbor-evidence:*),Bash(./bin/harbor-evidence:*),"
+    "Bash(bash bin/harbor-evidence:*)"
+)
+
+# Backward-compatible names used by the authoring path and its tests.
+TOOL_LIST = AUTHOR_TOOLS
+ALLOWED_TOOLS = AUTHOR_ALLOWED_TOOLS
+
+
+@dataclass(frozen=True)
+class AgentProfile:
+    """The narrow surface a specific native session may use.
+
+    The author needs Write/Edit and the Docker-aware ``harbor-author`` helper.
+    The evidence resolver only needs to read evidence, query allowlisted
+    sources and write one proposal; sharing the author profile would give it
+    far more power than its job requires.
+    """
+
+    role: str
+    tool_list: str
+    allowed_tools: str
+    helper_name: str
+    helper_dir: str
+    workspace_env: str
+    trace_name: str
+
+
+AUTHOR_PROFILE = AgentProfile(
+    role="author",
+    tool_list=AUTHOR_TOOLS,
+    allowed_tools=AUTHOR_ALLOWED_TOOLS,
+    helper_name="harbor-author",
+    helper_dir="author-bin",
+    workspace_env="HARBOR_AUTHOR_WORKSPACE",
+    trace_name="author-trace.jsonl",
+)
+RESOLVER_PROFILE = AgentProfile(
+    role="resolver",
+    tool_list=RESOLVER_TOOLS,
+    allowed_tools=RESOLVER_ALLOWED_TOOLS,
+    helper_name="harbor-evidence",
+    helper_dir="resolver-bin",
+    workspace_env="HARBOR_EVIDENCE_WORKSPACE",
+    trace_name="resolver-trace.jsonl",
 )
 
 
@@ -139,14 +188,18 @@ class AgentRunner(Protocol):
     ) -> AgentOutcome: ...
 
 
-def build_agent_settings(model: str) -> dict[str, Any]:
-    """Permission set for an authoring session.
+def build_agent_settings(
+    model: str,
+    *,
+    profile: AgentProfile = AUTHOR_PROFILE,
+) -> dict[str, Any]:
+    """Permission set for a native session.
 
-    The allowlist is intentionally narrow: the agent can edit its workspace
-    with the native file tools and can call only the ``harbor-author`` helper.
-    Every other Bash command is denied automatically because the session runs
-    with ``--permission-prompts none``.
+    The allowlist is intentionally narrow: the agent can use its native file
+    tools and can call exactly one helper. Every other Bash command is denied
+    automatically because the session runs with ``--permission-prompts none``.
     """
+    helper = profile.helper_name
     return {
         "model": model,
         "permissions": {
@@ -156,9 +209,9 @@ def build_agent_settings(model: str) -> dict[str, Any]:
                 "Edit",
                 "Grep",
                 "Glob",
-                "Bash(harbor-author:*)",
-                "Bash(./bin/harbor-author:*)",
-                "Bash(bash bin/harbor-author:*)",
+                f"Bash({helper}:*)",
+                f"Bash(./bin/{helper}:*)",
+                f"Bash(bash bin/{helper}:*)",
             ],
             "deny": [
                 "WebFetch",
@@ -172,7 +225,25 @@ def build_agent_settings(model: str) -> dict[str, Any]:
                 "Edit(.harbor/**)",
                 "Write(CLAUDE.md)",
                 "Edit(CLAUDE.md)",
-            ],
+            ]
+            + (
+                [
+                    # The resolver only needs its helper. Denying the common
+                    # shell readers stops a pipeline such as
+                    # ``harbor-evidence show ... | head`` from widening the
+                    # surface; ``show --limit`` is the supported form.
+                    "Bash(cd:*)",
+                    "Bash(ls:*)",
+                    "Bash(cat:*)",
+                    "Bash(head:*)",
+                    "Bash(tail:*)",
+                    "Bash(echo:*)",
+                    "Bash(python:*)",
+                    "Bash(python3:*)",
+                ]
+                if profile.role == "resolver"
+                else []
+            ),
             "defaultMode": "dontAsk",
         },
     }
@@ -183,12 +254,13 @@ def agent_environment(
     workspace: Path,
     repo_root: Path,
     extra_env: dict[str, str] | None = None,
+    profile: AgentProfile = AUTHOR_PROFILE,
 ) -> dict[str, str]:
     """A clean child environment for the nested Claude Code process.
 
     The parent session may be a Claude Code process itself. Its
     ``CLAUDECODE``/``CLAUDE_CODE_*`` variables, its messaging socket and the
-    pipeline's source tokens must not leak into the authoring agent.
+    pipeline's source tokens must not leak into the agent.
     """
     # Windows environment names are case-insensitive and are usually stored
     # upper-case (PROGRAMFILES, SYSTEMROOT). Compare case-folded so Docker's
@@ -213,19 +285,21 @@ def agent_environment(
         env["ANTHROPIC_AUTH_TOKEN"] = token
     env.setdefault("HOME", os.environ.get("USERPROFILE", str(Path.home())))
     path = env.get("PATH", "")
-    # The wrapper lives beside the author workspace, not inside it, so the
-    # agent cannot rewrite the only command it is allowed to execute.
-    local_bin = workspace.parent / "author-bin"
+    # The wrapper lives beside the workspace, not inside it, so the agent
+    # cannot rewrite the only command it is allowed to execute.
+    local_bin = workspace.parent / profile.helper_dir
     env["PATH"] = str(local_bin) + (os.pathsep + path if path else "")
     env["PYTHONPATH"] = str(repo_root) + (
         os.pathsep + os.environ["PYTHONPATH"]
         if os.environ.get("PYTHONPATH")
         else ""
     )
-    env["HARBOR_AUTHOR_WORKSPACE"] = str(workspace)
-    env["HARBOR_AUTHOR_PYTHON"] = os.environ.get(
-        "HARBOR_AUTHOR_PYTHON", _python_identity()
-    )
+    env[profile.workspace_env] = str(workspace)
+    # Both helpers use the same interpreter discovery variable; keeping the
+    # author name makes the existing author wrapper remain unchanged.
+    python = os.environ.get("HARBOR_AUTHOR_PYTHON", _python_identity())
+    env["HARBOR_AUTHOR_PYTHON"] = python
+    env["HARBOR_EVIDENCE_PYTHON"] = python
     env.update(extra_env or {})
     from .resources import child_environment
     env.update(child_environment())
@@ -239,14 +313,23 @@ def _python_identity() -> str:
 
 
 class ClaudeCodeAgent:
-    """Run one ``claude -p`` authoring session with native tools."""
+    """Run one ``claude -p`` native session with a restricted profile."""
 
     name = "claude-code"
 
-    def __init__(self, config: Config, *, role: str = "author"):
+    def __init__(
+        self,
+        config: Config,
+        *,
+        role: str = "author",
+        profile: AgentProfile | None = None,
+    ):
         self.config = config
         self.settings: ModelSettings = config.model_for(role)
         self.role = role
+        self.profile = profile or (
+            RESOLVER_PROFILE if role == "resolver" else AUTHOR_PROFILE
+        )
         self.binary = shutil.which("claude")
         if not self.binary:
             raise PipelineError("claude CLI is not on PATH")
@@ -277,9 +360,9 @@ class ClaudeCodeAgent:
                 "--strict-mcp-config",
                 "--disable-slash-commands",
                 "--tools",
-                TOOL_LIST,
+                self.profile.tool_list,
                 "--allowedTools",
-                ALLOWED_TOOLS,
+                self.profile.allowed_tools,
                 "--permission-mode",
                 "dontAsk",
                 "--permission-prompts",
@@ -371,6 +454,7 @@ class ClaudeCodeAgent:
             workspace=workspace,
             repo_root=Path(__file__).resolve().parent.parent,
             extra_env=extra_env,
+            profile=self.profile,
         )
         stdout_lines: list[str] = []
         stderr_chunks: list[str] = []
@@ -415,7 +499,7 @@ class ClaudeCodeAgent:
             timed_out.set()
             _kill_process(proc)
 
-        trace_path = workspace / ".harbor" / "author-trace.jsonl"
+        trace_path = workspace / ".harbor" / self.profile.trace_name
         trace_path.parent.mkdir(parents=True, exist_ok=True)
         timer = threading.Timer(self.settings.timeout_sec, watchdog)
         timer.start()
@@ -430,8 +514,9 @@ class ClaudeCodeAgent:
             _kill_process(proc)
         finally:
             timer.cancel()
-            from .author_debug import cleanup
-            cleanup(workspace)
+            if self.profile.role == "author":
+                from .author_debug import cleanup
+                cleanup(workspace)
 
         err_thread.join(timeout=5)
         stderr = "".join(stderr_chunks)

@@ -46,6 +46,107 @@
 - 上下文：由 Claude Code 原生多轮对话、prompt caching 和 auto-compaction 管理；不再每步重发所有文件。
 - 预算：`--max-turns`、`--max-budget-usd`、会话超时，加上 helper 自己的 build/probe/exec 计数上限。
 
+### 2.1.1 证据解析 agent（可选：缺失补全与 author 纠正）
+
+`collect` 仍然是确定性的：同样的来源、同样的 allowlist、同样的 sha256。
+如果固定 discovery 没有得到完整的 vulnerable/fixed 对，`evidence_resolver = true` 会启动一个独立的证据解析会话。完整候选仍直接进入 author；author 检查源码后发现配对有误时，也可以主动申请调用同一个 resolver：
+
+- 工作区：`runs/<run>/<CVE>/resolver/`，只能读 `inputs/`；
+- 工具：`Read/Write/Edit/Grep/Glob` + 仅限 `harbor-evidence` helper（Write/Edit 只用于 `reconciliation.json`）；
+- 禁止 `WebFetch/WebSearch`、任意 shell、Docker、写入 `inputs/`；
+- helper 所有网络请求仍走 `sources.fetch` 的 https + 主机白名单 + 公网 IP 校验 + DNS pinning；
+- 输出 `reconciliation.json` 提案；`freeze`、`depcheck` 仍然重新验证，agent 不能直接改 spec。
+
+helper 支持 `list/show`、`registry`、`github tags/releases/commit/parent`、`fetch` 和 `propose`。
+`discovery.json` 的两个 ref 分别携带类型，不能仅凭 `0.0.14` 的外观判断它是 registry 版本还是 Git tag：
+
+```json
+{
+  "vulnerable": {"kind": "tag", "value": "0.0.14", "repository": "owner/repo"},
+  "fixed": {"kind": "commit", "value": "8074483c0000000000000000000000000000000000", "repository": "owner/repo"},
+  "fix_commit": "8074483c0000000000000000000000000000000000"
+}
+```
+
+上例 SHA 是格式示意。`kind` 支持 `package_version`、`tag`、`commit`、`archive`、`unresolved`。包版本记录 `ecosystem/package`，Git 引用记录仓库和解析出的 commit，发布归档记录 URL 和 SHA-256；来源通过 `source_id` 回溯。旧 `vulnerable_ref/fixed_ref` checkpoint 仍可读取，无法确定类型的旧值保留为 `unresolved` 并重新查证；新 discovery JSON 只写带类型的字段。生成模板和 normalization 会按 ref 类型选择构建方式，源码或归档对使用 `generic`，避免把 SHA/tag 传给 npm、pip 或 Maven。
+
+确定性 discovery 在调用 resolver 前执行以下通用规则：
+
+- 解析 CNA `packageURL` 中的 PyPI/npm/Maven/Go 身份；使用真实 registry 元数据核对版本及预发布版本拼写。
+- 读取明确 affected 值、简单范围的包含上界、明确 unaffected 版本；排他上界不充当受影响版本，选择版本时同时检查范围下界。
+- 正常的 affected/unaffected 并列项和多个维护分支分别匹配，不把它们整体当成冲突；支持可解析的 `custom` 数字范围和 `unspecified` 开放下界。保留已知 tag 的原始前缀，以其版本部分匹配范围；OSV 的明确 affected 列表可补充 CNA 枚举遗漏，但不能覆盖明确 unaffected 或含糊的状态变更。
+- 验证真实 Git tag，包括 annotated tag，保留 `v` 前缀；Git SHA 不参与版本排序。
+- 源码候选还要通过 Git 祖先关系检查，拒绝已包含修复或位于不相关分支的 tag。只读取比较接口的摘要，避免下载整个版本差分；查询仍计入每题的来源预算。
+- CNA 的 `versionType=git` 保留 Git 含义；同一项目在 PyPI 发布了同名版本，不能据此把 Git 范围转换成 PyPI 范围。旧缓存中的这类推断同样需要重新查证。
+- 修复链接失效时，只在公告或 OSV 已声明的上游仓库查找同一 SHA；Go pseudo-version 的 hash 通过上游提交元数据解析。
+- 只有源码 fix 可用时验证 tag/commit 对；若发布 tag 无法验证，可在 CNA 有合理 affected 范围、修复包含实际应用代码差分且只有一个 parent 时，把该 parent 作为待差分验证的候选。全为 unaffected 的记录、相互矛盾的版本声明、纯文档/版本号变动和 merge commit 不走这条回退。
+- 从 [WordPress 官方插件 API](https://developer.wordpress.org/reference/functions/plugins_api/) 获取版本和下载来源，下载 ZIP 并检查插件头中的版本与归档 SHA-256。GitHub 无同名 tag 不代表 WordPress 发布版本不存在。
+- 对空 patch 重取 commit JSON；若提交本身没有文件差分，保留已验证版本并标记 fix 证据不足，不用另一父提交的任意差分代替漏洞修复依据。resolver 提案同样必须通过实际 patch 检查。
+- GitHub `.patch` 含多个 `From <SHA>` 时，按原链接请求 commit JSON 并核对 SHA；不能把邮件补丁的第一个提交当成 fixed。已有缓存同样重新解析，无法核实原链接指向的提交时保留未决。
+- 公告 fix 仍缺失、无法获取或没有实际 patch 时，在已确认的上游仓库按精确 CVE ID 搜索提交，最多 5 条。只有搜索结果完整、修复类标题（`fix:` / `fix(scope):` / `security:`）、实际代码差分和单父提交共同筛出唯一候选时，才同时替换为“父提交 / 修复提交”的 `commit` 对。纯文档、测试、自身版本号改动不作为此规则的修复候选；多候选、详情取不到或预算耗尽时保留未决。搜索和详情查询仍共用下面的 8 次来源请求上限，正常候选不额外搜索。
+
+每次补全最多新增 8 个来源请求，命中已验证的本地证据时不发新请求。pipeline 和 triage 的缓存入口同样执行类型迁移、身份补全和证据检查。来源冲突、复杂分支或未验证的 ref 保持不完整；后续漏洞差分验证仍照常执行。
+
+`is_complete` / discovery 的 `ready` 只表示候选证据完整，不表示已经证明该 CVE 的漏洞／修复机制。公告可能引用了其他问题的补丁，祖先关系也不能证明所选 vulnerable 确实存在漏洞。确认版本对正确还需要核对实际源码或发布包，并在相同前置条件下验证漏洞差分及其与补丁的因果关系；固定规则和 resolver 产出的候选都遵守这个标准。
+
+版本选择与校验统一由 `discovery_refs.py` 执行：`collect` 只收集公告、包身份、版本提示和修复来源；发布版本、源码 tag、父提交等候选使用同一套版本比较和身份检查，完整的旧 checkpoint 也走相同的配对校验。原先收集阶段的相邻版本探测并入发布版本选择器，最多探测修复版本前的 4 个数字邻居，必须同时满足 affected 范围和真实 registry 身份，不能把推算出的字符串直接当成已发布版本。Go/Maven 校验和仅为最终选定的包版本获取。
+
+`discovery.json` 的 `selection_trace` 按顺序记录本次选择依据，无需查看 agent 轨迹：
+
+- `rule`：使用的规则，例如 `registry_identity`、`git_ancestry`、`fix_single_parent_candidate`。
+- `outcome` / `reason`：候选、验证通过、拒绝、未决或最终选定，以及具体理由。
+- `candidate` / `source_ids`：尝试的引用及证据索引中的来源；`affected_scope` 记录匹配的 CNA 版本声明。
+- 最后一项记录实际输出的 `vulnerable`、`fixed`、`fix_commit`，以及 `mechanism_verified: false`，防止把元数据检查误读为机制证明。
+
+新运行逐条保留实际查询的候选及拒绝原因；OSV 等大型版本列表的范围过滤记录数量、少量示例和原始来源，避免把数百个未采用的版本逐个写入 author 输入。复用已有完整轨迹的 checkpoint 不重复追加；旧 checkpoint 没有选择历史时，只记录本次重新校验和复用事实，不补写未经记录的历史原因。resolver 改写 ref 时也会追加对应的提案记录。
+
+author 发现“vulnerable 已修复、fixed 仍有漏洞、补丁针对其他问题或发布包源码不符”时，写一份 `evidence-review-request.json`，提供 `reason` 和本地源码／日志的 `citations`（`path`、逐字匹配的 `quote`）；可附带 `suggested_refs`，不要求 author 已经找到替代版本。随后调用：
+
+```bash
+harbor-author request-evidence-review --file evidence-review-request.json
+```
+
+helper 核对引用并记录当前版本对身份，author 随即结束会话。pipeline 把申请交给现有 resolver，要求其回应本次 `review_request_id`、说明原因并引用上游证据。新对使用共享的 ref 身份与祖先关系校验，校验过程不重新自动选对；无效提案或 resolver 故障会停止该轮，不能继续使用被质疑的旧对。
+
+批准修改后，pipeline 增加 revision，归档旧元数据，使旧 spec、synthesis、目标构建记录、probe、matrix 进度和 solver 结果失效，刷新 author 输入并恢复同一个会话。author 的 `target/`、`poc/` 和预算计数保留，需要按新 ref 更新源码并重新构建、验证。若 resolver 以证据说明原对成立，也会把解释交回 author 并要求重新 probe。每题最多 `max_evidence_reviews = 2` 次（可配置为 0 禁用），处理记录保存在 `evidence-reviews/<request_id>/review.json`；已批准但应用中断的修改可恢复，不重复调用 resolver。
+
+手动回放已有 checkpoint：
+
+```bash
+python -m harbor_pipeline -c pipeline.scale.toml resolve-evidence \
+  --cve CVE-2026-2419 --run-dir runs/<run>/CVE-2026-2419 --apply --json
+```
+
+### 2.1.2 Requeue 已解析的 `UNSUPPORTED` 候选
+
+`UNSUPPORTED` 是终态，不能被 resolver 偷偷改成可继续状态。resolver 成功后，用显式 requeue 创建新 run：
+
+```bash
+python -m harbor_pipeline -c pipeline.scale.toml requeue-resolved \
+  --cve CVE-2026-79785 \
+  --source-run-dir runs/<old-run>/CVE-2026-79785 \
+  --run-id resolved-YYYYMMDD --json
+```
+
+requeue 会：
+
+- 校验 `resolver-result.json` 是 `proposed`；
+- 校验 discovery 的 vulnerable/fixed/fix commit/source 完整；
+- 跑一次最小 `depcheck`；
+- 把 evidence、discovery、resolver result 复制到新 run；
+- 新 run 从 `EVIDENCE_READY` 开始，history 记录 `requeued after evidence resolver`；
+- 旧 run 保持 `UNSUPPORTED` 不变，便于对比和审计。
+
+之后才能对新 run 执行 `run ... --until build` 或 `--until validate`。
+
+批量跑已经解析的 9 个候选：
+
+```bash
+python scripts/run_resolved_tests.py --run-id resolved-20261116-all --workers 2
+```
+
+脚本依次执行 `requeue-resolved → run --until build → run --until validate`，日志和 summary 写到 `work/resolved-tests/<run-id>/`。它不会进入 solver/reviewer/release。`--workers` 控制候选级并发；Docker admission 和模型网关仍会限流，建议从 2–3 开始。`--stop-on-fail` 只在 `--workers 1` 下可用。
+
 ### 2.2 `harbor-author` helper（内循环）
 
 agent 只能通过 `harbor-author` 接触外部世界：

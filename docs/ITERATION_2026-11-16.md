@@ -105,3 +105,76 @@ Remove-Item Env:HARBOR_RUN_DOCKER_TESTS
 ## 下一轮应由哪些证据驱动
 
 构建超时项应优先复用各自的已生成目录，在健康且低并发的引擎上测量实际构建阶段，区分下载、编译和 Docker 状态流故障。只有重新出现具体失败时再修改对应路径。其余 reviewer 提出的上下文不足、任务契约不适用等结论仍需逐题核实，不能将“无法确认”直接当成机制复现错误。
+
+## Requeue 试点（2026-11-16）
+
+`UNSUPPORTED` 是终态；resolver 只更新 evidence/discovery，不会改旧 run。新增 `requeue-resolved` 把已解析的终态候选复制到新 run，旧 run 保留：
+
+- 校验 `resolver-result.json` 为 proposed；
+- 校验 discovery 的 vulnerable/fixed/fix commit/source；
+- 跑最小 `depcheck`；
+- 复制 evidence、discovery、resolver result；
+- 新 run 从 `EVIDENCE_READY` 开始，history 记录 `requeued after evidence resolver`。
+
+用 `CVE-2026-79785` 做第一次真实 requeue：
+
+1. `work/resolver-eval/CVE-2026-79785` → `runs/resolved-20261116/CVE-2026-79785`，状态 `EVIDENCE_READY`。
+2. author 会话启动，写出 target/PoC/bundle；第一次 author 以 `versions.vulnerable_ref 4.0.0b8 does not appear in any fetched source` 失败。
+3. 现场核对发现是确定性 grounding 问题：discovery 使用 PEP 440 `4.0.0b8`，证据里只有 git tag `v4.0.0-beta.8`。在 `synthesis._grounded` 增加受限的版本别名（`4.0.0b8` ↔ `4.0.0-beta.8`）后，失败 author 的 bundle 重新运行 `normalize_bundle` 为 0 issues。
+4. 重新 requeue 为 `runs/resolved-20261116b`，author 再次启动；vulnerable 和 fixed target 镜像都已构建。fixed 构建再次遇到 Docker post-export hang，helper 在 600 秒超时后恢复并写入 build-state。
+5. 用真实 `harbor-author probe` 回放：observer 和 verifier 已启动，但 target 的 `/business` 检查失败，probe 返回 `target_unhealthy`，author 没有提交。这说明 requeue→author→build→probe 链路可达，但该 author 产物仍需继续修复业务路由。
+
+这证明 requeue 的状态迁移和 author 入口有效，同时发现两个需要继续处理的点：
+
+- 版本别名 grounding 已修；否则 PEP 440 与 git tag 的差异会误杀正确 bundle。
+- author helper 的 post-export hang 仍会等待 `command_timeout_sec` 才恢复；本次 fixed build 在 600 秒后恢复，说明恢复逻辑有效但等待时间偏长。
+- `79785` 的 target probe 因 `/business` 失败，未进入 submit/T01–T12；这是 author 产物缺陷，不是 requeue 或 resolver 伪造。
+- 为继续 probe，测试时把已导出的 vulnerable 镜像手工补入 build-state；正常 helper 路径应在超时恢复后自动写回。这个手工步骤只用于本轮诊断，不是正式 requeue 行为。
+
+## 证据解析 agent 试点（2026-11-16）
+
+新增一个可选的、只读的 `evidence_resolver` 阶段，位于 `collect` 和 `freeze` 之间。它不替代确定性采集，也不修改 author/build/verify 的评分边界；只在 discovery 无法给出完整 vulnerable/fixed 对时启动。
+
+### 实现边界
+
+- 独立原生 Claude Code 会话，工作区 `runs/<run>/<CVE>/resolver/`。
+- 只读 `inputs/`；工具为 `Read/Grep/Glob` 加 `harbor-evidence` helper。
+- helper 的网络仍走 `sources.fetch` 的 https、主机白名单、公网 IP 校验和 DNS pinning。
+- 输出 `reconciliation.json`；`freeze`、`depcheck` 仍会重新校验，agent 不能直接写 spec。
+- 只对不完整 discovery 触发；完整候选不消耗 resolver 会话。
+- `fixed_ref` 为 raw commit 时强制 `ecosystem="generic"` 和源码项目路径，避免把 commit 当作 registry 版本。
+
+### 回放结果
+
+用已有 `discovery.json` / `evidence/` 回放 11 个历史 UNSUPPORTED 候选，不启动 Docker、不跑 author/solver：
+
+| CVE | resolver 结果 | vulnerable | fixed | ecosystem |
+|---|---|---|---|---|
+| 10130 | proposed | 0.2.0 | 0.3.1 | pypi |
+| 11470 | proposed | 5.0.1 | 8009845b… | generic |
+| 2419 | proposed | 1.69 | 1.69.1 | generic |
+| 2531 | proposed | 25.14.1 | 74d6f0fd… | generic |
+| 28428 | unsupported | — | — | — |
+| 32749 | proposed | fd652613… | 5ee00907… | generic |
+| 40501 | proposed | c709d3fb… | 15185303… | generic |
+| 5328 | proposed | 829bac71… | 42bcb946… | generic |
+| 79785 | proposed | 4.0.0b8 | 4.0.0b9 | pypi |
+| 8113 | proposed | 43905b93… | e8bd4e17… | generic |
+| 22661 | proposed | 6d0bf7ff… | 0f8d4c38… | generic |
+
+- 10/11 形成提案并写入 `discovery.json`；1 个 `28428` 因 GitHub API 403 无法取得 parent commit，resolver 明确返回 unsupported，没有编造版本。
+- 10 个提案用最小 bundle 跑 `depcheck.check_bundle` 均为 0 issues；这证明证据配对和 registry 版本检查相容，但不等于题目已构建或发布。
+- 11 个独立 resolver 会话合计约 4.90 美元；单次 11–27 turns，约 0.20–1.00 美元。
+- `10130` 第一次提案引用了零字节 patch；加入 zero-byte/short-source gate 后，第二次自动改为抓取 GitHub commit JSON 并成功。
+- `10130` 回放还暴露了 Windows 控制台 GBK 输出问题：`harbor-evidence show` 遇到 emoji 时以编码错误退出。helper 现在把 stdout/stderr 重配置为 UTF-8 + replace，避免把显示编码问题误判为查询失败。
+- `2531`、`32749` 最初仍保留 pypi/go 的 registry 版本，`depcheck` 拒绝 raw commit；加入“raw commit 必须 generic source build”规则后重新提案通过。
+- `22661` 第一次在 20 turns 上限处停止；提高到 40 turns 并限制 helper 调用后，第二次在 22 turns 内完成。
+- `40501` 证据上可形成 commit 对，但它是 Electron 桌面应用，是否满足 Web 契约仍需 author 判断；本轮没有把它算作可发布。
+- `11470`、`5328` 等 generic source 方案要求 author 从源码 commit 构建，尚未经过 build/probe/T01–T12。
+
+### 测试
+
+- 新增 `tests/test_evidence_resolver.py`：16 个用例覆盖 workspace 权限、提案 schema、zero-byte 来源、raw-commit/generic 规则、stale proposal、requeue、helper GitHub 记录、pipeline 集成；另有 `test_grounded_accepts_pep440_and_git_tag_spellings` 覆盖版本别名。
+- `python -m pytest -q -ra`：408 collected，5 个容器用例 skipped，exit 0。
+- `ruff check` 对改动文件通过。
+- 本轮没有运行完整 pipeline，也没有把任何历史 UNSUPPORTED 状态改写成 RELEASED；回放副本位于 `work/resolver-eval/` 和 `work/resolver-test/`。

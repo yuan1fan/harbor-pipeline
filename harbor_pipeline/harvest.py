@@ -577,7 +577,15 @@ def _triage_one(
     if not no_cache:
         try:
             discovery = discovery_mod.load(run_dir, cve_id)
-            cache_hit = True
+            evidence = read_json(run_dir / "evidence-index.json")
+            if not discovery_mod.checkpoint_evidence_usable(evidence, run_dir):
+                discovery = None
+            else:
+                _, discovery = discovery_mod.complete_missing_refs(
+                    settings, run_dir, evidence, discovery
+                )
+                write_json(run_dir / "discovery.json", discovery.to_json())
+            cache_hit = discovery is not None
         except (OSError, ValueError, PipelineError):
             discovery = None
     if discovery is None:
@@ -608,7 +616,7 @@ def _triage_one(
                 ),
             )
     notes = list(discovery.notes)
-    if not discovery.has_fix_pair:
+    if not discovery.is_complete:
         reason = "; ".join(notes) or "no vulnerable/fixed release pair and fix commit"
         return TriageResult(
             cve_id=cve_id,

@@ -14,6 +14,7 @@ import json
 import os
 import shlex
 import sys
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,10 +28,13 @@ from .authoring import (
     BUNDLE_FILE,
     COUNTERS_FILE,
     DECLINED_FILE,
+    EVIDENCE_REVIEW_FILE,
     JOB_STATE_FILE,
     PROBE_STATE_FILE,
     SUBMISSION_FILE,
     assemble_bundle,
+    evidence_review_pending,
+    evidence_review_request,
     validate_workspace,
 )
 from .backend import build_image, run_in_image
@@ -306,7 +310,13 @@ def cmd_build(ctx: ToolContext, *, variant: str = "both", quiet: bool = False) -
         if not quiet:
             _print({"ok": False, "stage": "prepare", "error": str(exc)[:3000]})
         return 1
-    _charge(ctx, "builds")
+    charged = False
+
+    def charge_build():
+        nonlocal charged
+        if not charged:
+            _charge(ctx, "builds")
+            charged = True
     results: dict[str, dict] = {}
     variants = ("vulnerable", "fixed") if variant == "both" else (variant,)
     for name in variants:
@@ -321,6 +331,7 @@ def cmd_build(ctx: ToolContext, *, variant: str = "both", quiet: bool = False) -
                 image_ref=image_ref,
                 log_path=log_path,
                 timeout_sec=ctx.config.pipeline.command_timeout_sec,
+                reuse=True, on_build=charge_build,
             )
         except TaskError as exc:
             _job_finish(
@@ -344,6 +355,7 @@ def cmd_build(ctx: ToolContext, *, variant: str = "both", quiet: bool = False) -
             "source_digest": digest(tree_hashes(context)),
             "task_dir": str(task_dir),
             "cached": build.cached,
+            "reused": build.reused,
             "log": str(log_path),
         }
     state_path = ctx.workspace / BUILD_STATE_FILE
@@ -376,6 +388,7 @@ def cmd_build(ctx: ToolContext, *, variant: str = "both", quiet: bool = False) -
                     name: {
                         "image": item["image_ref"],
                         "cached": item.get("cached"),
+                        "reused": item.get("reused", False),
                         "log": item["log"],
                     }
                     for name, item in results.items()
@@ -393,6 +406,13 @@ def _load_build_state(ctx: ToolContext, bundle: dict) -> dict:
     variants = state.get("variants") or {}
     if not all(variants.get(name, {}).get("image_ref") for name in ("vulnerable", "fixed")):
         return {}
+    from .backend import docker_binary
+    from .build_cache import image_identity
+    docker = docker_binary()
+    for image in [*variants.values(), *(state.get("base") or {}).values()]:
+        identity = image.get("image_digest")
+        if not identity or image_identity(docker, identity) != identity:
+            return {}
     return state
 
 
@@ -480,6 +500,8 @@ def cmd_probe(ctx: ToolContext, *, alternate: bool = False, quiet: bool = False)
 
 
 def cmd_submit(ctx: ToolContext) -> int:
+    if evidence_review_pending(ctx.workspace):
+        raise PipelineError("evidence review is pending; end this session so the pipeline can invoke the resolver")
     bundle, notes, issues = validate_workspace(
         workspace=ctx.workspace,
         run_dir=ctx.run_dir,
@@ -522,6 +544,9 @@ def cmd_submit(ctx: ToolContext) -> int:
             "submitted_at": utc_now_text(),
         },
     )
+    # A successful submission supersedes an earlier exploratory decline.
+    # Do not clear that decision before validation and the probe succeed.
+    (ctx.workspace / DECLINED_FILE).unlink(missing_ok=True)
     _print(
         {
             "ok": True,
@@ -552,7 +577,32 @@ def cmd_decline(ctx: ToolContext, reason: str) -> int:
             "declined_at": utc_now_text(),
         },
     )
+    (ctx.workspace / SUBMISSION_FILE).unlink(missing_ok=True)
+    if evidence_review_pending(ctx.workspace):
+        pending = read_json(ctx.workspace / EVIDENCE_REVIEW_FILE)
+        write_json(ctx.workspace / EVIDENCE_REVIEW_FILE, {**pending, "status": "cancelled"})
     _print({"ok": True, "status": "declined", "reason": reason[:1000]})
+    return 0
+
+
+def cmd_request_evidence_review(ctx: ToolContext, file: str) -> int:
+    if not ctx.config.pipeline.evidence_resolver or ctx.config.pipeline.max_evidence_reviews == 0:
+        raise PipelineError("author evidence review is disabled by pipeline configuration")
+    if evidence_review_pending(ctx.workspace):
+        _print({"ok": True, "status": "evidence_review_requested", "next": "End this author session; a request is already pending."})
+        return 0
+    path = (ctx.workspace / file).resolve()
+    if not path.is_relative_to(ctx.workspace.resolve()) or not path.is_file() or path.stat().st_size > 64000:
+        raise PipelineError("request file must be a JSON file inside the author workspace, at most 64 KB")
+    payload = read_json(path)
+    if not isinstance(payload, dict):
+        raise PipelineError("evidence review request must be a JSON object")
+    request = evidence_review_request(ctx.workspace, ctx.discovery, {**payload, "request_nonce": uuid.uuid4().hex})
+    write_json(ctx.workspace / EVIDENCE_REVIEW_FILE, {**request, "status": "requested", "requested_at": utc_now_text()})
+    for marker in (SUBMISSION_FILE, DECLINED_FILE):
+        (ctx.workspace / marker).unlink(missing_ok=True)
+    _print({"ok": True, "status": "evidence_review_requested", "request_id": request["request_id"],
+            "next": "End this author session now. The pipeline will review the evidence and resume you with its result."})
     return 0
 
 
@@ -594,6 +644,7 @@ def cmd_status(ctx: ToolContext) -> int:
         {
             "workspace": str(ctx.workspace),
             "counters": _counters(ctx),
+            "evidence_review": read_json(ctx.workspace / EVIDENCE_REVIEW_FILE) if (ctx.workspace / EVIDENCE_REVIEW_FILE).is_file() else None,
             "job": _job_status(ctx),
             "build": {
                 "bundle_digest": build.get("bundle_digest"),
@@ -646,6 +697,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("submit", help="record a verified submission")
     decline_cmd = sub.add_parser("decline", help="decline this CVE")
     decline_cmd.add_argument("--reason", required=True)
+    review_cmd = sub.add_parser("request-evidence-review", help="ask the evidence resolver to review an incorrect version/fix pair")
+    review_cmd.add_argument("--file", required=True)
     sub.add_parser("status", help="show counters and recent logs")
     shell_cmd = sub.add_parser("shell", help="general shell in a persistent author sandbox, available before build")
     shell_cmd.add_argument("--timeout", type=int, default=120)
@@ -732,6 +785,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_submit(ctx)
         if args.subcommand == "decline":
             return cmd_decline(ctx, args.reason)
+        if args.subcommand == "request-evidence-review":
+            return cmd_request_evidence_review(ctx, args.file)
         if args.subcommand == "status":
             return cmd_status(ctx)
         _print({"ok": False, "error": f"unknown command {args.subcommand!r}"})

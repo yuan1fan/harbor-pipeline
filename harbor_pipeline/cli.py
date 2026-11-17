@@ -143,6 +143,38 @@ def build_parser() -> argparse.ArgumentParser:
     _add_cve(recheck_cmd)
     _add_output_args(recheck_cmd)
 
+    resolve_cmd = sub.add_parser(
+        "resolve-evidence",
+        help="run the bounded evidence resolver on an existing candidate",
+    )
+    _add_cve(resolve_cmd)
+    _add_output_args(resolve_cmd)
+    resolve_cmd.add_argument(
+        "--run-dir",
+        type=Path,
+        help="direct path to runs/<run-id>/<CVE>; overrides --run-id",
+    )
+    resolve_cmd.add_argument(
+        "--apply",
+        action="store_true",
+        help="write the proposal into discovery.json after validation",
+    )
+
+    requeue_cmd = sub.add_parser(
+        "requeue-resolved",
+        help="copy a resolved UNSUPPORTED candidate into a fresh EVIDENCE_READY run",
+    )
+    _add_cve(requeue_cmd)
+    requeue_cmd.add_argument(
+        "--source-run-dir",
+        type=Path,
+        required=True,
+        help="runs/<run-id>/<CVE> containing resolver-result.json",
+    )
+    requeue_cmd.add_argument("--run-id", required=True, help="new run id")
+    requeue_cmd.add_argument("--output-dir", type=Path, help="new run output root")
+    requeue_cmd.add_argument("--json", action="store_true")
+
     for stage in STAGES:
         stage_cmd = sub.add_parser(stage, help=f"advance one CVE up to {stage}")
         _add_cve(stage_cmd)
@@ -313,6 +345,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "check-config":
             payload = {"ok": True, "config": str(config_path),
                        "authoring": config.pipeline.authoring,
+                       "evidence_resolver": config.pipeline.evidence_resolver,
                        "docker_slots": config.pipeline.docker_slots,
                        "inherited_connection_keys": sorted(imported)}
             if args.json:
@@ -342,6 +375,10 @@ def main(argv: list[str] | None = None) -> int:
             return _benchmark(config, args)
         if args.command == "recheck":
             return _recheck(config, args)
+        if args.command == "resolve-evidence":
+            return _resolve_evidence(config, args)
+        if args.command == "requeue-resolved":
+            return _requeue_resolved(config, args)
         return _single(config, args)
     except PipelineError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -380,6 +417,71 @@ def _recheck(config, args) -> int:
     else:
         _print_report(payload)
     return EXIT_CODES.get(report.state, 3)
+
+
+def _resolve_evidence(config, args) -> int:
+    from . import evidence_resolver
+
+    if args.run_dir:
+        run_dir = args.run_dir
+    elif args.run_id:
+        output_root = Path(args.output_dir) if args.output_dir else Path(config.pipeline.output_dir)
+        run_dir = output_root.resolve() / args.run_id / args.cve
+    else:
+        print("error: resolve-evidence needs --run-dir or --run-id", file=sys.stderr)
+        return 2
+    if not (run_dir / "discovery.json").is_file():
+        print(f"error: no discovery.json under {run_dir}", file=sys.stderr)
+        return 2
+    try:
+        result = evidence_resolver.resolve_run(
+            run_dir=run_dir,
+            cve_id=args.cve,
+            config=config,
+            apply=args.apply,
+        )
+    except (OSError, ValueError, PipelineError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        resolver = result.get("resolver") or {}
+        print(
+            f"{args.cve}: resolver={resolver.get('status')} "
+            f"vulnerable={resolver.get('proposal', {}).get('vulnerable_ref')} "
+            f"fixed={resolver.get('proposal', {}).get('fixed_ref')} "
+            f"applied={result.get('applied')}"
+        )
+        if resolver.get("error"):
+            print(f"  error: {resolver['error']}")
+    return 0 if result.get("resolver", {}).get("status") in {"proposed", "unsupported"} else 3
+
+
+def _requeue_resolved(config, args) -> int:
+    from .requeue import requeue_resolved
+
+    output_root = Path(args.output_dir) if args.output_dir else Path(config.pipeline.output_dir)
+    try:
+        result = requeue_resolved(
+            source_run_dir=args.source_run_dir,
+            cve_id=args.cve,
+            output_root=output_root,
+            new_run_id=args.run_id,
+            config=config,
+        )
+    except (OSError, ValueError, PipelineError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    payload = result.to_json()
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        print(
+            f"{result.cve_id}: requeued {result.source_run_dir} -> "
+            f"{result.new_run_dir} ({result.state})"
+        )
+    return 0
 
 
 def _single(config, args) -> int:

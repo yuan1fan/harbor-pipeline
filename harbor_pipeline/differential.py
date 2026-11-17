@@ -8,6 +8,7 @@ to experiments by resolved task path, never by task name.
 from __future__ import annotations
 
 import shutil
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -484,6 +485,7 @@ def run_seed_repeats(
     environment_image: str | None = None,
     verifier_image: str | None = None,
     ledger=None,
+    progress=None,
 ) -> tuple[list[dict], list[str]]:
     """T09: rebuild the same reference task across independent jobs.
 
@@ -493,6 +495,7 @@ def run_seed_repeats(
     """
     from .backend import build_task_images, prune_task_images
     from dataclasses import replace
+    from .execution_progress import seed_succeeded
 
     records: list[dict] = []
     errors: list[str] = []
@@ -504,10 +507,23 @@ def run_seed_repeats(
                 network_mode=network_mode, allowed_hosts=allowed_hosts,
                 overrides=overrides, synthesis=synthesis, revision=candidate_revision, paired_verification=False,
             )
+            checkpoint_task = task
+            key = f"seed-{seed + 1}-{variant}"
+            if progress is not None:
+                saved = progress.get_seed(key, task, candidate_revision, seed, variant)
+                if saved is not None:
+                    records.append(saved)
+                    continue
             seed_root = root / f"seed-{seed + 1}-{variant}"
             task_dir = task.write(seed_root)
-            reservation = f"{run_id}-{spec['cve_id']}-rebuild-{candidate_revision}-{seed}-{variant}"
+            reservation = f"{run_id}-{spec['cve_id']}-rebuild-{candidate_revision}-{seed}-{variant}-{uuid.uuid4().hex[:12]}"
             trial_started = False
+            builds_started = 0
+
+            def count_build():
+                nonlocal builds_started
+                builds_started += 1
+
             if ledger is not None:
                 try:
                     ledger.reserve(reservation, {"builds": 2 if environment_image else 3, "trials": 1}, reuse=True)
@@ -520,6 +536,7 @@ def run_seed_repeats(
                     target_only=bool(environment_image), environment_image=environment_image,
                     product=spec["product"]["name"],
                     product_ref=spec["versions"]["vulnerable_ref" if variant == "vulnerable" else "fixed_ref"],
+                    on_build=count_build,
                 )
                 task = render_task(
                     spec, scenario_name=scenario_name, variant=variant, probe="reference",
@@ -552,15 +569,15 @@ def run_seed_repeats(
                     "trial_dir": str(trial.trial_dir), "task_path": str(task_dir),
                 }
                 records.append(record)
-                if trial.evidence_status != expected:
+                if not seed_succeeded(record):
                     errors.append(f"T09 rebuild {seed + 1}/{variant}: {trial.evidence_status}, expected {expected}")
                     if fail_fast:
                         return records, errors
+                elif progress is not None:
+                    progress.put_seed(key, checkpoint_task, record)
             finally:
                 if ledger is not None:
-                    attempts = sum((seed_root / "build-logs" / f"build-{name}.log").is_file()
-                                   for name in ("target", "verifier", "agent"))
-                    ledger.commit(reservation, {"builds": attempts, "trials": int(trial_started)})
+                    ledger.commit(reservation, {"builds": builds_started, "trials": int(trial_started)})
                 prune_task_images(tag)
     return records, errors
 

@@ -9,6 +9,8 @@ max_repairs = 2
 # Authoring is one native Claude Code session per candidate. ``legacy`` keeps
 # the old draft + JSON repair path for a fallback during the transition.
 authoring = "agent"
+# Resolve incomplete evidence with a bounded, read-only native session.
+evidence_resolver = true
 author_max_resumes = 2
 author_build_runs = 16
 author_probe_runs = 30
@@ -57,6 +59,13 @@ autocompact = "400k"
 max_budget_usd = 12.0
 
 
+[models.resolver]
+provider = "claude-code"
+model = "deepseek-flash[1m]"
+timeout_sec = 1200
+max_turns = 40
+max_budget_usd = 2.0
+
 [models.solver]
 provider = "claude-code"
 model = "deepseek-flash[1m]"
@@ -88,7 +97,7 @@ api_base = "${ANTHROPIC_BASE_URL}"
 api_version = "2023-06-01"
 
 [sources]
-allowed_hosts = ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org", "api.osv.dev", "api.github.com", "services.nvd.nist.gov", "registry.npmjs.org", "proxy.golang.org", "sum.golang.org", "repo1.maven.org"]
+allowed_hosts = ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org", "api.osv.dev", "api.github.com", "services.nvd.nist.gov", "registry.npmjs.org", "proxy.golang.org", "sum.golang.org", "repo1.maven.org", "api.wordpress.org", "downloads.wordpress.org"]
 max_bytes = 1500000
 timeout_sec = 30
 # Serve per-CVE NVD records from the cached yearly feed instead of the API,

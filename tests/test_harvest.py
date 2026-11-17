@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 from pathlib import Path
 
@@ -252,8 +253,11 @@ def test_release_tag_prefix_is_normalized():
     assert discovery_mod._normalize_release(None) is None
 
 
-def test_registry_probe_pins_generic_project(tmp_path: Path, monkeypatch):
-    body = json.dumps({"info": {"version": "6.5.9"}, "urls": []}).encode()
+def test_registry_identity_binds_generic_project_to_its_repository(tmp_path: Path, monkeypatch):
+    from harbor_pipeline import sources
+    from harbor_pipeline.discovery_refs import _Metadata, _registry_ref
+    body = json.dumps({"info": {"name": "tornado", "version": "6.5.9",
+        "project_urls": {"Source": "https://github.com/tornadoweb/tornado"}}, "urls": []}).encode()
 
     def fake_fetch(url, settings):
         if url.endswith("/pypi/tornado/6.5.9/json"):
@@ -262,27 +266,30 @@ def test_registry_probe_pins_generic_project(tmp_path: Path, monkeypatch):
                 final_url=url,
                 status=200,
                 body=body,
-                sha256="0" * 64,
+                sha256=hashlib.sha256(body).hexdigest(),
                 media_type="application/json",
             )
         raise TaskError("source_error", "HTTP 404")
 
-    monkeypatch.setattr(discovery_mod, "fetch", fake_fetch)
+    monkeypatch.setattr(sources, "fetch", fake_fetch)
     collector = EvidenceCollector(SourceSettings(), tmp_path)
     notes: list[str] = []
 
-    assert discovery_mod._probe_registries(
-        collector, "tornado", "6.5.9", notes
-    ) == "pypi"
+    metadata = _Metadata(collector, notes)
+    actual = _registry_ref(metadata, "pypi", "tornado", "6.5.9", expected_repo="tornadoweb/tornado")
+    assert actual.kind == "package_version"
+    assert _registry_ref(metadata, "pypi", "tornado", "6.5.9", expected_repo="other/tornado") is None
     assert collector.has_url("https://pypi.org/pypi/tornado/6.5.9/json")
     assert collector.sources[0]["source_type"] == "release_notes"
-    # A failed probe must not pollute the evidence index.
+    # Both checks share one verified HTTP snapshot.
     assert len(collector.sources) == 1
-    assert any("probed from pypi" in note for note in notes)
+    assert metadata.trace[-1]["outcome"] == "rejected"
 
 
-def test_registry_probe_falls_through_to_npm(tmp_path: Path, monkeypatch):
-    body = json.dumps({"version": "3.0.3", "dist": {"integrity": "sha512-abc=="}}).encode()
+def test_registry_identity_preserves_npm_artifact_pin(tmp_path: Path, monkeypatch):
+    from harbor_pipeline import sources
+    from harbor_pipeline.discovery_refs import _Metadata, _registry_ref
+    body = json.dumps({"name": "bestzip", "version": "3.0.3", "dist": {"integrity": "sha512-abc=="}}).encode()
 
     def fake_fetch(url, settings):
         if url.startswith("https://registry.npmjs.org/bestzip/3.0.3"):
@@ -291,18 +298,17 @@ def test_registry_probe_falls_through_to_npm(tmp_path: Path, monkeypatch):
                 final_url=url,
                 status=200,
                 body=body,
-                sha256="0" * 64,
+                sha256=hashlib.sha256(body).hexdigest(),
                 media_type="application/json",
             )
         raise TaskError("source_error", "HTTP 404")
 
-    monkeypatch.setattr(discovery_mod, "fetch", fake_fetch)
+    monkeypatch.setattr(sources, "fetch", fake_fetch)
     collector = EvidenceCollector(SourceSettings(), tmp_path)
     notes: list[str] = []
 
-    assert discovery_mod._probe_registries(
-        collector, "bestzip", "3.0.3", notes
-    ) == "npm"
+    actual = _registry_ref(_Metadata(collector, notes), "npm", "bestzip", "3.0.3")
+    assert actual.kind == "package_version" and actual.package == "bestzip"
     identities = discovery_mod.artifact_identity(
         {"sources": collector.sources},
         tmp_path,
@@ -510,7 +516,7 @@ def test_collect_pins_go_module_versions_and_checksums(tmp_path: Path, monkeypat
             cve_record_url(cve): b'{"containers":{"cna":{"affected":[{"product":"bar"}]}}}',
             f"https://api.osv.dev/v1/vulns/{cve}": json.dumps(osv).encode(),
             f"https://github.com/foo/bar/commit/{commit}.patch":
-                f"From {commit} Mon Sep 17 00:00:00 2001\n".encode(),
+                f"From {commit} Mon Sep 17 00:00:00 2001\ndiff --git a/main.go b/main.go\n@@ -1 +1 @@\n-bad\n+fixed\n".encode(),
         }
         for version in ("1.2.3", "1.2.2"):
             table[f"https://proxy.golang.org/github.com/foo/bar/@v/v{version}.info"] = (
@@ -578,3 +584,28 @@ def test_artifact_identity_normalizes_go_incompatible_version(tmp_path: Path):
     )
     assert identities[0]["version"] == "20.10.13"
     assert identities[0]["digest"] == f"sha256:{raw.hex()}"
+
+
+def test_artifact_identity_keeps_registry_pin_with_binary_archive_evidence(tmp_path):
+    archive = tmp_path / "package.whl"
+    archive.write_bytes(b"PK\x03\x04\xff\xfe\x80binary wheel")
+    metadata = tmp_path / "release.json"
+    metadata.write_text(json.dumps({"info": {"name": "example", "version": "1.2.3"},
+        "urls": [{"packagetype": "sdist", "digests": {"sha256": "b" * 64}}]}))
+    evidence = {"sources": [
+        {"source_type": "release_notes", "status": "ok", "url": "https://files.pythonhosted.org/packages/example.whl",
+         "local_path": archive.name, "content_sha256": "a" * 64},
+        {"source_type": "release_notes", "status": "ok", "url": "https://pypi.org/pypi/example/1.2.3/json",
+         "local_path": metadata.name, "content_sha256": "c" * 64},
+    ]}
+    identities = discovery_mod.artifact_identity(evidence, tmp_path, product="example", vulnerable_ref="1.2.3")
+    assert len(identities) == 1
+    assert identities[0]["kind"] == "pypi" and identities[0]["digest"] == "sha256:" + "b" * 64
+
+
+def test_artifact_identity_cannot_verify_non_utf8_registry_metadata(tmp_path):
+    (tmp_path / "bad.json").write_bytes(b"\xff\xfe\x80not registry JSON")
+    evidence = {"sources": [{"source_type": "release_notes", "status": "ok",
+        "url": "https://pypi.org/pypi/example/1.2.3/json", "local_path": "bad.json", "content_sha256": "a" * 64}]}
+    identities = discovery_mod.artifact_identity(evidence, tmp_path, product="example", vulnerable_ref="1.2.3")
+    assert len(identities) == 1 and identities[0]["digest"].startswith("unverified:")

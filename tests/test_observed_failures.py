@@ -2,6 +2,7 @@
 
 These replay the failing stage without spending another author/solver session.
 """
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import subprocess
@@ -156,6 +157,34 @@ def test_all_empty_patches_cannot_be_used_as_fix_evidence(tmp_path):
     assert actual == (None, None)
 
 
+def test_patch_mailbox_cannot_select_its_first_commit_as_the_fix(tmp_path):
+    first, second, merge = "a" * 40, "b" * 40, "c" * 40
+    mailbox = (f"From {first} Mon Sep 17 00:00:00 2001\nSubject: unrelated fix\n\n"
+               f"From {second} Mon Sep 17 00:00:00 2001\nSubject: actual vulnerability fix\n")
+    url = f"https://github.com/example/app/commit/{merge}.patch"
+    assert discovery._commit_sha(mailbox, url) is None
+    calls = []
+
+    class Collector:
+        run_dir = tmp_path
+
+        def add(self, attempt, *_args):
+            calls.append(attempt)
+            path = tmp_path / f"source-{len(calls)}.txt"
+            path.write_text(mailbox if attempt.endswith(".patch") else json.dumps({
+                "sha": merge, "files": [{"filename": "app.py", "patch": "@@ -1 +1 @@\n-bad\n+fixed"}]}))
+            return {"id": f"src-{len(calls)}", "status": "ok", "local_path": path.name}
+
+    result = discovery._fetch_fix_commit(Collector(), [url], [])
+    assert result == (merge, "src-2")
+    assert calls[-1] == f"https://api.github.com/repos/example/app/commits/{merge}"
+
+
+def test_commit_json_must_match_the_requested_ref():
+    assert discovery._commit_sha(json.dumps({"sha": "b" * 40}),
+                                 "https://github.com/example/app/commit/" + "a" * 40) is None
+
+
 def test_commit_api_requests_json_when_patch_media_is_empty():
     from harbor_pipeline.sources import _request_headers
     from harbor_pipeline.config import SourceSettings
@@ -235,19 +264,21 @@ def _post_export_log(tmp_path, *, fatal=False):
     return log
 
 
-def test_post_export_timeout_recovers_the_tagged_image(tmp_path, monkeypatch):
+def test_post_export_timeout_recovers_the_current_attempt_image(tmp_path, monkeypatch):
     context = tmp_path / "context"
     context.mkdir()
     (context / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
     log = _post_export_log(tmp_path)
     image_id = "sha256:" + "a" * 64
+    attempt_id = "b" * 32
 
     monkeypatch.setattr(backend, "docker_binary", lambda: "docker")
     monkeypatch.setattr(backend, "daemon_available", lambda _docker: True)
+    monkeypatch.setattr(backend.uuid, "uuid4", lambda: SimpleNamespace(hex=attempt_id))
     monkeypatch.setattr(backend, "_run", lambda *args, **kwargs: (_ for _ in ()).throw(
         TaskError("build_error", "Build exceeded 1s: docker build")))
     monkeypatch.setattr(backend.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(
-        returncode=0, stdout=image_id + "\n", stderr=""))
+        returncode=0, stdout=image_id + " " + attempt_id + "\n", stderr=""))
     monkeypatch.setattr(backend, "inspect_image", lambda *args, **kwargs: (image_id, "amd64"))
     monkeypatch.setattr(backend, "dependency_lock", lambda _context: {})
 

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from harbor_pipeline import evaluator
 from harbor_pipeline import synthesis as synthesis_mod
+from harbor_pipeline.authoring import author_contract
 from harbor_pipeline.author_probe import compose_text as probe_compose_text
 from harbor_pipeline.differential import MatrixResult
 from harbor_pipeline.generator import render_task
@@ -447,6 +448,14 @@ def test_scoped_npm_ref_prefix_is_stripped():
     ) == "3.6.2"
     assert synthesis_mod._clean_version_ref("pypi", "demo", "demo==1.2.3") == "1.2.3"
     assert synthesis_mod._clean_version_ref("maven", "g:a", "g:a:1.2.3") == "1.2.3"
+
+
+def test_author_contract_maps_xss_primitive_to_secret_read_family():
+    contract = author_contract(CVE)
+    assert "exactly five valid families" in contract
+    assert "`xss` is **not** a family; it is only a valid `primitive`." in contract
+    assert "For an `xss` primitive, `family` MUST still be `secret_read`" in contract
+    assert 'Never emit `family: "xss"`' in contract
 
 
 def test_an_advisory_without_an_end_to_end_exploit_is_unsupported():

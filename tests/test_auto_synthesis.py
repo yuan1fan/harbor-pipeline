@@ -830,7 +830,7 @@ def test_discovery_package_facts_reads_github_string_patched_version():
     assert affected == "< 2.0.2"
 
 
-def test_discovery_picks_highest_release_below_fix():
+def test_discovery_picks_highest_release_below_fix(tmp_path):
     osv = {
         "affected": [{
             "package": {"name": "pyramid", "ecosystem": "PyPI"},
@@ -840,10 +840,15 @@ def test_discovery_picks_highest_release_below_fix():
     }
     _, _, _, fixed, _ = discovery_mod._package_facts(osv, [], {})
     assert fixed == "2.0.2"
-    assert (
-        discovery_mod._choose_vulnerable(osv, None, "2.0.2")
-        == "2.0.1"
-    )
+    from harbor_pipeline.discovery_refs import _Metadata, _registry_candidates
+    from harbor_pipeline.sources import EvidenceCollector
+    from harbor_pipeline.config import SourceSettings
+    metadata = _Metadata(EvidenceCollector(SourceSettings(), tmp_path), [])
+    vulnerable, fixed = _registry_candidates(metadata, None, "pypi", "pyramid", None, "2.0.2",
+        known=osv["affected"][0]["versions"])
+    assert (vulnerable, fixed) == ("2.0.1", "2.0.2")
+    filtered = next(event for event in metadata.trace if event["rule"] == "affected_release_filter")
+    assert filtered["excluded_count"] == 1 and filtered["excluded_examples"] == ["2.0.2"]
 
 
 def test_commit_sha_reads_patch_header():
@@ -900,3 +905,10 @@ def test_normalize_supplies_default_dockerfile_when_omitted(tmp_path: Path):
     assert dockerfile.startswith("FROM python:3.11.4-slim")
     assert "pip install --no-cache-dir -r requirements.txt" in dockerfile
     assert any("no Dockerfile" in note for note in notes)
+
+
+def test_grounded_accepts_pep440_and_git_tag_spellings():
+    corpus = "affected: v4.0.0-beta.8; fixed in v4.0.0-beta.9"
+    assert synthesis_mod._grounded("4.0.0b8", corpus, {}, None)
+    assert synthesis_mod._grounded("4.0.0b9", corpus, {}, None)
+    assert not synthesis_mod._grounded("4.0.0b7", corpus, {}, None)

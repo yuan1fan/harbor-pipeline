@@ -1,15 +1,12 @@
 """Automatic evidence discovery for an arbitrary CVE id.
 
 The curated pool in :mod:`harbor_pipeline.cves` is a seed, not a gate. This
-module builds a source plan from public records for any CVE, parses what it
-fetched, and derives the two facts the rest of the pipeline cannot invent:
+module collects public records, identity/version hints and upstream patches.
+The shared selector in :mod:`harbor_pipeline.discovery_refs` owns candidate
+ordering, typed-ref validation and the persisted selection trace.
 
-* an actual vulnerable release and the release that ships the fix, and
-* a fetched upstream fix commit whose patch text can be cited.
-
-Everything here is data, never instructions. A failure to find a version pair
-or a fix commit is reported as a classified ``unsupported`` outcome instead of
-being papered over with a guessed value.
+Evidence completeness is not a verdict that the CVE's mechanism reproduces.
+Unverified refs remain unresolved for the calling pipeline to handle.
 """
 
 from __future__ import annotations
@@ -24,9 +21,10 @@ from pathlib import Path
 from typing import Any
 
 from .config import SourceSettings
+from .discovery_refs import _ref_version, complete_missing_refs
 from .errors import TaskError
 from .nvd_feed import NvdFeedCache
-from .sources import EvidenceCollector, FetchResult, cve_record_url, fetch
+from .sources import EvidenceCollector, FetchResult, cve_record_url, fetch as fetch
 from .util import PipelineError, read_json, write_json
 
 OSV_URL = "https://api.osv.dev/v1/vulns/{cve_id}"
@@ -76,10 +74,62 @@ _MAVEN_CHECKSUM_RE = re.compile(
     r"repo1\.maven\.org/maven2/(?P<group>.+)/(?P<artifact>[^/]+)/"
     r"(?P<version>[^/]+)/(?P=artifact)-(?P=version)\.jar\.sha256$"
 )
-_RANGE_RE = re.compile(r"(>=|<=|>|<|=)\s*([0-9][0-9A-Za-z.\-+]*)")
 
 
 @dataclass(frozen=True)
+class DiscoveryRef:
+    """A ref's namespace is explicit; a numeric string is never assumed to be a tag."""
+
+    kind: str
+    value: str
+    ecosystem: str | None = None
+    package: str | None = None
+    repository: str | None = None
+    resolved_commit: str | None = None
+    url: str | None = None
+    sha256: str | None = None
+    source_id: str | None = None
+
+    def __post_init__(self):
+        if self.kind not in {"package_version", "tag", "commit", "archive", "unresolved"}:
+            raise PipelineError(f"unknown discovery ref kind: {self.kind!r}")
+        if not isinstance(self.value, str) or not self.value.strip():
+            raise PipelineError("discovery ref value must be a nonempty string")
+        if self.kind == "commit" and not _SHA_RE.fullmatch(self.value):
+            raise PipelineError("commit ref must be a Git SHA, not a release version")
+        if self.resolved_commit and not re.fullmatch(r"[0-9a-f]{40}", self.resolved_commit):
+            raise PipelineError("resolved_commit must be a full Git SHA")
+        if self.kind == "archive" and (not self.url or not re.fullmatch(r"[0-9a-f]{64}", self.sha256 or "")):
+            raise PipelineError("archive ref requires its URL and SHA-256")
+
+    def to_json(self) -> dict:
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
+    @classmethod
+    def from_json(cls, data: dict) -> "DiscoveryRef":
+        if not isinstance(data, dict):
+            raise PipelineError("discovery ref must be an object with kind/value")
+        try:
+            return cls(**data)
+        except TypeError as exc:
+            raise PipelineError(f"invalid discovery ref: {exc}") from exc
+
+
+_UNSET = object()
+
+
+def _legacy_ref(value, ecosystem, package) -> DiscoveryRef | None:
+    if not value:
+        return None
+    value = str(value)
+    if re.fullmatch(r"[0-9a-f]{40}", value):
+        return DiscoveryRef("commit", value)
+    if ecosystem in {"pypi", "npm", "go", "maven", "nuget", "apt", "docker"}:
+        return DiscoveryRef("package_version", value, ecosystem=ecosystem, package=package)
+    return DiscoveryRef("unresolved", value)
+
+
+@dataclass(frozen=True, init=False)
 class Discovery:
     """Deterministic facts derived from the collected evidence."""
 
@@ -87,36 +137,102 @@ class Discovery:
     package: str | None = None
     ecosystem: str | None = None
     component: str | None = None
-    vulnerable_ref: str | None = None
-    fixed_ref: str | None = None
+    vulnerable: DiscoveryRef | None = None
+    fixed: DiscoveryRef | None = None
     fix_commit: str | None = None
     fix_source_id: str | None = None
     aliases: tuple[str, ...] = ()
     references: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
+    affected_range: str | None = None
+    selection_trace: tuple[dict, ...] = ()
+
+    def __init__(
+        self, cve_id, package=None, ecosystem=None, component=None,
+        vulnerable=None, fixed=None, fix_commit=None, fix_source_id=None,
+        aliases=(), references=(), notes=(), affected_range=None, selection_trace=(), *,
+        vulnerable_ref=_UNSET, fixed_ref=_UNSET,
+    ):
+        # Constructor aliases keep older callers/checkpoints readable. New
+        # JSON has a single canonical representation, never duplicate refs.
+        if vulnerable_ref is not _UNSET:
+            vulnerable = _legacy_ref(vulnerable_ref, ecosystem, package)
+        if fixed_ref is not _UNSET:
+            fixed = _legacy_ref(fixed_ref, ecosystem, package)
+        if isinstance(vulnerable, dict):
+            vulnerable = DiscoveryRef.from_json(vulnerable)
+        if isinstance(fixed, dict):
+            fixed = DiscoveryRef.from_json(fixed)
+        values = locals()
+        for field in self.__dataclass_fields__:
+            object.__setattr__(self, field, values[field])
+
+    @property
+    def vulnerable_ref(self) -> str | None:
+        return self.vulnerable.value if self.vulnerable else None
+
+    @property
+    def fixed_ref(self) -> str | None:
+        return self.fixed.value if self.fixed else None
+
+    @property
+    def build_ecosystem(self) -> str | None:
+        if any(ref and ref.kind in {"tag", "commit", "archive"} for ref in (self.vulnerable, self.fixed)):
+            return "generic"
+        return self.ecosystem
+
+    @property
+    def build_package(self) -> str | None:
+        if self.build_ecosystem == "generic":
+            for ref in (self.fixed, self.vulnerable):
+                if ref and ref.repository:
+                    return ref.repository
+        return self.package
 
     def to_json(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        data["vulnerable"] = self.vulnerable.to_json() if self.vulnerable else None
+        data["fixed"] = self.fixed.to_json() if self.fixed else None
+        return data
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "Discovery":
+        refs = {}
+        for key in ("vulnerable", "fixed"):
+            if key in data:
+                refs[key] = DiscoveryRef.from_json(data[key]) if data[key] is not None else None
+                legacy = data.get(key + "_ref")
+                if legacy is not None and (not refs[key] or refs[key].value != legacy):
+                    raise PipelineError(f"conflicting typed and legacy {key} refs")
+            else:
+                refs[key + "_ref"] = data.get(key + "_ref")
         return cls(
             cve_id=data["cve_id"],
             package=data.get("package"),
             ecosystem=data.get("ecosystem"),
             component=data.get("component"),
-            vulnerable_ref=data.get("vulnerable_ref"),
-            fixed_ref=data.get("fixed_ref"),
+            **refs,
             fix_commit=data.get("fix_commit"),
             fix_source_id=data.get("fix_source_id"),
             aliases=tuple(data.get("aliases") or ()),
             references=tuple(data.get("references") or ()),
             notes=tuple(data.get("notes") or ()),
+            affected_range=data.get("affected_range"),
+            selection_trace=tuple(data.get("selection_trace") or ()),
         )
 
     @property
     def has_fix_pair(self) -> bool:
         return bool(self.vulnerable_ref and self.fixed_ref and self.fix_commit)
+
+    @property
+    def is_complete(self) -> bool:
+        return bool(self.has_fix_pair and self.fix_source_id
+                    and self.vulnerable_ref != self.fixed_ref
+                    and self.vulnerable.kind != "unresolved"
+                    and self.fixed.kind != "unresolved"
+                    and not (self.vulnerable.resolved_commit
+                             and self.vulnerable.resolved_commit == self.fixed.resolved_commit))
 
 
 def collect(settings: SourceSettings, run_dir: Path, cve_id: str) -> tuple[dict, Discovery]:
@@ -169,74 +285,9 @@ def collect(settings: SourceSettings, run_dir: Path, cve_id: str) -> tuple[dict,
         if ecosystem:
             notes.append(f"ecosystem inferred from references: {ecosystem}")
 
-    # Release tags commonly carry a leading "v" while package registries do
-    # not. Normalizing here keeps the value valid for npm/PyPI pins.
-    fixed_ref = _normalize_release(fixed_ref)
-
-    if not ecosystem and package and fixed_ref:
-        ecosystem = _probe_registries(collector, package, fixed_ref, notes)
-    if ecosystem == "go" and fixed_ref:
-        fixed_ref = _normalize_go_version(fixed_ref)
-
+    # This layer collects hints only. The typed-ref selector owns version
+    # ordering, registry lookup, range checks and final pair validation.
     fix_commit, fix_source_id = _fetch_fix_commit(collector, references, notes)
-
-    vulnerable_ref = _normalize_release(
-        _choose_vulnerable(osv_record, vulnerable_range, fixed_ref)
-    )
-
-    # PyPI and npm expose per-version metadata with a digest. Go and Maven
-    # publish the digest in a separate checksum document, so both are fetched
-    # below to give the evaluator something to pin before the image build.
-    if ecosystem in {"pypi", "npm", "go", "maven"} and package:
-        if fixed_ref and not collector.has_url(
-            _registry_url(ecosystem, package, fixed_ref) or ""
-        ):
-            _fetch_registry(collector, ecosystem, package, fixed_ref, notes)
-        # Prefer the release immediately below the fix. OSV version lists can
-        # start at an early alpha (for example 2.2.0a1 for a 3.1.9 fix), which
-        # would build a release far older than the advisory range describes.
-        candidates: list[str] = []
-        if fixed_ref:
-            candidates.extend(_previous_versions(fixed_ref))
-        if vulnerable_ref and vulnerable_ref not in candidates:
-            candidates.append(vulnerable_ref)
-        for candidate in candidates:
-            if not candidate or candidate == fixed_ref:
-                continue
-            if vulnerable_range and not _range_allows(vulnerable_range, candidate):
-                continue
-            source = _fetch_registry(collector, ecosystem, package, candidate, notes)
-            if source and source["status"] == "ok":
-                if vulnerable_ref and vulnerable_ref != candidate:
-                    notes.append(
-                        f"registry release {candidate} preferred over OSV version "
-                        f"{vulnerable_ref} as the vulnerable build"
-                    )
-                vulnerable_ref = candidate
-                break
-        if vulnerable_ref and vulnerable_range and not _range_allows(
-            vulnerable_range, vulnerable_ref
-        ):
-            notes.append(
-                f"chosen vulnerable_ref {vulnerable_ref} is outside the recorded "
-                f"affected range {vulnerable_range!r}"
-            )
-        if ecosystem in {"go", "maven"}:
-            for version in (vulnerable_ref, fixed_ref):
-                if version:
-                    _fetch_checksum(collector, ecosystem, package, version, notes)
-
-    if not fixed_ref and fix_commit:
-        # The advisory may name a fix commit without a published release.
-        # For a source build the commit is a perfectly precise fixed ref.
-        fixed_ref = fix_commit
-        notes.append("using the upstream fix commit as the fixed ref")
-    if not fixed_ref:
-        notes.append("no fixed release could be derived from OSV or the GitHub advisory")
-    if not vulnerable_ref:
-        notes.append("no concrete vulnerable release could be derived")
-    if not fix_commit:
-        notes.append("no fetchable upstream fix commit was found")
 
     evidence = collector.save(cve_id)
     discovery = Discovery(
@@ -244,14 +295,15 @@ def collect(settings: SourceSettings, run_dir: Path, cve_id: str) -> tuple[dict,
         package=package,
         ecosystem=ecosystem,
         component=component,
-        vulnerable_ref=vulnerable_ref,
-        fixed_ref=fixed_ref,
+        fixed_ref=fixed_ref or fix_commit,
+        affected_range=vulnerable_range,
         fix_commit=fix_commit,
         fix_source_id=fix_source_id,
         aliases=tuple(aliases),
         references=tuple(references),
         notes=tuple(notes),
     )
+    evidence, discovery = complete_missing_refs(settings, run_dir, evidence, discovery)
     write_json(run_dir / "discovery.json", discovery.to_json())
     return evidence, discovery
 
@@ -318,6 +370,16 @@ def load(run_dir: Path, cve_id: str) -> Discovery:
             f"discovery.json refers to {discovery.cve_id}, not {cve_id}"
         )
     return discovery
+
+
+def checkpoint_evidence_usable(evidence: dict, run_dir: Path) -> bool:
+    """A cached success entry must still have its nonempty local evidence body."""
+    return all(
+        any(s.get("source_type") == kind and s.get("status") == "ok"
+            and _local_text(s, run_dir).strip()
+            for s in evidence.get("sources") or [])
+        for kind in ("cve_record", "upstream_commit")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -480,6 +542,12 @@ def _package_facts(
                 break
     if not component and isinstance(osv_record, dict):
         component = str(osv_record.get("summary") or "")[:200] or None
+    if isinstance(cve_record, dict):
+        from .discovery_refs import _package_mapping
+
+        mapping, _ = _package_mapping(cve_record, package)
+        if mapping:
+            ecosystem, package = mapping
     return package, ecosystem, component, fixed, affected_range
 
 
@@ -519,7 +587,10 @@ def _osv_extracted_range(
     if not candidates:
         return None, None
     preferred = [item for item in candidates if item[0] == "AFFECTED_FIELD"] or candidates
-    _, introduced, fixed = max(preferred, key=lambda item: _version_key(item[2]))
+    ordered = [item for item in preferred if _ref_version(item[2]) is not None]
+    if not ordered:
+        return None, None
+    _, introduced, fixed = max(ordered, key=lambda item: _ref_version(item[2]))
     affected = f">= {introduced}, < {fixed}" if introduced else f"< {fixed}"
     return fixed, affected
 
@@ -543,7 +614,6 @@ def _fetch_fix_commit(
         api_url = _github_api_commit(url)
         if api_url and api_url not in attempts:
             attempts.append(api_url)
-        entry = None
         for attempt in attempts:
             fetched = collector.add(
                 attempt,
@@ -551,20 +621,16 @@ def _fetch_fix_commit(
                 "Upstream fix commit referenced by the CVE records",
             )
             if fetched["status"] == "ok":
-                if not _local_text(fetched, collector.run_dir).strip():
+                text = _local_text(fetched, collector.run_dir)
+                if not text.strip():
                     notes.append(f"fix commit response from {attempt} is empty; trying the next source")
                     continue
-                entry = fetched
-                break
+                sha = _commit_sha(text, url)
+                if not sha:
+                    notes.append(f"fix source {attempt} is not an unambiguous single commit; trying direct commit metadata")
+                    continue
+                return sha, fetched["id"]
             notes.append(f"fix commit fetch failed for {attempt}: {fetched.get('error')}")
-        if entry is None:
-            continue
-        text = _local_text(entry, collector.run_dir)
-        sha = _commit_sha(text, url)
-        if not sha:
-            notes.append(f"fix commit patch at {url} has no commit hash")
-            continue
-        return sha, entry["id"]
     return None, None
 
 
@@ -583,31 +649,24 @@ def _github_api_commit(url: str) -> str | None:
 def _commit_sha(text: str, url: str) -> str | None:
     match = _COMMIT_RE.search(url)
     short = match.group(1) if match else None
-    full = re.search(r"^From ([0-9a-f]{40})\b", text, re.MULTILINE)
+    full = re.findall(r"^From ([0-9a-f]{40})\b", text, re.MULTILINE)
+    if len(full) > 1:
+        # GitHub merge .patch responses can be a mailbox of several commits.
+        # Its first entry is not necessarily the CVE's fix or the requested ref.
+        return None
     if full:
-        return full.group(1)
+        return full[0]
+    try:
+        document = json.loads(text)
+        sha = document.get("sha") if isinstance(document, dict) else None
+        if sha:
+            return sha if re.fullmatch(r"[0-9a-f]{40}", str(sha)) and (not short or sha.startswith(short)) else None
+    except ValueError:
+        pass
     for candidate in re.findall(r"\b[0-9a-f]{40}\b", text[:4000]):
         if not short or candidate.startswith(short):
             return candidate
     return short
-
-
-def _choose_vulnerable(
-    osv_record: Any, affected_range: str | None, fixed_ref: str | None
-) -> str | None:
-    versions: list[str] = []
-    if isinstance(osv_record, dict):
-        for item in osv_record.get("affected") or []:
-            for version in item.get("versions") or []:
-                if isinstance(version, str) and not _SHA_RE.match(version):
-                    versions.append(version)
-    if versions and fixed_ref:
-        below = [v for v in versions if _version_key(v) < _version_key(fixed_ref)]
-        if below:
-            return max(below, key=_version_key)
-    if versions and not fixed_ref:
-        return max(versions, key=_version_key)
-    return None
 
 
 def _go_module_path(package: str) -> str:
@@ -665,145 +724,6 @@ def _checksum_url(ecosystem: str, package: str, version: str) -> str | None:
             f"{urllib.parse.quote(version, safe='')}/{artifact}-{version}.jar.sha256"
         )
     return None
-
-
-def _fetch_checksum(
-    collector: EvidenceCollector,
-    ecosystem: str,
-    package: str,
-    version: str,
-    notes: list[str],
-) -> dict | None:
-    """Fetch a checksum document, trying Go's ``+incompatible`` form second.
-
-    The module proxy answers the bare version for most modules, but the
-    checksum database only knows ``vX+incompatible`` for modules without a
-    major-version path. Failed attempts are not written to the evidence index;
-    only the document that exists becomes a source.
-    """
-    urls = [
-        url for url in (_checksum_url(ecosystem, package, version),) if url
-    ]
-    if ecosystem == "go":
-        module = urllib.parse.quote(_go_module_path(package), safe="/!")
-        urls.append(
-            f"https://sum.golang.org/lookup/{module}@v{version}+incompatible"
-        )
-    errors: list[str] = []
-    for url in urls:
-        try:
-            result = fetch(url, collector.settings)
-        except TaskError as exc:
-            errors.append(str(exc))
-            continue
-        return collector.record(
-            url,
-            "release_notes",
-            f"{package} {version} artifact checksum",
-            result,
-        )
-    if errors:
-        notes.append(f"{package} {version} checksum unavailable: {errors[-1]}")
-    return None
-
-
-def _fetch_registry(
-    collector: EvidenceCollector,
-    ecosystem: str,
-    package: str,
-    version: str,
-    notes: list[str],
-) -> dict | None:
-    url = _registry_url(ecosystem, package, version)
-    if url is None:
-        return None
-    entry = collector.add(url, "release_notes", f"{package} {version} package metadata")
-    if entry["status"] != "ok":
-        notes.append(f"{package} {version} metadata unavailable: {entry.get('error')}")
-    return entry
-
-
-def _probe_registries(
-    collector: EvidenceCollector,
-    package: str,
-    fixed_ref: str,
-    notes: list[str],
-) -> str | None:
-    """Find a registry that publishes this package at the fix version.
-
-    Git-only OSV records and GitHub advisories often name a project without an
-    ecosystem. When the same name and version exist on PyPI or npm, that
-    registry is the real distribution channel, and its metadata gives the
-    evaluator a pinned artifact digest. Failure is expected for source-only
-    projects, so failed probes are not written to the evidence index.
-    """
-    for ecosystem in ("pypi", "npm"):
-        url = _registry_url(ecosystem, package, fixed_ref)
-        if url is None:
-            continue
-        try:
-            result = fetch(url, collector.settings)
-        except TaskError as exc:
-            notes.append(f"{ecosystem} probe for {package} {fixed_ref} failed: {exc}")
-            continue
-        collector.record(
-            url,
-            "release_notes",
-            f"{package} {fixed_ref} registry metadata discovered by probe",
-            result,
-        )
-        notes.append(
-            f"ecosystem probed from {ecosystem} registry: {package} {fixed_ref} exists"
-        )
-        return ecosystem
-    return None
-
-
-def _previous_versions(fixed: str, limit: int = 4) -> list[str]:
-    """Candidate releases just below a fix, for registries without version lists."""
-    match = re.match(r"^(.*?)(\d+)([^0-9]*)$", fixed)
-    if not match:
-        return []
-    prefix, number, suffix = match.groups()
-    results = []
-    for delta in range(1, limit + 1):
-        value = int(number) - delta
-        if value < 0:
-            break
-        results.append(f"{prefix}{value}{suffix}")
-    if results:
-        # Prefer the newest candidate first.
-        return results
-    return []
-
-
-def _range_allows(expression: str, version: str) -> bool:
-    clauses = [c.strip() for c in expression.split(",") if c.strip()]
-    if not clauses:
-        return True
-    key = _version_key(version)
-    for clause in clauses:
-        match = _RANGE_RE.search(clause)
-        if not match:
-            continue
-        operator, bound = match.groups()
-        bound_key = _version_key(bound)
-        if operator == ">=" and not key >= bound_key:
-            return False
-        if operator == ">" and not key > bound_key:
-            return False
-        if operator == "<=" and not key <= bound_key:
-            return False
-        if operator == "<" and not key < bound_key:
-            return False
-        if operator == "=" and not key == bound_key:
-            return False
-    return True
-
-
-def _version_key(value: str) -> tuple[int, ...]:
-    parts = re.findall(r"\d+", value)
-    return tuple(int(part) for part in parts) if parts else (0,)
 
 
 def _local_text(source: dict, run_dir: Path) -> str:
@@ -867,12 +787,19 @@ def artifact_identity(
         if source.get("source_type") != "release_notes" or source.get("status") != "ok":
             continue
         url = source["url"]
+        go = _GO_CHECKSUM_RE.search(url)
+        maven = _MAVEN_CHECKSUM_RE.search(url)
+        pypi = _PYPI_VERSION_RE.search(url)
+        npm = _NPM_VERSION_RE.search(url)
+        # Downloaded wheels/archives may share this source category. They are
+        # not registry metadata and must never be decoded as UTF-8 text here.
+        if not any((go, maven, pypi, npm)):
+            continue
         path = Path(run_dir) / source.get("local_path", "")
         try:
             text = path.read_text(encoding="utf-8-sig")
-        except OSError:
+        except (OSError, UnicodeError):
             continue
-        go = _GO_CHECKSUM_RE.search(url)
         if go:
             module = _go_module_unescape(
                 urllib.parse.unquote(go.group("module"))
@@ -893,7 +820,6 @@ def artifact_identity(
                 "source_url": url,
             })
             continue
-        maven = _MAVEN_CHECKSUM_RE.search(url)
         if maven:
             group = urllib.parse.unquote(maven.group("group")).replace("/", ".")
             artifact = urllib.parse.unquote(maven.group("artifact"))
@@ -912,10 +838,6 @@ def artifact_identity(
                 else f"unverified:{source['content_sha256']}",
                 "source_url": url,
             })
-            continue
-        pypi = _PYPI_VERSION_RE.search(url)
-        npm = _NPM_VERSION_RE.search(url)
-        if not pypi and not npm:
             continue
         try:
             body = json.loads(text)

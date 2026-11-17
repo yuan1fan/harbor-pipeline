@@ -47,6 +47,10 @@ class Settings:
     # ``agent`` authors with a native Claude Code session; ``legacy`` keeps
     # the old one-shot draft plus JSON repair loop available for one release.
     authoring: str = "agent"
+    # Run a small native evidence-resolver session only when discovery cannot
+    # derive a concrete pair or the author challenges it. It cannot build or author.
+    evidence_resolver: bool = False
+    max_evidence_reviews: int = 2
     author_max_resumes: int = 2
     author_build_runs: int = 8
     author_probe_runs: int = 20
@@ -81,7 +85,7 @@ class ModelSettings:
 
 @dataclass
 class SourceSettings:
-    allowed_hosts: list[str] = field(default_factory=lambda: ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org", "api.osv.dev", "api.github.com", "services.nvd.nist.gov", "registry.npmjs.org", "proxy.golang.org", "sum.golang.org", "repo1.maven.org"])
+    allowed_hosts: list[str] = field(default_factory=lambda: ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org", "api.osv.dev", "api.github.com", "services.nvd.nist.gov", "registry.npmjs.org", "proxy.golang.org", "sum.golang.org", "repo1.maven.org", "api.wordpress.org", "downloads.wordpress.org"])
     max_bytes: int = 1500000
     timeout_sec: int = 30
     # Serve per-CVE NVD records from a cached yearly feed instead of the
@@ -150,7 +154,7 @@ def load_config(path: Path | None = None) -> Config:
         raise PipelineError("resource_dir must be a nonempty local directory")
     if not isinstance(settings.resource_disk_paths, list) or any(not isinstance(p, str) or not p for p in settings.resource_disk_paths):
         raise PipelineError("resource_disk_paths must be a list of paths")
-    for name in ("archive_images", "prune_images", "solver_review", "require_harbor_lint", "inherit_claude_settings"):
+    for name in ("archive_images", "prune_images", "solver_review", "evidence_resolver", "require_harbor_lint", "inherit_claude_settings"):
         if not isinstance(getattr(settings, name), bool):
             raise PipelineError(f"{name} must be a boolean")
     for name in ("workers", "trial_workers", "trials", "min_trials", "max_calls", "max_total_tokens", "max_context_bytes", "command_timeout_sec"):
@@ -162,7 +166,7 @@ def load_config(path: Path | None = None) -> Config:
         raise PipelineError("authoring must be 'agent' or 'legacy'")
     if settings.author_sandbox_network not in {"none", "bridge"}:
         raise PipelineError("author_sandbox_network must be 'none' or 'bridge'")
-    for name in ("author_max_resumes", "author_build_runs", "author_probe_runs", "author_exec_runs"):
+    for name in ("author_max_resumes", "author_build_runs", "author_probe_runs", "author_exec_runs", "max_evidence_reviews"):
         if not isinstance(getattr(settings, name), int) or getattr(settings, name) < 0:
             raise PipelineError(f"{name} must be a nonnegative integer")
     for name in (

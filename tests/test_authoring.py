@@ -444,6 +444,18 @@ def test_render_task_can_pin_a_generic_agent_but_a_per_variant_verifier():
 
 
 def test_cmd_probe_writes_state_and_finishes_job(tmp_path: Path, monkeypatch):
+    # This test exercises probe state, not Docker. Supply the immutable image
+    # identities required by cache validation and fail if it tries to build.
+    image_ids = {name: "sha256:" + char * 64 for name, char in
+                 (("vulnerable", "a"), ("fixed", "b"), ("verifier", "c"))}
+    monkeypatch.setattr("harbor_pipeline.backend.docker_binary", lambda: "fixture-docker")
+    monkeypatch.setattr("harbor_pipeline.build_cache.image_identity",
+                        lambda _docker, ref: ref if ref in image_ids.values() else None)
+
+    def unexpected_build(*_args, **_kwargs):
+        raise AssertionError("probe-state unit test must not start a Docker build")
+
+    monkeypatch.setattr(author_tool, "cmd_build", unexpected_build)
     run_dir, evidence = _run_dir(tmp_path)
     workspace = authoring.prepare_workspace(
         run_dir=run_dir,
@@ -474,14 +486,16 @@ def test_cmd_probe_writes_state_and_finishes_job(tmp_path: Path, monkeypatch):
                 "variants": {
                     "vulnerable": {
                         "image_ref": "target-v",
+                        "image_digest": image_ids["vulnerable"],
                         "task_dir": str(task_dir),
                     },
                     "fixed": {
                         "image_ref": "target-f",
+                        "image_digest": image_ids["fixed"],
                         "task_dir": str(task_dir),
                     },
                 },
-                "base": {"verifier": {"image_ref": "verifier:1"}},
+                "base": {"verifier": {"image_ref": "verifier:1", "image_digest": image_ids["verifier"]}},
             }
         ),
         encoding="utf-8",

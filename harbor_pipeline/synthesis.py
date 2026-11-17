@@ -798,22 +798,22 @@ def normalize_bundle(
 
     # Product and versions are authoritative from discovery when present.
     product = bundle.get("product") or {}
-    if discovery.package:
-        name = discovery.package
-        if (discovery.ecosystem or "") in {"pypi", "npm"}:
+    if discovery.build_package:
+        name = discovery.build_package
+        if (discovery.build_ecosystem or "") in {"pypi", "npm"}:
             name = name.lower()
         if str(product.get("name", "")).lower() != name.lower():
             notes.append(
                 f"product name forced from evidence: {product.get('name')!r} -> {name!r}"
             )
         product["name"] = name
-    if discovery.ecosystem:
-        if product.get("ecosystem") != discovery.ecosystem:
+    if discovery.build_ecosystem:
+        if product.get("ecosystem") != discovery.build_ecosystem:
             notes.append(
                 "product ecosystem forced from evidence: "
-                f"{product.get('ecosystem')!r} -> {discovery.ecosystem!r}"
+                f"{product.get('ecosystem')!r} -> {discovery.build_ecosystem!r}"
             )
-        product["ecosystem"] = discovery.ecosystem
+        product["ecosystem"] = discovery.build_ecosystem
     if discovery.component and not product.get("component"):
         product["component"] = discovery.component
     bundle["product"] = product
@@ -1890,6 +1890,48 @@ def _corpus(evidence: dict, run_dir: Path) -> str:
     return "\n".join(chunks)
 
 
+_VERSION_ALIAS = re.compile(
+    r"v?(\d+(?:\.\d+)*)(?:[-.]?beta[-.]?(\d+)|b(\d+))",
+    re.IGNORECASE,
+)
+
+
+def _version_variants(value: str) -> set[str]:
+    """Spellings a version may take across PyPI, git tags and advisory text.
+
+    ``normalize_bundle`` may turn a git range such as ``< 4.0.0-beta.9`` into
+    the PEP 440 form ``4.0.0b8``. The fetched CVE/OSV sources often contain
+    only the tag spelling, so an exact substring check would reject a correctly
+    normalized version (observed on CVE-2026-79785). These variants are
+    deliberately narrow: they only bridge the documented beta/pre-release
+    spellings, not arbitrary version guesses.
+    """
+    raw = str(value or "").strip().strip("\"'")
+    if not raw:
+        return set()
+    variants = {raw, raw.casefold()}
+    stripped = raw[1:] if raw[:1].lower() == "v" else raw
+    variants.add(stripped)
+    variants.add(stripped.casefold())
+    match = _VERSION_ALIAS.fullmatch(raw)
+    if match:
+        base = match.group(1)
+        number = match.group(2) or match.group(3)
+        for candidate in (
+            f"{base}b{number}",
+            f"{base}beta{number}",
+            f"{base}-beta{number}",
+            f"{base}-beta.{number}",
+            f"v{base}b{number}",
+            f"v{base}beta{number}",
+            f"v{base}-beta{number}",
+            f"v{base}-beta.{number}",
+        ):
+            variants.add(candidate)
+            variants.add(candidate.casefold())
+    return variants
+
+
 def _grounded(
     value: str, corpus: str, by_id: dict[str, dict], fix_source_id: str | None
 ) -> bool:
@@ -1898,7 +1940,9 @@ def _grounded(
     if fix_source_id and value in corpus:
         return True
     # Short prefixes (7-char commit shas) are grounded by the patch header.
-    return value in corpus
+    if value in corpus:
+        return True
+    return any(variant in corpus for variant in _version_variants(value))
 
 
 def _evidence_excerpts(evidence: dict, run_dir: Path, *, limit: int = 60_000) -> str:
