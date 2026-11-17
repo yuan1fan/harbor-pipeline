@@ -2357,6 +2357,7 @@ class CvePipeline:
     def _release_key(self, spec, evidence, task, image_set, outcome):
         from .validation_evidence import validation_signature
         from . import release as release_module
+        from . import release_replay as replay_module
         discovery_path = self.store.path("discovery.json")
         pair = authoring.discovery_identity(discovery_mod.Discovery.from_json(read_json(discovery_path))) if discovery_path.is_file() else None
         return digest({
@@ -2367,6 +2368,7 @@ class CvePipeline:
             "review": self.store.read_artifact("solver-review.json") if self.config.pipeline.solver_review else None,
             "review_limits": {k: v for k, v in vars(self.config.pipeline).items() if k.startswith("solver_")},
             "release_code": digest(Path(release_module.__file__).read_bytes()),
+            "release_replay_code": digest(Path(replay_module.__file__).read_bytes()),
         })
 
     @telemetry.pipeline_stage("release_resume")
@@ -2469,9 +2471,25 @@ class CvePipeline:
         from .retries import retry_infrastructure
         recheck = checkpoint.get("recheck")
         if not recheck:
+            limit = self.config.pipeline.stage_retry_attempts
+            remaining = limit - int(checkpoint.get("replay_attempts", 0))
+            if remaining <= 0:
+                raise TaskError("infra_error", "Release replay retry budget is exhausted; inspect the recorded failure",
+                                detail={"stage": "release", "automatic_retry_exhausted": True,
+                                        "stage_attempts": limit})
+
+            def replay_release():
+                checkpoint["replay_attempts"] = int(checkpoint.get("replay_attempts", 0)) + 1
+                self.store.write_artifact("release-stage.json", checkpoint)
+                return recheck_from_release(self.adapter, result.root, n_concurrent=1,
+                    timeout_sec=self.config.pipeline.command_timeout_sec,
+                    on_build=lambda: self._ledger().charge("builds", 1))
+
             try:
-                recheck = retry_infrastructure(lambda: recheck_from_release(self.adapter, result.root, n_concurrent=self.workers))
+                recheck = retry_infrastructure(replay_release, attempts=remaining)
             except TaskError as exc:
+                checkpoint["last_error"] = exc.as_record()
+                self.store.write_artifact("release-stage.json", checkpoint)
                 exc.detail = {**(exc.detail or {}), "stage": "release"}
                 raise
         if recheck.get("reward") != 1.0:
@@ -2664,12 +2682,14 @@ class CvePipeline:
             return self._report(self.store.load(), task, None, None, None, None)
         job = self.store.load()
         from .retries import retry_infrastructure
-        image_set = retry_infrastructure(lambda: self.build(spec, task, self.store.load()), attempts=2)
+        image_set = retry_infrastructure(lambda: self.build(spec, task, self.store.load()),
+                                         attempts=self.config.pipeline.stage_retry_attempts)
         if until == "build":
             return self._report(self.store.load(), task, image_set, None, None, None)
         job = self.store.load()
         matrix, outcome = retry_infrastructure(
-            lambda: self.validate(spec, evidence, task, image_set, self.store.load()), attempts=2)
+            lambda: self.validate(spec, evidence, task, image_set, self.store.load()),
+            attempts=self.config.pipeline.stage_retry_attempts)
         failure = self._matrix_repair_error(matrix, outcome)
         if failure is not None:
             # The target is up and the graders behave, but the reference exploit
@@ -3297,13 +3317,24 @@ class CvePipeline:
         if job.state != "QUARANTINED":
             return job
         error = job.error or {}
+        if (error.get("detail") or {}).get("automatic_retry_exhausted"):
+            return job
         used = int(job.attempts.get("retry", 0))
         category = str(error.get("category") or "")
         from .retries import infrastructure_retry_limit
         recovery = recovery_decision(error)
         if recovery["action"] not in {"retry", "author", "blocked"}:
             return job
-        retry_limit = infrastructure_retry_limit(error, self.config.pipeline.max_repairs)
+        # Keep the explicit infrastructure budget separate from author repair
+        # attempts.  A retryable Docker/Harbor/source failure must not inherit
+        # the much larger max_repairs allowance, while blocked reports still
+        # retain the operator's normal repair budget.
+        default_limit = (
+            self.config.pipeline.max_infra_retries
+            if recovery["action"] == "retry"
+            else self.config.pipeline.max_repairs
+        )
+        retry_limit = infrastructure_retry_limit(error, default_limit)
         if recovery["action"] == "blocked":
             # Automatic workers stop on blocked reports. A later explicit
             # run/batch invocation may retry after the operator fixes the cause.

@@ -35,7 +35,7 @@ def execute_pipeline(pipeline: CvePipeline, *, retries: int) -> dict:
         attempts += 1
         report = pipeline.run()
         error = report.error or {}
-        if not error.get("retryable"):
+        if not error.get("retryable") or (error.get("detail") or {}).get("automatic_retry_exhausted"):
             break
         if attempts > infrastructure_retry_limit(error, retries):
             break
@@ -58,7 +58,7 @@ def run_candidate(job: CandidateJob, config: Config) -> dict:
             output_root=job.output_root,
         )
         payload = execute_pipeline(
-            pipeline, retries=max(0, config.pipeline.max_repairs)
+            pipeline, retries=max(0, config.pipeline.max_infra_retries)
         )
         payload["report_path"] = str(pipeline.root / "report.json")
         return payload

@@ -12,6 +12,7 @@ def _executors():
         "harbor_adapter.py", "backend.py", "goals.py", "trials.py",
         "pipeline.py", "runtime_identity.py", "provenance.py",
         "validation_evidence.py", "execution_progress.py", "build_cache.py", "author_probe.py",
+        "assets/browser_bot.py",
     )}
 
 

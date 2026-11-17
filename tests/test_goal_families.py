@@ -469,3 +469,38 @@ def test_an_advisory_without_an_end_to_end_exploit_is_unsupported():
     assert synthesis_mod._negated_exploit(
         "An unauthenticated request reads the secret token."
     ) is None
+
+
+def test_xss_bot_setup_is_schema_valid_and_embedded_in_target(tmp_path):
+    setup = {
+        "reason": "the stored sink is only rendered for an authenticated administrator",
+        "steps": [
+            {"action": "goto", "path": "/admin/login"},
+            {"action": "fill", "selector": "input[name=email]", "value": "admin@example.test"},
+            {"action": "fill", "selector": "input[name=password]", "value": "test-password"},
+            {"action": "click", "selector": "button[type=submit]"},
+            {"action": "wait_for", "selector": "#admin-dashboard"},
+        ],
+    }
+    body = _bundle()
+    body["target"]["bot_setup"] = setup
+    _, _, issues = _normalize(tmp_path, body)
+    assert not issues, issues
+    goal = {
+        "family": "secret_read", "type": "secret_disclosure", "primitive": "xss",
+        "target_asset": "/opt/app/secret/token",
+        "observable": "The admin bot's cookie secret reaches CALLBACK_URL.",
+    }
+    pre = {
+        "network_reachable": True, "auth_identity": "high_privilege", "auth_scheme": "http_basic",
+        "privileges": "high", "configuration": "authenticated admin page",
+        "user_interaction": True, "unknown": [],
+    }
+    synthesis = _synthesis("secret_read")
+    synthesis.target["bot_setup"] = setup
+    task = render_task(_spec(goal, pre), scenario_name="synthesized", variant="vulnerable",
+                       synthesis=synthesis)
+    entrypoint = task.files["environment/target/entrypoint.sh"]
+    assert "/bot-oracle/setup.json" in entrypoint
+    assert "admin@example.test" in entrypoint
+    assert "step" in entrypoint.lower()

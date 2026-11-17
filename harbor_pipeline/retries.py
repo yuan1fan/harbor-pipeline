@@ -81,7 +81,11 @@ def retry_infrastructure(operation, *, attempts=3, delay_sec=2.0, on_retry=None)
         try:
             return operation()
         except TaskError as exc:
-            if recovery_decision(exc)["action"] != "retry" or attempt + 1 == attempts:
+            if recovery_decision(exc)["action"] != "retry":
+                raise
+            if attempt + 1 == attempts:
+                exc.detail = {**(exc.detail or {}), "automatic_retry_exhausted": True,
+                              "stage_attempts": attempts}
                 raise
             if on_retry:
                 on_retry(attempt + 1, exc)
