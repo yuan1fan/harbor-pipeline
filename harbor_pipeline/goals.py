@@ -31,6 +31,7 @@ BOT_COOKIE_NAME = "harbor_secret"
 BOT_PORT = 8090
 BOT_SECRET_MOUNT = "/bot-oracle"
 BOT_SECRET_FILE = "/bot-oracle/token"
+BOT_SETUP_FILE = "/bot-oracle/setup.json"
 
 # Shared marker volume for the file-write family. Only the target and the
 # independent observer mount it; the verifier main (where the PoC runs) does

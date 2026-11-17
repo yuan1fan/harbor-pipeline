@@ -72,3 +72,25 @@ def test_bot_private_volume_is_not_mounted_by_untrusted_verifier(tmp_path, rende
     if render == "matrix":
         assert "fixed-bot-data:/bot-oracle:ro" in text
         assert "bot-fixed:\n        condition: service_healthy" in text
+
+
+def test_bot_reads_bounded_application_login_setup(tmp_path, monkeypatch):
+    setup = {
+        "reason": "the sink is behind the administrator login",
+        "steps": [
+            {"action": "goto", "path": "/admin/login"},
+            {"action": "fill", "selector": "input[name=email]", "value": "admin@example.test"},
+            {"action": "fill", "selector": "input[name=password]", "value": "test-password"},
+            {"action": "click", "selector": "button[type=submit]"},
+            {"action": "wait_for", "selector": "#admin-dashboard"},
+        ],
+    }
+    path = tmp_path / "setup.json"
+    path.write_text(__import__("json").dumps(setup), encoding="utf-8")
+    bot = _bot(monkeypatch)
+    bot["SETUP_FILE"] = str(path)
+    assert bot["read_setup"]() == setup["steps"]
+    setup["steps"][0]["path"] = "//evil.example/"
+    path.write_text(__import__("json").dumps(setup), encoding="utf-8")
+    with pytest.raises(ValueError):
+        bot["read_setup"]()

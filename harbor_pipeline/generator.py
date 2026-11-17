@@ -157,6 +157,7 @@ def render_task(
         presentation_mode=presentation_mode,
         presentation_hints=tuple(str(x) for x in (presentation.get("hints") or ())),
         presentation_sources=tuple(str(x) for x in (presentation.get("source_paths") or ())),
+        bot_setup=(getattr(synthesis, "target", {}) or {}).get("bot_setup"),
     )
     if synthesis is not None:
         files = render_synthesis(ctx, synthesis)

@@ -288,16 +288,21 @@ def recheck_from_release(
     release_dir: Path,
     *,
     n_concurrent: int = 2,
+    timeout_sec: int = 900,
+    on_build=None,
 ) -> dict:
     """Re-run health plus the reference PoC from the immutable release copy."""
     task_dir = release_dir / "task"
     if not task_dir.is_dir():
         raise PipelineError(f"No task directory in {release_dir}")
+    from .release_replay import prepare_release_replay
+    execution_dir, replay = prepare_release_replay(release_dir, timeout_sec=timeout_sec, on_build=on_build)
     outcome = adapter.run(
-        [task_dir],
+        [execution_dir],
         agent="oracle",
         job_name="release-recheck",
-        n_concurrent=n_concurrent,
+        n_concurrent=1,
+        timeout_sec=timeout_sec,
     )
     if not outcome.trials:
         raise TaskError("infra_error", "Release recheck produced no trial")
@@ -313,6 +318,7 @@ def recheck_from_release(
         "health_ok": bool((trial.evidence or {}).get("health_ok")),
         "reference_observed": bool((trial.evidence or {}).get("reference_observed")),
         "trial_dir": str(trial.trial_dir),
+        "replay": replay,
     }
 
 

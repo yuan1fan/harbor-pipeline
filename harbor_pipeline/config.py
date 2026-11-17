@@ -37,6 +37,9 @@ class Settings:
     resource_disk_paths: list[str] = field(default_factory=list)
     archive_images: bool = False
     max_repairs: int = 2
+    # Infrastructure retries are independent of author repair attempts.
+    max_infra_retries: int = 2
+    stage_retry_attempts: int = 2
     trials: int = 5
     min_trials: int = 5
     max_calls: int = 12
@@ -148,7 +151,7 @@ def load_config(path: Path | None = None) -> Config:
     for name in ("docker_slots", "min_free_memory_mb", "min_free_disk_gb"):
         if type(getattr(settings, name)) is not int or getattr(settings, name) < 0:
             raise PipelineError(f"{name} must be a nonnegative integer")
-    for name in ("resource_wait_sec", "build_cache_keep_gb"):
+    for name in ("resource_wait_sec", "build_cache_keep_gb", "stage_retry_attempts"):
         if type(getattr(settings, name)) is not int or getattr(settings, name) < 1:
             raise PipelineError(f"{name} must be a positive integer")
     if not isinstance(settings.resource_dir, str) or not settings.resource_dir.strip():
@@ -167,7 +170,7 @@ def load_config(path: Path | None = None) -> Config:
         raise PipelineError("authoring must be 'agent' or 'legacy'")
     if settings.author_sandbox_network not in {"none", "bridge"}:
         raise PipelineError("author_sandbox_network must be 'none' or 'bridge'")
-    for name in ("author_max_resumes", "author_build_runs", "author_probe_runs", "author_exec_runs", "max_evidence_reviews"):
+    for name in ("author_max_resumes", "author_build_runs", "author_probe_runs", "author_exec_runs", "max_evidence_reviews", "max_infra_retries"):
         if not isinstance(getattr(settings, name), int) or getattr(settings, name) < 0:
             raise PipelineError(f"{name} must be a nonnegative integer")
     for name in (

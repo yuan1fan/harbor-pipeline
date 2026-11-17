@@ -1,24 +1,28 @@
 # Eight-CVE recovery regression. Share the host queue with the original checkout.
-# Candidate/LLM workers: 3; Docker slots: 2; trials per candidate: 1.
+# Candidate/LLM workers: 2; Docker slots: 2; trials per candidate: 1.
 [pipeline]
 output_dir = "runs"
 # Reuse only the endpoint/auth pair from local Claude settings when this
 # PowerShell has no connection overrides. No credentials are written here.
 inherit_claude_settings = true
 # Concurrent author/LLM candidates; Docker phases have a separate host queue.
-workers = 3
+workers = 2
 # Concurrent trials inside one candidate. Docker admission below caps the
 # aggregate build/probe/trial concurrency across candidate workers.
 trial_workers = 1
 docker_slots = 2
 resource_dir = "../harbor_pipeline/work/resources"
-min_free_memory_mb = 4096
+min_free_memory_mb = 3584
 min_free_disk_gb = 15
-resource_wait_sec = 7200
+# A two-hour admission wait hid a dead WSL memory pool.  Fail fast so the
+# batch reports the resource problem instead of holding every worker.
+resource_wait_sec = 300
 wsl_reclaim_memory = true
 prune_images = true
 build_cache_keep_gb = 20
 max_repairs = 6
+max_infra_retries = 2
+stage_retry_attempts = 2
 # Authoring is one native Claude Code session per candidate. ``legacy`` keeps
 # the old draft + JSON repair path for a fallback during the transition.
 authoring = "agent"

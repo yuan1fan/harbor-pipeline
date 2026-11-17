@@ -1071,7 +1071,7 @@ def normalize_bundle(
     known_target_keys = {
         "fix_mode", "base_image", "port", "health_path", "business_path",
         "business_body", "start_command", "files", "fixed_overrides",
-        "business_probes",
+        "business_probes", "bot_setup",
     }
     stray = [
         key for key, value in target.items()
@@ -1321,6 +1321,16 @@ def _strip_app_prefix(
 
 def _validate_target(target: dict[str, Any]) -> list[str]:
     issues: list[str] = []
+    if "bot_setup" in target:
+        from jsonschema import Draft202012Validator
+        schema = load_schema("synthesis-bundle")["properties"]["target"]["properties"]["bot_setup"]
+        setup = target["bot_setup"]
+        if not Draft202012Validator(schema).is_valid(setup):
+            issues.append("target.bot_setup must use bounded goto/fill/click/wait_for browser actions with a reason")
+        else:
+            steps = setup["steps"]
+            if steps[0]["action"] != "goto" or steps[-1]["action"] != "wait_for":
+                issues.append("target.bot_setup must start with goto and end with wait_for on an authenticated readiness selector")
     probes = target.get("business_probes") or []
     if not isinstance(probes, list) or not probes:
         issues.append("target.business_probes needs at least one normal application request; /health and /business alone do not verify functionality")
