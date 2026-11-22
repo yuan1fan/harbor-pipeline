@@ -361,7 +361,7 @@ def cmd_build(ctx: ToolContext, *, variant: str = "both", quiet: bool = False) -
         base_images = author_probe.ensure_base_images(
             probe_root=ctx.run_dir / "author-probe" / "base-images",
             log_dir=ctx.workspace / ".harbor",
-            timeout_sec=ctx.config.pipeline.command_timeout_sec,
+            timeout_sec=getattr(ctx.config.pipeline, "author_build_timeout_sec", ctx.config.pipeline.command_timeout_sec),
         )
         tasks = _render_variants(ctx, spec, bundle, base_images=base_images)
     except Exception as exc:  # noqa: BLE001 - report the render/base failure
@@ -389,7 +389,7 @@ def cmd_build(ctx: ToolContext, *, variant: str = "both", quiet: bool = False) -
                 context=context,
                 image_ref=image_ref,
                 log_path=log_path,
-                timeout_sec=ctx.config.pipeline.command_timeout_sec,
+                timeout_sec=getattr(ctx.config.pipeline, "author_build_timeout_sec", ctx.config.pipeline.command_timeout_sec),
                 reuse=True, on_build=charge_build,
             )
         except TaskError as exc:

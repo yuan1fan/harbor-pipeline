@@ -15,6 +15,7 @@ switch to a white-box presentation or add context hints), or decline.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +77,22 @@ def require_valid_solver(solver: dict) -> None:
         if exception or ("reward" in trial and trial["reward"] is None):
             name = str(exception.get("exception_type") or exception.get("type")
                        or exception.get("name") or trial.get("failure_type") or "missing_reward")
+            message = str(exception.get("exception_message") or "")
+            # Harbor currently labels a Claude Code exit-1 trial as an
+            # authentication/network error. The stream-json result carries the
+            # real terminal reason, and a turn/budget cap must be retried (with
+            # a larger solver budget), not treated as a credential fault.
+            if re.search(r"(?i)error_max_turns|Reached maximum number of turns|\bmax_turns\b", message):
+                # A cap is a valid "unsolved within budget" result, not a
+                # failed assessment. Let the reviewer decide whether the task
+                # is fair; a failed solver alone is not grounds to reject it.
+                trial["failure_type"] = "max_turns"
+                trial["budget_exhausted"] = True
+                continue
+            if re.search(r"(?i)error_max_budget_usd|Reached maximum budget|\bbudget_exhausted\b", message):
+                trial["failure_type"] = "max_budget"
+                trial["budget_exhausted"] = True
+                continue
             raise TaskError(
                 "infra_error", f"Solver trial has no valid assessment: {name}; retry the solver before reviewing the task",
                 detail={"solver_failure_type": name, "solver_trial_dir": trial.get("trial_dir"),

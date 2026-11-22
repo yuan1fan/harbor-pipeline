@@ -1,0 +1,677 @@
+[
+  {
+    "cve_id": "CVE-2026-33314",
+    "priority": 10,
+    "product": "pyload",
+    "vendor": "pyload",
+    "group": "sample50_untested",
+    "family_hint": "server_request",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "pyload: pyLoad is a free and open-source download manager written in Python. Prior to version 0.5.0b3.dev97, a Host Header Spoofing vulnerability in the @local_check decorator allows unaut"
+  },
+  {
+    "cve_id": "CVE-2026-82044",
+    "priority": 20,
+    "product": "UTMStack",
+    "vendor": "UTMStack",
+    "group": "sample50_untested",
+    "family_hint": "server_request",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "UTMStack: UTMStack before 11.2.16 contains a server-side request forgery vulnerability that allows authenticated attackers to make the server request arbitrary internal resources by supplyin"
+  },
+  {
+    "cve_id": "CVE-2026-100848",
+    "priority": 30,
+    "product": "AzuraCast",
+    "vendor": "AzuraCast",
+    "group": "sample50_untested",
+    "family_hint": "server_request",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "AzuraCast: AzuraCast (Composer package azuracast/azuracast) before 0.23.8 validates a station's \"Remote Relay\" URL only for URL syntax and an http/https scheme (Utilities\\Urls::parseUserUrl, "
+  },
+  {
+    "cve_id": "CVE-2026-102091",
+    "priority": 40,
+    "product": "Secure Data Forms",
+    "vendor": "Kiteworks",
+    "group": "sample50_untested",
+    "family_hint": "server_request",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "Secure Data Forms: Kiteworks Secure Data Forms before version 9.5.0 is vulnerable to Server-Side Request Forgery that could allow an unauthenticated, remote attacker to make the server issue arbitrar"
+  },
+  {
+    "cve_id": "CVE-2026-105214",
+    "priority": 50,
+    "product": "zitadel",
+    "vendor": "zitadel",
+    "group": "sample50_untested",
+    "family_hint": "server_request",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "zitadel: Zitadel before 4.16.2 contains a server-side request forgery vulnerability that allows attackers to make the server request internal resources through organization domain HTTP veri"
+  },
+  {
+    "cve_id": "CVE-2026-70620",
+    "priority": 60,
+    "product": "odysseus",
+    "vendor": "odysseus-dev",
+    "group": "sample50_untested",
+    "family_hint": "server_request",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "odysseus: Odysseus before commit 87babb5 contains a server-side request forgery vulnerability that allows admin-privileged attackers to direct the server to probe internal network resources "
+  },
+  {
+    "cve_id": "CVE-2026-73432",
+    "priority": 70,
+    "product": "vulnerability-lookup",
+    "vendor": "vulnerability-lookup",
+    "group": "sample50_untested",
+    "family_hint": "server_request",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "vulnerability-lookup: Vulnerability-Lookup contains a server-side request forgery (SSRF) vulnerability in the remote-instance synchronization functionality. Remote instance addresses were validated only"
+  },
+  {
+    "cve_id": "CVE-2026-76164",
+    "priority": 80,
+    "product": "ail-framework",
+    "vendor": "ail-project",
+    "group": "sample50_untested",
+    "family_hint": "server_request",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "ail-framework: AIL Framework contains a server-side request forgery (SSRF) vulnerability in its crawler submission functionality. A low-privileged authenticated user with access to the crawler in"
+  },
+  {
+    "cve_id": "CVE-2026-91750",
+    "priority": 90,
+    "product": "WeKnora",
+    "vendor": "Tencent",
+    "group": "sample50_untested",
+    "family_hint": "server_request",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "WeKnora: WeKnora before 0.7.0 fails to re-validate HTTP redirect targets in the POST /api/v1/knowledge-bases/:id/knowledge/url endpoint when downloading documents from user-supplied URLs. A"
+  },
+  {
+    "cve_id": "CVE-2026-115720",
+    "priority": 100,
+    "product": "builder",
+    "vendor": "frappe",
+    "group": "sample50_untested",
+    "family_hint": "server_request",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "builder: Frappe Builder before 1.36.1 contains a server-side request forgery vulnerability in builder/api.py where the assert_not_private_url() guard validates only the initial hostname bef"
+  },
+  {
+    "cve_id": "CVE-2026-63764",
+    "priority": 110,
+    "product": "lmdeploy",
+    "vendor": "InternLM",
+    "group": "sample50_untested",
+    "family_hint": "server_request",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "lmdeploy: LMDeploy through 0.14.0, fixed in commit 03c3130, contains a server-side request forgery (SSRF) vulnerability in the _load_http_url function within the connection.py media handler,"
+  },
+  {
+    "cve_id": "CVE-2026-82556",
+    "priority": 120,
+    "product": "Forgejo",
+    "vendor": "n/a",
+    "group": "sample50_untested",
+    "family_hint": "server_request",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "Forgejo: A vulnerability was found in Forgejo up to 15.0.4. This issue affects the function net.LookupIP of the file services/migrations/allowlist/is_migrate_allowed.go of the component Rep"
+  },
+  {
+    "cve_id": "CVE-2026-66415",
+    "priority": 130,
+    "product": "Leantime",
+    "vendor": "Leantime",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "path_traversal",
+      "file_read",
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "Leantime: Leantime 3.6.2 contains a server-side request forgery and local file inclusion vulnerability that allows authenticated attackers to read internal resources by passing unsanitized u"
+  },
+  {
+    "cve_id": "CVE-2026-70559",
+    "priority": 140,
+    "product": "Dinky",
+    "vendor": "DataLinkDC",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "file_read",
+      "information_disclosure"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "Dinky: Dinky's SysConfigController.getAll() handler for GET /api/sysConfig/getAll carries a method-level @SaIgnore annotation that short-circuits the class-level @SaCheckLogin, so the Sa-"
+  },
+  {
+    "cve_id": "CVE-2026-71426",
+    "priority": 150,
+    "product": "GetSimpleCMS-CE",
+    "vendor": "GetSimpleCMS-CE",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "GetSimpleCMS-CE: GetSimple CMS is a content management system (CMS), and GetSimple CMS CE is the community edition of that CMS. In versions 3.3.22 and prior, an authenticated user with page-editing"
+  },
+  {
+    "cve_id": "CVE-2026-72779",
+    "priority": 160,
+    "product": "cms",
+    "vendor": "craftcms",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "cms: Craft CMS 5.0.0-RC1 before 5.10.6 and 4.0.0-RC1 before 4.18.2 contain an arbitrary file read vulnerability. The create() Twig function restricts class instantiation using a 5-entry"
+  },
+  {
+    "cve_id": "CVE-2026-77068",
+    "priority": 170,
+    "product": "n8n",
+    "vendor": "n8n-io",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "path_traversal",
+      "code_execution"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "n8n: n8n before 2.33.4 and 2.34.x before 2.34.1 contain a remote code execution vulnerability in the @n8n/workflow-sdk node-schema loader used for MCP node-schema loading. The loader de"
+  },
+  {
+    "cve_id": "CVE-2026-79750",
+    "priority": 180,
+    "product": "mcphub",
+    "vendor": "samanhappy",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "file_read",
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "mcphub: MCPHub is a unified hub for centrally managing and dynamically orchestrating multiple MCP servers/APIs into separate endpoints with flexible routing strategies. Prior to version 1."
+  },
+  {
+    "cve_id": "CVE-2026-86253",
+    "priority": 190,
+    "product": "h3",
+    "vendor": "h3js",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "h3: h3 (npm package) versions <= 2.0.1-rc.14 contain a path traversal vulnerability in serveStatic(). On Node.js deployments, event.url.pathname is not normalized, so percent-encoded d"
+  },
+  {
+    "cve_id": "CVE-2026-86775",
+    "priority": 200,
+    "product": "knowns",
+    "vendor": "knowns-dev",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "knowns: knowns (npm package) versions <= 0.29.1 contain a path traversal vulnerability in the Document API. The HTTP handler in internal/server/routes/docs.go normalizes the user-supplied "
+  },
+  {
+    "cve_id": "CVE-2026-26186",
+    "priority": 210,
+    "product": "fleet",
+    "vendor": "fleetdm",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "sql_injection"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "fleet: Fleet is open source device management software. A SQL injection vulnerability in versions prior to 4.80.1 allowed authenticated users to inject arbitrary SQL expressions via the `"
+  },
+  {
+    "cve_id": "CVE-2026-33083",
+    "priority": 220,
+    "product": "dataease",
+    "vendor": "dataease",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "sql_injection"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "dataease: DataEase is an open-source data visualization and analytics platform. Versions 2.10.20 and below contain a SQL injection vulnerability in the orderDirection parameter used in datas"
+  },
+  {
+    "cve_id": "CVE-2026-45418",
+    "priority": 230,
+    "product": "clipbucket-v5",
+    "vendor": "MacWarrior",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "sql_injection"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "clipbucket-v5: ClipBucket v5 is an open source video sharing platform. Prior to version 5.5.3 - #132, any authenticated user who can upload videos can add multiple subtitles from different files "
+  },
+  {
+    "cve_id": "CVE-2026-72851",
+    "priority": 240,
+    "product": "server",
+    "vendor": "budibase",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "sql_injection"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "server: Budibase before 3.40.0 contains an unauthenticated SQL injection vulnerability in webhook-triggered automations with EXECUTE_QUERY steps. Attackers can POST attacker-controlled JSO"
+  },
+  {
+    "cve_id": "CVE-2026-47670",
+    "priority": 250,
+    "product": "DbGate",
+    "vendor": "dbgate",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "command_injection",
+      "code_execution"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "DbGate /runners/load-reader functionName command injection; authenticated RCE; secret_read candidate."
+  },
+  {
+    "cve_id": "CVE-2026-40083",
+    "priority": 260,
+    "product": "cacti",
+    "vendor": "Cacti",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "sql_injection",
+      "deserialization"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "cacti: Cacti is an open source performance and fault management framework. Versions 1.2.30 and prior have SQL Injection through unsanitized unserialize+implode in managers.php. At line 75"
+  },
+  {
+    "cve_id": "CVE-2026-40330",
+    "priority": 270,
+    "product": "MasaCMS",
+    "vendor": "MasaCMS",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "sql_injection",
+      "code_execution",
+      "information_disclosure"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "MasaCMS: Masa CMS is an open source content management system. In versions 7.2.0 through 7.2.9, 7.3.0 through 7.3.14, 7.4.0 through 7.4.9, and 7.5.0 through 7.5.2, a SQL injection vulnerabi"
+  },
+  {
+    "cve_id": "CVE-2026-46624",
+    "priority": 280,
+    "product": "twenty",
+    "vendor": "twentyhq",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "sql_injection",
+      "command_injection",
+      "code_execution"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "twenty: Twenty is an open source CRM. From 1.7.7 through 1.16.7, a critical Remote Code Execution (RCE) vulnerability exists in Twenty CRM via a chained SQL Injection and PostgreSQL COPY T"
+  },
+  {
+    "cve_id": "CVE-2026-28496",
+    "priority": 290,
+    "product": "FOSSBilling",
+    "vendor": "FOSSBilling",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "code_execution",
+      "template_injection",
+      "information_disclosure"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "FOSSBilling: FOSSBilling is a free, open-source billing and client management system. Versions prior to 0.8.0 have a Server-Side Template Injection (SSTI) vulnerability in the template renderin"
+  },
+  {
+    "cve_id": "CVE-2026-30941",
+    "priority": 300,
+    "product": "parse-server",
+    "vendor": "parse-community",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "sql_injection"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "parse-server: Parse Server is an open source backend that can be deployed to any infrastructure that can run Node.js. Prior to 8.6.14 and 9.5.2-alpha.1, NoSQL injection vulnerability allows an u"
+  },
+  {
+    "cve_id": "CVE-2026-77914",
+    "priority": 310,
+    "product": "rconfig",
+    "vendor": "rconfig",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "rconfig: rConfig Core 8.0.0 before 8.2.13 contains a path traversal vulnerability that allows authenticated users to read arbitrary files by supplying crafted filenames containing directory"
+  },
+  {
+    "cve_id": "CVE-2026-61873",
+    "priority": 320,
+    "product": "grav",
+    "vendor": "getgrav",
+    "group": "sample50_untested",
+    "family_hint": "file_write",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "grav: Grav before 9.1.8 contains an arbitrary file write vulnerability in the Form plugin's process.save.filename parameter, which is validated against path traversal before Twig process"
+  },
+  {
+    "cve_id": "CVE-2026-70558",
+    "priority": 330,
+    "product": "Dinky",
+    "vendor": "DataLinkDC",
+    "group": "sample50_untested",
+    "family_hint": "file_write",
+    "primitives": [
+      "file_read"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "Dinky: Dinky's POST /download/uploadFromRsByLocal handler passes the caller-supplied path parameter directly to new File(path) and file.transferTo(dest) with no path validation. The route"
+  },
+  {
+    "cve_id": "CVE-2026-72841",
+    "priority": 340,
+    "product": "luci",
+    "vendor": "openwrt",
+    "group": "sample50_untested",
+    "family_hint": "file_write",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "luci: luci-app-openvpn fails to properly validate the instance_name2 parameter during file upload, allowing authenticated users to perform path traversal and write arbitrary files outsid"
+  },
+  {
+    "cve_id": "CVE-2026-90932",
+    "priority": 350,
+    "product": "laradashboard",
+    "vendor": "laradashboard",
+    "group": "sample50_untested",
+    "family_hint": "file_write",
+    "primitives": [
+      "path_traversal",
+      "file_read",
+      "code_execution"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "laradashboard: LaraDashboard versions 0.9.2 through 1.2.2 contain a path traversal vulnerability in the core-upgrade backup handling. CoreUpgradeController and BackupService (e.g. BackupService::"
+  },
+  {
+    "cve_id": "CVE-2026-58654",
+    "priority": 360,
+    "product": "Grav",
+    "vendor": "getgrav",
+    "group": "sample50_untested",
+    "family_hint": "file_write",
+    "primitives": [
+      "path_traversal",
+      "code_execution"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "Grav API plugin avatar upload: authenticated arbitrary file storage / path traversal; file_write candidate."
+  },
+  {
+    "cve_id": "CVE-2026-77080",
+    "priority": 370,
+    "product": "n8n",
+    "vendor": "n8n-io",
+    "group": "sample50_untested",
+    "family_hint": "file_write",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "n8n: n8n before 1.123.69, 2.x before 2.33.4, and 2.34.x before 2.34.1 contain an arbitrary file read and write vulnerability in the Snowflake node, which passes free-form Execute Query "
+  },
+  {
+    "cve_id": "CVE-2026-77929",
+    "priority": 380,
+    "product": "clipbucket-v5",
+    "vendor": "MacWarrior",
+    "group": "sample50_untested",
+    "family_hint": "file_write",
+    "primitives": [
+      "code_execution"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "clipbucket-v5: ClipBucket v5 before 5.5.3-#182 contains a file upload vulnerability that allows authenticated users to achieve remote code execution by uploading a PHP file with valid image magic"
+  },
+  {
+    "cve_id": "CVE-2026-82450",
+    "priority": 390,
+    "product": "bookstack",
+    "vendor": "bookstackapp",
+    "group": "sample50_untested",
+    "family_hint": "file_write",
+    "primitives": [
+      "code_execution"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "bookstack: BookStack before 26.05.4 contains a remote code execution vulnerability in the portable ZIP import functionality that allows users with Import Content and Create Books permissions "
+  },
+  {
+    "cve_id": "CVE-2026-91934",
+    "priority": 400,
+    "product": "Flowise",
+    "vendor": "FlowiseAI",
+    "group": "sample50_untested",
+    "family_hint": "file_write",
+    "primitives": [
+      "file_read"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "Flowise: Flowise versions before 3.1.4 fail to validate file paths in the SQL Database Chain node when connecting to SQLite databases, allowing authenticated attackers to write arbitrary fi"
+  },
+  {
+    "cve_id": "CVE-2026-6249",
+    "priority": 410,
+    "product": "Vvveb CMS",
+    "vendor": "Vvveb",
+    "group": "sample50_untested",
+    "family_hint": "file_write",
+    "primitives": [
+      "code_execution"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "Vvveb CMS: Vvveb CMS 1.0.8.2 contains a remote code execution vulnerability in its media upload handler that allows authenticated attackers to execute arbitrary operating system commands by u"
+  },
+  {
+    "cve_id": "CVE-2026-33028",
+    "priority": 420,
+    "product": "nginx-ui",
+    "vendor": "0xJacky",
+    "group": "sample50_untested",
+    "family_hint": "service_unavailable",
+    "primitives": [
+      "code_execution"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "nginx-ui: Nginx UI is a web user interface for the Nginx web server. Prior to version 2.3.4, the nginx-ui application is vulnerable to a Race Condition. Due to the complete absence of synchr"
+  },
+  {
+    "cve_id": "CVE-2026-29097",
+    "priority": 430,
+    "product": "SuiteCRM",
+    "vendor": "SuiteCRM",
+    "group": "sample50_untested",
+    "family_hint": "service_unavailable",
+    "primitives": [
+      "ssrf"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "SuiteCRM: SuiteCRM is an open-source, enterprise-ready Customer Relationship Management (CRM) software application. Versions prior to 7.15.1 and 8.9.3 contain a Server-Side Request Forgery ("
+  },
+  {
+    "cve_id": "CVE-2026-18140",
+    "priority": 440,
+    "product": "aws-smithy-json",
+    "vendor": "AWS",
+    "group": "sample50_untested",
+    "family_hint": "service_unavailable",
+    "primitives": [
+      "deserialization"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "aws-smithy-json: Uncontrolled recursion in the unknown-key skip path of the aws-smithy-json runtime crate before 0.62.7, which the smithy-rs code generator invokes from every generated struct deser"
+  },
+  {
+    "cve_id": "CVE-2026-15957",
+    "priority": 450,
+    "product": "aws-sdk-rust",
+    "vendor": "AWS",
+    "group": "sample50_untested",
+    "family_hint": "service_unavailable",
+    "primitives": [
+      "deserialization"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "aws-sdk-rust: Smithy-RS is a Rust code generation and runtime framework that generates HTTP clients and servers from Smithy interface definitions, powering the AWS SDK for Rust and custom servic"
+  },
+  {
+    "cve_id": "CVE-2026-109618",
+    "priority": 460,
+    "product": "PHP",
+    "vendor": "PHP Group",
+    "group": "sample50_untested",
+    "family_hint": "service_unavailable",
+    "primitives": [
+      "code_execution"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "PHP: PHP uses longjmp() for out-of-memory (OOM) errors to exit the current context and abort handling of the request. Some contexts may not properly account for this scenario and leave "
+  },
+  {
+    "cve_id": "CVE-2026-71502",
+    "priority": 470,
+    "product": "cti-transmute",
+    "vendor": "misp",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "information_disclosure"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "Stored XSS; secret_read via framework admin bot. cti-transmute: CTI-Transmute contains a stored cross-site scripting vulnerability caused by insufficient neutralization of Vue template expression delimiters in server-rendered user-controlled da"
+  },
+  {
+    "cve_id": "CVE-2026-74902",
+    "priority": 480,
+    "product": "siyuan",
+    "vendor": "siyuan-note",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "command_injection"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "Stored XSS; secret_read via framework admin bot. siyuan: SiYuan before v3.7.4 contains a cross-site scripting vulnerability in the file upload validation flow that fails to escape filenames before inserting them into HTML via insertAdjac"
+  },
+  {
+    "cve_id": "CVE-2026-6410",
+    "priority": 490,
+    "product": "@fastify/static",
+    "vendor": "@fastify/static",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "path_traversal",
+      "file_read"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "Directory-name disclosure via directory listing; secret_read secret_location=directory_name. @fastify/static: @fastify/static versions 8.0.0 through 9.1.0 allow path traversal when directory listing is enabled via the list option. The dirList.path() function resolves directories outside th"
+  },
+  {
+    "cve_id": "CVE-2026-75920",
+    "priority": 500,
+    "product": "phpMyFAQ",
+    "vendor": "thorsten",
+    "group": "sample50_untested",
+    "family_hint": "secret_read",
+    "primitives": [
+      "file_read"
+    ],
+    "baseline_state": "UNTESTED",
+    "notes": "Backup ZIP race / file disclosure; secret_read. phpMyFAQ: phpMyFAQ before v4.1.6 writes content backup ZIP archives to the web-accessible document root at content.zip, exposing sensitive files including database credentials. Unauthenticat"
+  }
+]

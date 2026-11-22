@@ -84,10 +84,26 @@ def write_json(path: Path, value: Any) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(json_text(value) + "\n")
-        os.replace(tmp, path)
+        # Windows can briefly deny the atomic rename when an editor, indexer,
+        # antivirus scanner or Docker process still has the destination open.
+        # A failed helper job-status write leaves the helper "running" after it
+        # has exited, which the author loop reports as a missing terminal
+        # result. Retry the rename instead of turning that lock into an
+        # infrastructure quarantine.
+        for attempt in range(5):
+            try:
+                os.replace(tmp, path)
+                break
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
     finally:
         if os.path.exists(tmp):
-            os.unlink(tmp)
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 def read_json(path: Path) -> Any:

@@ -97,9 +97,15 @@ def test_finished_helper_resumes_author_without_generating_a_task_failure(case, 
         return AgentOutcome(status="completed", session_id="same-session")
 
     monkeypatch.setattr(case.pipeline, "_run_author_session_once", session)
+    # Simulate a long build that already consumed every failure-resume slot.
+    job = case.pipeline.store.load()
+    job.attempts["author_job_resume"] = 2
+    case.pipeline.store.save(job)
     case.pipeline._run_author_session(case.workspace, prompt="start", resume=None)
     assert len(calls) == 2 and calls[1]["resume"] == "same-session"
-    assert case.pipeline.store.load().attempts["author_job_resume"] == 1
+    attempts = case.pipeline.store.load().attempts
+    assert attempts["author_job_resume"] == 2
+    assert attempts["author_helper_success_resume"] == 1
 
 
 @pytest.mark.parametrize("status", ["timeout", "provider_error", "auth_error"])

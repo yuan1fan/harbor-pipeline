@@ -564,13 +564,17 @@ def _batch(config, args) -> int:
         per_candidate_tokens=per_tokens,
         per_candidate_usd=per_usd,
     )
+    # Persist the plan for every run, not only ``--plan-only``. Resume drivers
+    # use it to verify that an existing run directory belongs to the same
+    # candidate set; without it a stopped normal batch looks unrecoverable even
+    # though every candidate has a resumable state.json.
+    plan_path = plan.root / "batch-plan.json"
+    plan_root_payload = plan.to_json()
+    plan_root_payload["plan_path"] = str(plan_path)
+    _write_json(plan_path, plan_root_payload)
     if args.plan_only:
-        plan_path = plan.root / "batch-plan.json"
-        payload = plan.to_json()
-        payload["plan_path"] = str(plan_path)
-        _write_json(plan_path, payload)
         if args.json:
-            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            print(json.dumps(plan_root_payload, indent=2, ensure_ascii=False))
         else:
             print(
                 f"batch plan {plan.run_id}: {len(plan.candidates)} candidates "

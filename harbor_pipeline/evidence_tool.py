@@ -57,8 +57,24 @@ def _config_from_env() -> Config:
     if path:
         candidate = Path(path)
         if candidate.is_file():
-            return load_config(candidate)
-    return Config()
+            config = load_config(candidate)
+        else:
+            config = Config()
+    else:
+        config = Config()
+    # The parent deliberately strips GITHUB_TOKEN from the model environment.
+    # The helper receives only a private token-file path so authenticated
+    # GitHub API calls remain available without exposing the credential to the
+    # resolver session.
+    token_path = os.environ.get("HARBOR_HELPER_GITHUB_TOKEN_FILE", "").strip()
+    if token_path:
+        try:
+            token = Path(token_path).read_text(encoding="utf-8").strip()
+        except OSError:
+            token = ""
+        if token:
+            config.sources.github_token = token
+    return config
 
 
 def _context() -> ToolContext:

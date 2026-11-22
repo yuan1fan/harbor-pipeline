@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
@@ -40,6 +41,33 @@ BUILD_STATE_FILE = ".harbor/build-state.json"
 PROBE_STATE_FILE = ".harbor/probe-state.json"
 JOB_STATE_FILE = ".harbor/job.json"
 EVIDENCE_REVIEW_FILE = ".harbor/evidence-review.json"
+
+# A decline is normally a CVE/task verdict. These phrases mean the author was
+# blocked by the host or helper before it could exercise the task; that is an
+# infrastructure failure and must not be counted as UNSUPPORTED.
+_INFRASTRUCTURE_DECLINE = re.compile(
+    r"(?i)("
+    r"free disk|disk space|no space left|ENOSPC|GiB\s*(?:free|available)|"
+    r"\d+(?:\.\d+)?\s*GiB\s*<\s*reserve|reserve\s+\d+\s*GiB|workspace volume|"
+    r"docker daemon|docker engine|cannot connect to the docker daemon|"
+    r"host memory|out of memory|OOMKilled|resource gate|resource admission|"
+    r"vmmemwsl|\bWSL\b|infrastructure block|environment capacity|"
+    r"network is unreachable|temporary failure in name resolution|no such host|"
+    r"public redirector|probe runtime gives no such host|network is internal|"
+    r"helper exited without a terminal result|PermissionError|WinError 5"
+    r")"
+)
+
+
+def decline_category(reason: str) -> str:
+    """Classify an author decline without weakening a real CVE verdict."""
+    return "infra_error" if _INFRASTRUCTURE_DECLINE.search(str(reason or "")) else "unsupported"
+
+
+def decline_error(reason: str) -> TaskError:
+    category = decline_category(reason)
+    detail = {"unsupported_reason": reason} if category == "unsupported" else {"decline_reason": reason}
+    return TaskError(category, reason, detail=detail)
 
 _TARGET_PLACEHOLDER = """\
 #!/usr/bin/env python3

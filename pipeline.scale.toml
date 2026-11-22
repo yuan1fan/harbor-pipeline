@@ -111,7 +111,7 @@ api_base = "${ANTHROPIC_BASE_URL}"
 api_version = "2023-06-01"
 
 [sources]
-allowed_hosts = ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org", "api.osv.dev", "api.github.com", "services.nvd.nist.gov", "registry.npmjs.org", "proxy.golang.org", "sum.golang.org", "repo1.maven.org", "api.wordpress.org", "downloads.wordpress.org"]
+allowed_hosts = ["raw.githubusercontent.com", "github.com", "codeload.github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org", "api.osv.dev", "api.github.com", "services.nvd.nist.gov", "registry.npmjs.org", "proxy.golang.org", "sum.golang.org", "repo1.maven.org", "api.wordpress.org", "downloads.wordpress.org"]
 max_bytes = 1500000
 timeout_sec = 30
 # Serve per-CVE NVD records from the cached yearly feed instead of the API,

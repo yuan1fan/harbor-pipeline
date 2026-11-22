@@ -1259,7 +1259,7 @@ class CvePipeline:
                 self._base_images = author_probe.ensure_base_images(
                     probe_root=self.store.path("author-probe", "base-images"),
                     log_dir=self.store.path("build-logs"),
-                    timeout_sec=self.config.pipeline.command_timeout_sec,
+                    timeout_sec=getattr(self.config.pipeline, "author_build_timeout_sec", self.config.pipeline.command_timeout_sec),
                 )
             except TaskError as exc:
                 if exc.category.code == "infra_error":
@@ -1301,15 +1301,26 @@ class CvePipeline:
                                     detail={"author_helper": helper})
                 job = self.store.load()
                 job_resumes = int(job.attempts.get("author_job_resume", 0))
+                success_resumes = int(job.attempts.get("author_helper_success_resume", 0))
+                helper_succeeded = helper.get("status") == "succeeded"
                 if (outcome.status == "completed" and outcome.helper_result
                         and helper.get("status") in {"succeeded", "failed"} and workspace.status() == "none"
-                        and resume and job_resumes < self.config.pipeline.author_max_resumes):
-                    job.attempts["author_job_resume"] = job_resumes + 1
+                        and resume
+                        and (success_resumes < self.config.pipeline.author_max_resumes
+                             if helper_succeeded else job_resumes < self.config.pipeline.author_max_resumes)):
+                    # A completed background build/probe is progress, not a
+                    # failed repair attempt. Do not spend the failure budget on
+                    # the successful result; otherwise a long build can reach
+                    # the resume ceiling just before its result is available.
+                    if helper_succeeded:
+                        job.attempts["author_helper_success_resume"] = success_resumes + 1
+                    else:
+                        job.attempts["author_job_resume"] = job_resumes + 1
                     self.store.save(job)
                     prompt = authoring.resume_prompt("Your last helper result is available. Read .harbor/job.json for its result. "
                         "Do not start another copy of a still-running command. Fix a concrete build error or continue probing and submit.\n" +
                         json.dumps(outcome.helper_result, ensure_ascii=False))
-                    reason = "helper_resume"
+                    reason = "helper_success_resume" if helper_succeeded else "helper_resume"
                     continue
                 return outcome
 
@@ -1523,9 +1534,7 @@ class CvePipeline:
         if decision == "declined":
             declined = read_json(workspace.declined_path)
             reason = str(declined.get("reason") or "the author declined")[:1000]
-            raise TaskError(
-                "unsupported", reason, detail={"unsupported_reason": reason}
-            )
+            raise authoring.decline_error(reason)
         if decision != "submitted":
             category = (
                 "infra_error"
@@ -3096,9 +3105,7 @@ class CvePipeline:
             if decision == "declined":
                 declined = read_json(workspace.declined_path)
                 reason = str(declined.get("reason") or "the author declined")[:1000]
-                raise TaskError(
-                    "unsupported", reason, detail={"unsupported_reason": reason}
-                )
+                raise authoring.decline_error(reason)
             # A resume that did not submit still consumed the session quota;
             # otherwise a broken session could be retried forever through
             # _prepare_retry.

@@ -1,0 +1,56 @@
+[
+  {
+    "cve_id": "CVE-2026-109618",
+    "priority": 10,
+    "group": "github_token",
+    "notes": "fix commit/parent found; GitHub API 403 before token"
+  },
+  {
+    "cve_id": "CVE-2026-18140",
+    "priority": 20,
+    "group": "github_token",
+    "notes": "fix commit/parent found; GitHub API 403; crates.io not allowlisted"
+  },
+  {
+    "cve_id": "CVE-2026-71502",
+    "priority": 30,
+    "group": "github_token",
+    "notes": "tag v1.4 and fix parent found; GitHub API 403"
+  },
+  {
+    "cve_id": "CVE-2026-75920",
+    "priority": 40,
+    "group": "github_token",
+    "notes": "tags 4.1.5/4.1.6 and fix parent found; GitHub API 403; advisory range inconsistency"
+  },
+  {
+    "cve_id": "CVE-2026-6249",
+    "priority": 50,
+    "group": "borderline",
+    "notes": "fix parent verified; advisory says 1.0.8.2 affected but release notes say fixed"
+  },
+  {
+    "cve_id": "CVE-2026-82556",
+    "priority": 60,
+    "group": "borderline_low",
+    "notes": "Codeberg commit + no published fixed release; ref host unsupported"
+  },
+  {
+    "cve_id": "CVE-2026-54694",
+    "priority": 70,
+    "group": "code_fixed",
+    "notes": "successful background helper resume fix"
+  },
+  {
+    "cve_id": "CVE-2026-60120",
+    "priority": 80,
+    "group": "code_fixed",
+    "notes": "write_json retry + helper terminal + memory reserve"
+  },
+  {
+    "cve_id": "CVE-2026-15957",
+    "priority": 90,
+    "group": "code_fixed",
+    "notes": "author build timeout 3600 + helper terminal"
+  }
+]

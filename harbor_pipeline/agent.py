@@ -507,7 +507,10 @@ class ClaudeCodeAgent:
         started = time.monotonic()
         author = self.profile.role == "author"
         wait_limit = self.config.pipeline.resource_wait_sec if author else 0
-        wall_deadline = started + self.settings.timeout_sec + wait_limit + (2 * self.config.pipeline.command_timeout_sec if author else 0)
+        author_build_timeout = getattr(
+            self.config.pipeline, "author_build_timeout_sec", self.config.pipeline.command_timeout_sec
+        )
+        wall_deadline = started + self.settings.timeout_sec + wait_limit + (2 * author_build_timeout if author else 0)
         with ProcessTree(proc) as tree:
             def watchdog():
                 last, paused = time.monotonic(), 0.0
@@ -524,7 +527,7 @@ class ClaudeCodeAgent:
                     if ours and (helper.get("status") == "waiting" or proc.poll() is not None):
                         paused += now - last
                     last = now
-                    if (now >= wall_deadline or paused > wait_limit + (2 * self.config.pipeline.command_timeout_sec if author else 0)
+                    if (now >= wall_deadline or paused > wait_limit + (2 * author_build_timeout if author else 0)
                             or now - started - paused >= self.settings.timeout_sec):
                         timed_out.set()
                         tree.kill()

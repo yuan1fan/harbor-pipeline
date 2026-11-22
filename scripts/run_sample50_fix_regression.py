@@ -61,8 +61,12 @@ def main() -> int:
             old = json.loads(previous.read_text(encoding="utf-8"))
             if set(old.get("candidates", [])) != set(ids):
                 parser.error("existing run has a different candidate set; use a new run-id")
-        elif any(run_dir.glob("CVE-*/state.json")):
-            parser.error("existing states have no batch plan; use a new run-id")
+        else:
+            # Older normal batches did not write batch-plan.json. Resume is
+            # safe when every existing CVE directory belongs to this manifest.
+            existing = {path.name for path in run_dir.glob("CVE-*") if path.is_dir()}
+            if existing and not existing <= set(ids):
+                parser.error("existing states have a different candidate set; use a new run-id")
     elif args.resume:
         parser.error("cannot resume a run that does not exist")
     launch = [

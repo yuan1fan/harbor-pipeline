@@ -1,0 +1,122 @@
+[
+  {
+    "cve_id": "CVE-2026-15957",
+    "priority": 10,
+    "group": "disk_reserve",
+    "previous_state": "UNSUPPORTED",
+    "previous_error": "unsupported",
+    "notes": "Build and probe cannot run in this environment: every attempt is rejected before Docker starts because the workspace volume has ~13.6 GiB free against the framework's 15 GiB reserve (C: is 99% full), across seven build attempts spanning two authoring sessions. The CVE itself is representable and target/ plus poc/ are complete for the corrected smithy-rs pair (cb233e9fad574e1bbb03d9878bc504e6ce8f976d pre-fix -> e54027f2b7b32a2cf6ced99a1d454d03ffb10ce5 fix, maxDepth=128 recursion guard in the JSON"
+  },
+  {
+    "cve_id": "CVE-2026-26186",
+    "priority": 20,
+    "group": "evidence_review_budget",
+    "previous_state": "QUARANTINED",
+    "previous_error": "budget_exhausted",
+    "notes": "Author evidence-review limit reached; the challenged pair remains unapproved"
+  },
+  {
+    "cve_id": "CVE-2026-29097",
+    "priority": 30,
+    "group": "disk_reserve",
+    "previous_state": "UNSUPPORTED",
+    "previous_error": "unsupported",
+    "notes": "INFRASTRUCTURE BLOCK, not a CVE defect. CVE-2026-29097 (SSRF in the SuiteCRM RSS Feed Dashlet, fixed in 7.15.1) is fully representable by this contract, and the task is written and schema-valid. The authoring host cannot execute any container step: harbor-author build, probe, debug and shell all sit in the helper's resource gate and fail after 600 s with 'free disk at C:\\Users\\lishu\\Desktop\\面试准备\\harbor_pipeline\\runs: 13.6 GiB < reserve 15 GiB'. This reproduced five times across three author sess"
+  },
+  {
+    "cve_id": "CVE-2026-30941",
+    "priority": 40,
+    "group": "disk_reserve",
+    "previous_state": "UNSUPPORTED",
+    "previous_error": "unsupported",
+    "notes": "Build is blocked by the author harness resource gate, not by the task: the host volume holding the run workspace has ~13.4 GiB free while harbor-author requires a 15 GiB reserve, so both variant images fail before Docker starts (five attempts, including single-variant builds, all timed out at 'free disk ... < reserve 15 GiB'). The task itself is complete and 'harbor-author validate' returns ok with the real parse-server 9.5.1 -> 9.5.2-alpha.1 pin and a working NoSQL-injection PoC; re-run build/p"
+  },
+  {
+    "cve_id": "CVE-2026-72779",
+    "priority": 50,
+    "group": "transient_gateway",
+    "previous_state": "QUARANTINED",
+    "previous_error": "infra_error",
+    "notes": "Authoring session produced no submission: API Error: 503 Service temporarily unavailable. This is a server-side issue, usually temporary — try again in a moment. If it persists, check your inference gateway (llm2-xr6tqmh.0ops.sjtu.cn)."
+  },
+  {
+    "cve_id": "CVE-2026-72841",
+    "priority": 60,
+    "group": "transient_gateway",
+    "previous_state": "QUARANTINED",
+    "previous_error": "infra_error",
+    "notes": "API Error: 503 Service temporarily unavailable. This is a server-side issue, usually temporary — try again in a moment. If it persists, check your inference gateway (llm2-xr6tqmh.0ops.sjtu.cn)."
+  },
+  {
+    "cve_id": "CVE-2026-74902",
+    "priority": 70,
+    "group": "transient_gateway",
+    "previous_state": "QUARANTINED",
+    "previous_error": "infra_error",
+    "notes": "API Error: 503 Service temporarily unavailable. This is a server-side issue, usually temporary — try again in a moment. If it persists, check your inference gateway (llm2-xr6tqmh.0ops.sjtu.cn)."
+  },
+  {
+    "cve_id": "CVE-2026-77080",
+    "priority": 80,
+    "group": "transient_gateway",
+    "previous_state": "QUARANTINED",
+    "previous_error": "infra_error",
+    "notes": "API Error: 503 Service temporarily unavailable. This is a server-side issue, usually temporary — try again in a moment. If it persists, check your inference gateway (llm2-xr6tqmh.0ops.sjtu.cn)."
+  },
+  {
+    "cve_id": "CVE-2026-77929",
+    "priority": 90,
+    "group": "transient_gateway",
+    "previous_state": "QUARANTINED",
+    "previous_error": "infra_error",
+    "notes": "Authoring session produced no submission: API Error: 503 Service temporarily unavailable. This is a server-side issue, usually temporary — try again in a moment. If it persists, check your inference gateway (llm2-xr6tqmh.0ops.sjtu.cn)."
+  },
+  {
+    "cve_id": "CVE-2026-79750",
+    "priority": 100,
+    "group": "transient_gateway",
+    "previous_state": "QUARANTINED",
+    "previous_error": "infra_error",
+    "notes": "Authoring session produced no submission: API Error: 503 Service temporarily unavailable. This is a server-side issue, usually temporary — try again in a moment. If it persists, check your inference gateway (llm2-xr6tqmh.0ops.sjtu.cn)."
+  },
+  {
+    "cve_id": "CVE-2026-82450",
+    "priority": 110,
+    "group": "transient_gateway",
+    "previous_state": "QUARANTINED",
+    "previous_error": "infra_error",
+    "notes": "Authoring session produced no submission: API Error: 502 Upstream request failed. This is a server-side issue, usually temporary — try again in a moment. If it persists, check your inference gateway (llm2-xr6tqmh.0ops.sjtu.cn)."
+  },
+  {
+    "cve_id": "CVE-2026-86253",
+    "priority": 120,
+    "group": "transient_gateway",
+    "previous_state": "QUARANTINED",
+    "previous_error": "infra_error",
+    "notes": "API Error: 503 Service temporarily unavailable. This is a server-side issue, usually temporary — try again in a moment. If it persists, check your inference gateway (llm2-xr6tqmh.0ops.sjtu.cn)."
+  },
+  {
+    "cve_id": "CVE-2026-86775",
+    "priority": 130,
+    "group": "transient_gateway",
+    "previous_state": "QUARANTINED",
+    "previous_error": "infra_error",
+    "notes": "Authoring session produced no submission: API Error: 503 Service temporarily unavailable. This is a server-side issue, usually temporary — try again in a moment. If it persists, check your inference gateway (llm2-xr6tqmh.0ops.sjtu.cn)."
+  },
+  {
+    "cve_id": "CVE-2026-90932",
+    "priority": 140,
+    "group": "transient_gateway",
+    "previous_state": "QUARANTINED",
+    "previous_error": "infra_error",
+    "notes": "Authoring session produced no submission: API Error: 503 Service temporarily unavailable. This is a server-side issue, usually temporary — try again in a moment. If it persists, check your inference gateway (llm2-xr6tqmh.0ops.sjtu.cn)."
+  },
+  {
+    "cve_id": "CVE-2026-91934",
+    "priority": 150,
+    "group": "transient_gateway",
+    "previous_state": "QUARANTINED",
+    "previous_error": "infra_error",
+    "notes": "API Error: 503 Service temporarily unavailable. This is a server-side issue, usually temporary — try again in a moment. If it persists, check your inference gateway (llm2-xr6tqmh.0ops.sjtu.cn)."
+  }
+]

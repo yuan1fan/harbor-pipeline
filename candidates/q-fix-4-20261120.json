@@ -1,0 +1,26 @@
+[
+  {
+    "cve_id": "CVE-2026-54694",
+    "priority": 10,
+    "group": "q_code_fix_20261120",
+    "previous_issue": "author long-build success resume"
+  },
+  {
+    "cve_id": "CVE-2026-60120",
+    "priority": 20,
+    "group": "q_code_fix_20261120",
+    "previous_issue": "helper/probe Windows lock + memory"
+  },
+  {
+    "cve_id": "CVE-2026-15957",
+    "priority": 30,
+    "group": "q_code_fix_20261120",
+    "previous_issue": "long build/helper terminal"
+  },
+  {
+    "cve_id": "CVE-2026-26186",
+    "priority": 40,
+    "group": "q_code_fix_20261120",
+    "previous_issue": "long source fetch/helper terminal"
+  }
+]

@@ -566,3 +566,39 @@ def test_pipeline_resolver_runs_only_for_incomplete_discovery(tmp_path, monkeypa
     monkeypatch.setattr(discovery_mod, "complete_missing_refs", lambda settings, root, evidence, parsed: (evidence, parsed))
     pipeline._collect_auto(pipeline.store.create())
     assert called["n"] == 0
+
+
+def test_resolver_passes_github_token_via_private_helper_file(tmp_path, monkeypatch):
+    run_dir, discovery, evidence = _write_run(tmp_path)
+    captured = {}
+
+    class Runner:
+        def run(self, *, prompt, workspace, contract, settings_path, extra_env=None, resume=None):
+            captured.update(extra_env or {})
+            from harbor_pipeline.agent import AgentOutcome
+
+            return AgentOutcome(status="completed", turns=1)
+
+    result = evidence_resolver.EvidenceResolver(
+        Config(
+            models={
+                "default": ModelSettings(),
+                "resolver": ModelSettings(provider="claude-code"),
+            },
+            sources=SourceSettings(github_token="ghp_helper_test"),
+        ),
+        runner=Runner(),
+    ).resolve(
+        run_dir=run_dir,
+        cve_id="CVE-2026-99999",
+        discovery=discovery,
+        evidence=evidence,
+    )
+    assert result.status == "no_proposal"
+    token_path = Path(captured["HARBOR_HELPER_GITHUB_TOKEN_FILE"])
+    assert token_path.read_text(encoding="utf-8").strip() == "ghp_helper_test"
+    assert "GITHUB_TOKEN" not in captured
+
+    monkeypatch.setenv("HARBOR_HELPER_GITHUB_TOKEN_FILE", str(token_path))
+    helper_config = evidence_tool._config_from_env()
+    assert helper_config.sources.github_token == "ghp_helper_test"

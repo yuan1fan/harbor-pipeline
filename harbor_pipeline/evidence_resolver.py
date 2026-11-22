@@ -578,6 +578,21 @@ class EvidenceResolver:
         }
         if self.config.source_path:
             extra_env["HARBOR_EVIDENCE_CONFIG"] = str(self.config.source_path)
+        # The resolver model must not see the GitHub token, but the
+        # ``harbor-evidence`` helper needs it to avoid the unauthenticated
+        # 60-request/hour limit. Put it in a private file outside the agent
+        # workspace and pass only the path through the helper environment.
+        github_token = str(self.config.sources.github_token or "").strip()
+        if github_token:
+            secret_dir = workspace.run_dir / ".helper-secrets"
+            secret_dir.mkdir(parents=True, exist_ok=True)
+            token_path = secret_dir / "github-token"
+            token_path.write_text(github_token + "\n", encoding="utf-8")
+            try:
+                os.chmod(token_path, 0o600)
+            except OSError:
+                pass
+            extra_env["HARBOR_HELPER_GITHUB_TOKEN_FILE"] = str(token_path)
         try:
             outcome = agent.run(
                 prompt=first_prompt(cve_id, review_request) + (

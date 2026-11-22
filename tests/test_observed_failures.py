@@ -329,3 +329,18 @@ def test_failed_export_timeout_remains_a_build_error(tmp_path, monkeypatch):
             log_path=log, timeout_sec=1,
         )
     assert caught.value.category.code == "build_error"
+
+
+@pytest.mark.parametrize("message,expected", [
+    ('{"subtype":"error_max_turns","terminal_reason":"max_turns","errors":["Reached maximum number of turns (60)"]}', "max_turns"),
+    ('{"subtype":"error_max_budget_usd","terminal_reason":"budget_exhausted","errors":["Reached maximum budget ($5)"]}', "max_budget"),
+])
+def test_solver_budget_exhaustion_can_enter_reviewer(message, expected):
+    solver = {"trials": [{
+        "reward": None, "failure_type": "AgentAuthenticationError",
+        "exception": {"exception_type": "AgentAuthenticationError", "exception_message": message},
+    }]}
+    solver_review.require_valid_solver(solver)
+    trial = solver["trials"][0]
+    assert trial["failure_type"] == expected
+    assert trial["budget_exhausted"] is True

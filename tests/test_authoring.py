@@ -562,3 +562,19 @@ def test_probe_summary_auth_negative_fails_the_pair():
     # The pair helper is exercised through its public summary contract.
     assert author_probe.summarize(vulnerable, variant="vulnerable")["ok"]
     assert author_probe.summarize(fixed, variant="fixed")["ok"]
+
+
+def test_environment_blocked_author_decline_is_infra_not_unsupported():
+    disk = (
+        "INFRASTRUCTURE BLOCK, not a CVE defect. Build failed because free disk "
+        "at the run workspace is 13.6 GiB < reserve 15 GiB."
+    )
+    docker = "Docker daemon is unavailable before preparing shared images"
+    network = "The probe runtime gives no such host; the target network is internal and the callback cannot be reached."
+    cve = "The CVE is not a remote service and has no supported observable."
+    assert authoring.decline_category(disk) == "infra_error"
+    assert authoring.decline_category(docker) == "infra_error"
+    assert authoring.decline_category(network) == "infra_error"
+    assert authoring.decline_category(cve) == "unsupported"
+    assert authoring.decline_error(disk).category.code == "infra_error"
+    assert authoring.decline_error(cve).category.code == "unsupported"

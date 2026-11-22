@@ -59,6 +59,9 @@ class Settings:
     max_evidence_reviews: int = 2
     author_max_resumes: int = 2
     author_build_runs: int = 8
+    # Target builds can be much slower than ordinary Harbor commands. Keep a
+    # separate ceiling so raising it does not also stretch matrix/debug jobs.
+    author_build_timeout_sec: int = 1800
     author_probe_runs: int = 20
     author_exec_runs: int = 20
     author_sandbox_image: str = "python:3.12-slim-bookworm"
@@ -91,7 +94,7 @@ class ModelSettings:
 
 @dataclass
 class SourceSettings:
-    allowed_hosts: list[str] = field(default_factory=lambda: ["raw.githubusercontent.com", "github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org", "api.osv.dev", "api.github.com", "services.nvd.nist.gov", "registry.npmjs.org", "proxy.golang.org", "sum.golang.org", "repo1.maven.org", "api.wordpress.org", "downloads.wordpress.org"])
+    allowed_hosts: list[str] = field(default_factory=lambda: ["raw.githubusercontent.com", "github.com", "codeload.github.com", "www.cve.org", "nvd.nist.gov", "cveawg.mitre.org", "pypi.org", "api.osv.dev", "api.github.com", "services.nvd.nist.gov", "registry.npmjs.org", "proxy.golang.org", "sum.golang.org", "repo1.maven.org", "api.wordpress.org", "downloads.wordpress.org"])
     max_bytes: int = 1500000
     timeout_sec: int = 30
     # Serve per-CVE NVD records from a cached yearly feed instead of the
@@ -172,7 +175,7 @@ def load_config(path: Path | None = None) -> Config:
         raise PipelineError("authoring must be 'agent' or 'legacy'")
     if settings.author_sandbox_network not in {"none", "bridge"}:
         raise PipelineError("author_sandbox_network must be 'none' or 'bridge'")
-    for name in ("author_max_resumes", "author_build_runs", "author_probe_runs", "author_exec_runs", "max_evidence_reviews", "max_infra_retries"):
+    for name in ("author_max_resumes", "author_build_runs", "author_probe_runs", "author_exec_runs", "author_build_timeout_sec", "max_evidence_reviews", "max_infra_retries"):
         if not isinstance(getattr(settings, name), int) or getattr(settings, name) < 0:
             raise PipelineError(f"{name} must be a nonnegative integer")
     for name in (
