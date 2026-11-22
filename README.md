@@ -370,7 +370,7 @@ cold_rebuild = true  # 默认 false；不填写也不会执行 T09
 | CVE | 原因 |
 |---|---|
 | CVE-2026-102091 | 闭源商业设备，没有公开源码或发布包 |
-| CVE-2026-109618 | OOM/RCE 链无法用现有四种 observable 表达 |
+| CVE-2026-109618 | 真正的 OOM→RCE 链无法稳定复现；可复现的 session 预加载泄漏不属于 CVE 主体机制 |
 | CVE-2026-58468 | 声明的 fix 只增加 warning，漏洞仍可触发 |
 | CVE-2026-58654 | 只有完整性校验上传，没有 supported observable |
 | CVE-2026-59101 | fix 只增加 scheme 校验和错误回显 |
