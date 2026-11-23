@@ -4,7 +4,7 @@
 
 日期：2026 年 11 月 1 日  
 状态：自动化产线已实现；支持输入任意 CVE 编号自动发现证据、合成题目并差分验证；模板 CVE-2024-23334 已完成 qualification 并发布，自动合成 CVE-2023-40587 已完成真实 Docker/Harbor 验证  
-交接入口：[HANDOFF.md](../HANDOFF.md)  
+历史交接文档：[HANDOFF-2026-11-02.md](history/HANDOFF-2026-11-02.md)  
 运维手册：[OPERATIONS.md](OPERATIONS.md)  
 10k 容量与分片运行：[CAPACITY_10K.md](CAPACITY_10K.md)
 
@@ -54,7 +54,7 @@
 | 通用 target 契约 | 服务监听 `0.0.0.0:8080`；`/health`、`/business` 返回 `ok`；secret 位于 `/opt/app/secret/token` |
 | 模型 provider 与修复 | fixture/anthropic/claude-cli；合成与修复必须使用 anthropic 补全端点；修复只能改 `environment/` 既有文件，结构错误最多重问 3 次，provider 故障归为可重试 `infra_error` |
 
-模板路径的首个 CVE `CVE-2024-23334` 已 `RELEASED`，质量分 `100.0`，20 组成对样本，置信区间 `[0.8389, 1.0]`。自动合成路径的首个 CVE `CVE-2023-40587` 也已完成 20 组成对 qualification 并 `RELEASED`，质量分 `98.0`：自动发现 Pyramid 2.0.1→2.0.2 与修复 commit，合成真实版本 target，oracle `20/20`、修复版 `20/20` 保持，唯一失分是旧 synthesis 低估 confidentiality。两个任务的摘要、digest 与限制记录在 [HANDOFF.md](../HANDOFF.md)。12 个真实 Web CVE 的模板试点批次已跑通：1 个发布、11 个明确 `UNSUPPORTED`、所有输入有终态，产出率 `8.33%`；该数字是模板路径的历史结果，不代表自动路径产出率。模型难度基线也已实测（`claude-code` + `deepseek-flash-cyber`，3/3 成功，中位 `68.34s`）。
+模板路径的首个 CVE `CVE-2024-23334` 已 `RELEASED`，质量分 `100.0`，20 组成对样本，置信区间 `[0.8389, 1.0]`。自动合成路径的首个 CVE `CVE-2023-40587` 也已完成 20 组成对 qualification 并 `RELEASED`，质量分 `98.0`：自动发现 Pyramid 2.0.1→2.0.2 与修复 commit，合成真实版本 target，oracle `20/20`、修复版 `20/20` 保持，唯一失分是旧 synthesis 低估 confidentiality。两个任务的摘要、digest 与限制记录在 [HANDOFF-2026-11-02.md](history/HANDOFF-2026-11-02.md)。12 个真实 Web CVE 的模板试点批次已跑通：1 个发布、11 个明确 `UNSUPPORTED`、所有输入有终态，产出率 `8.33%`；该数字是模板路径的历史结果，不代表自动路径产出率。模型难度基线也已实测（`claude-code` + `deepseek-flash-cyber`，3/3 成功，中位 `68.34s`）。
 
 ## 3 关键设计决策
 
@@ -118,7 +118,7 @@ flowchart TD
 
 ```text
 harbor_pipeline/
-├── HANDOFF.md                    交接入口
+├── docs/history/HANDOFF-2026-11-02.md  历史交接文档
 ├── docs/FRAMEWORK_PLAN.md         本计划
 ├── harbor_pipeline/              控制程序与适配器
 ├── schemas/                      待建立的数据契约
@@ -457,4 +457,4 @@ M5 的“10 至 20 个候选”已达成：`candidates/pilot-web-cves.json` 提�
 
 交接应包含以下可检查结果：当前源码与配置、版本基线、数据契约、固定 Harbor 版本、一个真实 CVE 的完整产物和审计包、可重复的验收记录、失败样例、资源清理与恢复步骤、预算策略及未决项。接收方应能在约定环境从清洁状态复跑首题，并解释其为何属于指定 CVE。
 
-接收方首先执行 [HANDOFF.md](../HANDOFF.md) 中的接手清单，再按 [OPERATIONS.md](OPERATIONS.md) 复跑首个 CVE。当前交付已包含可运行的产线、Git 基线、锁定依赖、模板首题发布包、任意 CVE 自动合成路径、12 输入试点报告、oracle 与模型难度基线。下一阶段工作是扩大自动合成的覆盖类别（目前固定为未认证远程文件读取）、提高合成题 qualification 产出率、补人工审查记录，不应把 `UNSUPPORTED` 描述为已验收。
+接收方首先执行 [HANDOFF-2026-11-02.md](history/HANDOFF-2026-11-02.md) 中的接手清单，再按 [OPERATIONS.md](OPERATIONS.md) 复跑首个 CVE。当前交付已包含可运行的产线、Git 基线、锁定依赖、模板首题发布包、任意 CVE 自动合成路径、12 输入试点报告、oracle 与模型难度基线。下一阶段工作是扩大自动合成的覆盖类别（目前固定为未认证远程文件读取）、提高合成题 qualification 产出率、补人工审查记录，不应把 `UNSUPPORTED` 描述为已验收。
