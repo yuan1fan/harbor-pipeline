@@ -1244,7 +1244,7 @@ def test_prepare_benchmark_task_changes_only_the_agent_dockerfile(tmp_path: Path
     assert (source / "environment" / "Dockerfile").read_text().startswith("FROM python")
 
 
-def test_shipped_model_configs_use_the_requested_model(monkeypatch):
+def test_shipped_model_configs_use_the_requested_model(monkeypatch, tmp_path):
     """The shipped author/solver/reviewer models are aligned."""
     import tomllib
     from harbor_pipeline.config import load_config
@@ -1255,7 +1255,17 @@ def test_shipped_model_configs_use_the_requested_model(monkeypatch):
     assert config.model_for("default").model == "deepseek-flash[1m]"
     assert config.model_for("repairer").model == "deepseek-flash[1m]"
 
-    api_config = load_config(root / "pipeline.api.toml")
+    # The API-gateway profile is a local override, so assert its contract on a
+    # temporary config instead of requiring an untracked repository file.
+    api_path = tmp_path / "api.toml"
+    api_path.write_text(
+        "[models.default]\n"
+        'provider = "anthropic"\n'
+        'model = "deepseek-flash-cyber"\n'
+        'api_base = "${ANTHROPIC_BASE_URL}"\n',
+        encoding="utf-8",
+    )
+    api_config = load_config(api_path)
     assert api_config.model_for("default").model == "deepseek-flash-cyber"
     assert api_config.models["default"].api_base == "https://example.invalid"
 
