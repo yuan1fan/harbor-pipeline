@@ -10,6 +10,14 @@ runs/
 work/
 *.local.toml
 
+# One-off pipeline profiles stay local. Only the canonical pipeline.toml and
+# the shared capacity profile pipeline.scale.toml are part of the repository.
+pipeline.api.toml
+pipeline.recoverable.toml
+pipeline.repair2.toml
+pipeline.sample50-*.toml
+pipeline.solver120.toml
+
 # Office lock files and scratch notes
 ~$*
 _new_eval_block.txt

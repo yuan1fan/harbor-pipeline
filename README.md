@@ -395,16 +395,16 @@ export ANTHROPIC_AUTH_TOKEN=...
 python -m harbor_pipeline doctor --agent
 
 # 单题（任意 CVE，agent 直接出题）
-python -m harbor_pipeline -c pipeline.repair2.toml run \
+python -m harbor_pipeline -c pipeline.toml run \
   --cve CVE-2026-113664 --scenario auto --profile qualification --json
 
 # 批量
-python -m harbor_pipeline -c pipeline.repair2.toml batch \
+python -m harbor_pipeline -c pipeline.toml batch \
   --input candidates/cve-2026-scale-r2.json \
   --run-id scale-YYYYMMDD --profile qualification --workers 1 --trial-workers 1
 
 # 验证器/评分修复后，重评已隔离候选：复用已存储的 matrix，不重建镜像、不重跑试验
-python -m harbor_pipeline -c pipeline.repair2.toml recheck \
+python -m harbor_pipeline -c pipeline.toml recheck \
   --cve CVE-2026-112005 --run-id scale-YYYYMMDD --profile qualification
 ```
 
