@@ -1349,14 +1349,14 @@ class CvePipeline:
                 resume=resume,
             )
         finally:
-            # Debug/sandbox containers outlive the agent process; stop only
-            # this workspace's labelled containers so a killed or declined
-            # session cannot leak memory across the batch.
+            # Keep the writable layer (installed tools, cloned PoCs and caches)
+            # for --resume, but release memory while the pipeline builds or
+            # waits. Terminal candidates are cleaned up in _run.
             try:
                 from . import author_debug
 
-                author_debug.cleanup(workspace.root)
-            except Exception:  # noqa: BLE001 - cleanup must not mask the outcome
+                author_debug.suspend(workspace.root)
+            except Exception:  # noqa: BLE001 - suspend must not mask the outcome
                 pass
         # The completion providers reserved per call; a native session reports
         # its totals once. Charge what the CLI reported without turning a
@@ -2623,6 +2623,24 @@ class CvePipeline:
         with self.store.lease:
             return self._run(until)
 
+    def _cleanup_author_env(self, job) -> None:
+        """Remove persisted author containers only for final candidates."""
+        if job.state not in {"RELEASED", "UNSUPPORTED"}:
+            return
+        try:
+            workspace = self.store.path("author")
+            from . import author_debug
+
+            # Debug targets sit on the runtime lab network, so remove them
+            # before dispose drops that network.
+            author_debug.cleanup(workspace)
+            if (workspace / ".harbor/runtime.json").is_file():
+                from .author_runtime import dispose
+
+                dispose(workspace)
+        except Exception:  # noqa: BLE001 - cleanup must not mask the report
+            pass
+
     def _run(self, until: str) -> PipelineReport:
         job = self.store.load()
         try:
@@ -2630,10 +2648,13 @@ class CvePipeline:
             if job.state in {"QUARANTINED", "UNSUPPORTED", "RELEASED"}:
                 if telemetry.current():
                     telemetry.current().cache("state.json")
+                self._cleanup_author_env(job)
                 return self._stored_report(job)
             while True:
                 try:
-                    return self._advance(until)
+                    report = self._advance(until)
+                    self._cleanup_author_env(self.store.load())
+                    return report
                 except TaskError as exc:
                     self._record_recovery(exc, "dispatch")
                     if not self._attempt_repair(exc):
@@ -2642,17 +2663,23 @@ class CvePipeline:
             self._record_recovery(exc, "stopped")
             job = self.store.load()
             self.store.fail(job, exc)
-            return self._stored_report(self.store.load())
+            final = self.store.load()
+            self._cleanup_author_env(final)
+            return self._stored_report(final)
         except PipelineError as exc:
             job = self.store.load()
             wrapped = TaskError("infra_error", str(exc))
             self.store.fail(job, wrapped)
-            return self._stored_report(self.store.load())
+            final = self.store.load()
+            self._cleanup_author_env(final)
+            return self._stored_report(final)
         except Exception as exc:  # unexpected faults are infrastructure failures
             job = self.store.load()
             wrapped = TaskError("infra_error", f"{type(exc).__name__}: {exc}")
             self.store.fail(job, wrapped)
-            return self._stored_report(self.store.load())
+            final = self.store.load()
+            self._cleanup_author_env(final)
+            return self._stored_report(final)
 
     def _record_recovery(self, error: TaskError, phase: str) -> None:
         try:

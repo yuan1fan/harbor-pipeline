@@ -122,7 +122,7 @@ def test_different_candidates_never_inherit_each_others_identity(tmp_path):
 
 def test_native_auth_fallback_records_both_attempts(tmp_path, monkeypatch):
     monkeypatch.setattr('harbor_pipeline.agent.shutil.which', lambda _: 'fake-claude')
-    agent = ClaudeCodeAgent(Config())
+    agent = ClaudeCodeAgent(Config(), role="resolver")
     calls = []
 
     def run_once(**kwargs):
@@ -194,7 +194,7 @@ def test_author_repair_metadata_survives_same_session_resume(case, monkeypatch):
             return AgentOutcome('completed', session_id='same-session', usage=native_usage(), usd=0.1)
 
     monkeypatch.setattr('harbor_pipeline.pipeline.ClaudeCodeAgent', lambda *a, **k: Agent())
-    monkeypatch.setattr('harbor_pipeline.author_debug.cleanup', lambda *a: None)
+    monkeypatch.setattr('harbor_pipeline.author_debug.suspend', lambda *a: None)
     pipeline._run_author_session(case.workspace, prompt='initial', resume=None)
     assert not pipeline._resume_author(TaskError('validation_error', 'first repair'))
     assert not pipeline._resume_author(TaskError('validation_error', 'second repair'))

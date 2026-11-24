@@ -25,9 +25,14 @@ if TYPE_CHECKING:
 
 _SHA = re.compile(r"[0-9a-f]{40}")
 _VERSION = re.compile(r"[vV]?\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.-]+)?")
-MAX_REF_REQUESTS = 8
+MAX_REF_REQUESTS = 24
 MAX_FIX_SEARCH_RESULTS = 5
+MAX_BRANCH_TAG_PROBES = 4
 _FIX_SUBJECT = re.compile(r"^(?:fix|security)(?:\([^()\r\n]+\))?!?:\s", re.IGNORECASE)
+# Some upstream projects use a plain subject ("Avoid state corruption via
+# bailout") and put the CVE/GHSA fix statement in the body. Accept a bounded
+# body line, not any arbitrary release note that merely mentions a CVE.
+_FIX_BODY = re.compile(r"^\s*(?:fix|fixes|fixed|security)\b", re.IGNORECASE)
 
 
 _OPEN_BOUND = {"", "0", "*", "unspecified", "n/a", "unknown"}
@@ -330,6 +335,10 @@ class _Metadata:
         self.requests = 0
         self.attempted = set()
         self.trace = []
+        self._tag_cache = {}
+        self._branch_cache = {}
+        self._precedes_cache = {}
+        self.rate_limited = False
 
     def decision(self, rule, outcome, reason, *, candidate=None, source_ids=(), **details):
         event = {"rule": rule, "outcome": outcome, "reason": reason,
@@ -340,6 +349,8 @@ class _Metadata:
             self.trace.append(event)
 
     def source(self, url: str, source_type="other", *, json_required=False) -> dict:
+        if self.rate_limited:
+            return {}
         for source in reversed(self.collector.sources):
             same_url = source.get("url") == url
             if not same_url and urllib.parse.urlsplit(url).hostname == "pypi.org":
@@ -366,7 +377,16 @@ class _Metadata:
         self.attempted.add(url)
         result = self.collector.add(url, source_type, "Deterministic discovery ref verification")
         if result.get("status") != "ok":
-            self.decision("source_lookup", "unresolved", str(result.get("error") or "source unavailable"),
+            error = str(result.get("error") or "source unavailable")
+            if (urllib.parse.urlsplit(url).hostname == "api.github.com"
+                    and ("HTTP 403" in error or "HTTP 429" in error)):
+                # Anonymous GitHub is limited to 60 requests/hour. Further
+                # branch/tag probes cannot succeed in this session; stop
+                # instead of spending the remaining ref budget on 403s. A 403
+                # from another registry (for example Maven Central) must not
+                # disable later GitHub lookups.
+                self.rate_limited = True
+            self.decision("source_lookup", "unresolved", error,
                           candidate=url, source_ids=[result.get("id")])
         return result
 
@@ -376,6 +396,30 @@ class _Metadata:
         if not document:
             self.notes.append(f"ref metadata unavailable: {url} ({source.get('error') or 'not JSON'})")
         return document, source.get("id")
+
+    def get_any(self, url: str, source_type="other"):
+        source = self.source(url, source_type)
+        try:
+            document = json.loads(_text(source, self.collector.run_dir))
+        except ValueError:
+            document = None
+        if document is None:
+            self.notes.append(f"ref metadata unavailable: {url} ({source.get('error') or 'not JSON'})")
+        return document, source.get("id")
+
+    def commits(self, repo: str, ref: str, *, per_page: int = 100) -> tuple[list[dict], str | None]:
+        """List recent commits reachable from a tag or branch.
+
+        Git commit search indexes the default branch only; a maintenance
+        branch's backport can carry the same CVE message but never appear in
+        that global search. Listing commits reachable from the branch's release
+        tag is what exposes the branch-specific fix.
+        """
+        url = (f"https://api.github.com/repos/{repo}/commits?"
+               f"sha={urllib.parse.quote(ref, safe='')}&per_page={per_page}")
+        document, source_id = self.get_any(url, "release_notes")
+        rows = document if isinstance(document, list) else []
+        return [row for row in rows if isinstance(row, dict)], source_id
 
     def commit(self, repo: str, ref: str, source_type="other") -> tuple[dict, str | None]:
         url = f"https://api.github.com/repos/{repo}/commits/{urllib.parse.quote(ref, safe='')}"
@@ -397,10 +441,15 @@ class _Metadata:
     def tag(self, repo: str, value: str):
         from .discovery import DiscoveryRef
 
+        cache_key = (repo, value)
+        if cache_key in self._tag_cache:
+            return self._tag_cache[cache_key]
         for tag in dict.fromkeys((value, value if value.startswith(("v", "V")) else "v" + value)):
             url = f"https://api.github.com/repos/{repo}/git/ref/tags/{urllib.parse.quote(tag, safe='')}"
             document, source_id = self.get(url)
             if document.get("ref") != f"refs/tags/{tag}":
+                if self.rate_limited:
+                    break
                 continue
             obj = document.get("object") or {}
             if obj.get("type") == "tag" and _SHA.fullmatch(str(obj.get("sha") or "")):
@@ -411,11 +460,64 @@ class _Metadata:
             if obj.get("type") == "commit" and _SHA.fullmatch(str(obj.get("sha") or "")):
                 ref = DiscoveryRef("tag", tag, repository=repo, resolved_commit=obj["sha"], source_id=source_id)
                 self.decision("git_tag_identity", "verified", "exact tag resolved to its commit", candidate=ref.to_json(), source_ids=[source_id])
+                self._tag_cache[cache_key] = ref
+                return ref
+        self._tag_cache[cache_key] = None
+        return None
+
+    def release_tag(self, repo: str, value: str):
+        """Resolve a release label without assuming one tag naming convention.
+
+        GitHub projects commonly use ``v1.2.3``, while php-src uses
+        ``php-8.2.35``. Only a bounded set of exact names is probed; a missing
+        tag remains unknown, never a different version.
+        """
+        owner = repo.split("/", 1)[0]
+        for name in dict.fromkeys((f"{owner}-{value}", value)):
+            if self.rate_limited:
+                return None
+            ref = self.tag(repo, name)
+            if ref is not None:
                 return ref
         return None
 
-    def precedes(self, repo, base, head):
-        """Verify ancestry without downloading the potentially huge file diff."""
+    def branch(self, repo: str, series: str):
+        """Resolve a release branch tip for one advisory series."""
+        cache_key = (repo, series)
+        if cache_key in self._branch_cache:
+            return self._branch_cache[cache_key]
+        owner = repo.split("/", 1)[0]
+        names = (
+            f"{owner.upper()}-{series}",
+            f"{owner}-{series}",
+            f"release/{series}",
+            series,
+            f"v{series}",
+        )
+        for name in dict.fromkeys(names):
+            if self.rate_limited:
+                break
+            url = f"https://api.github.com/repos/{repo}/git/ref/heads/{urllib.parse.quote(name, safe='')}"
+            document, _ = self.get(url)
+            if document.get("ref") != f"refs/heads/{name}":
+                continue
+            obj = document.get("object") or {}
+            if obj.get("type") == "commit" and _SHA.fullmatch(str(obj.get("sha") or "")):
+                self._branch_cache[cache_key] = obj["sha"]
+                return obj["sha"]
+        self._branch_cache[cache_key] = None
+        return None
+
+    def precedes(self, repo, base, head, *, allow_identical=False):
+        """Verify ancestry without downloading the potentially huge file diff.
+
+        ``allow_identical`` is for release containment: a fix commit that is
+        exactly the release tag commit is still contained in that release. The
+        strict default is required for vulnerable-before-fix ordering.
+        """
+        cache_key = (repo, base, head, allow_identical)
+        if cache_key in self._precedes_cache:
+            return self._precedes_cache[cache_key]
         endpoint = f"https://api.github.com/repos/{repo}/compare/{base}...{head}"
         document = {}
         for source in self.collector.sources:
@@ -428,14 +530,22 @@ class _Metadata:
             # GitHub includes changed files only on page 1. The ancestry
             # summary remains available on page 2, even for a one-commit gap.
             document, _ = self.get(endpoint + "?per_page=1&page=2")
-        if (document.get("status") == "ahead" and document.get("base_commit", {}).get("sha") == base
-                and document.get("merge_base_commit", {}).get("sha") == base):
-            self.decision("git_ancestry", "verified", "vulnerable commit is an ancestor of the fix", repository=repo, base=base, fixed=head)
+        status = document.get("status")
+        base_match = (document.get("base_commit", {}).get("sha") == base
+                      and document.get("merge_base_commit", {}).get("sha") == base)
+        if base_match and (status == "ahead" or (allow_identical and status == "identical")):
+            self.decision("git_ancestry", "verified",
+                          "commit is contained in the selected release" if allow_identical
+                          else "vulnerable commit is an ancestor of the fix",
+                          repository=repo, base=base, fixed=head)
+            self._precedes_cache[cache_key] = True
             return True
-        if document.get("base_commit", {}).get("sha") == base and document.get("status") in {"behind", "diverged", "identical"}:
+        if document.get("base_commit", {}).get("sha") == base and status in {"behind", "diverged", "identical"}:
             self.decision("git_ancestry", "rejected", "commit is not strictly before the fix", repository=repo, base=base, fixed=head,
-                          comparison_status=document["status"])
+                          comparison_status=status)
+            self._precedes_cache[cache_key] = False
             return False
+        self._precedes_cache[cache_key] = None
         return None
 
 
@@ -621,6 +731,323 @@ def _application_patch(document):
     return False
 
 
+def _fix_message(message: str, exact_cve) -> bool:
+    """True when the message itself declares this CVE as fixed.
+
+    The subject prefix keeps the historical conservative path. The body path
+    allows a plain upstream subject such as "Avoid state corruption via
+    bailout" when a body line starts with Fix/Security and names the exact CVE.
+    A release note that only mentions the CVE somewhere else is not accepted.
+    """
+    if not exact_cve.search(message):
+        return False
+    subject = message.splitlines()[0] if message else ""
+    if _FIX_SUBJECT.match(subject):
+        return True
+    for line in message.splitlines()[1:]:
+        if _FIX_BODY.match(line) and exact_cve.search(line):
+            return True
+    return False
+
+
+def _branch_rows(discovery):
+    from .discovery import _range_sort_key
+
+    rows = [row for row in discovery.affected_ranges
+            if isinstance(row, dict) and row.get("series")
+            and row.get("introduced") and row.get("fixed")]
+    # Newest release series first; the default selector also prefers the
+    # latest affected branch.
+    return sorted(rows, key=_range_sort_key, reverse=True)
+
+
+def _series_from_refs(discovery):
+    from .discovery import _series_name
+
+    for ref in (discovery.fixed, discovery.vulnerable):
+        if not (ref and ref.kind in {"tag", "package_version"}):
+            continue
+        parsed = _ref_version(ref.value)
+        series = (f"{parsed.release[0]}.{parsed.release[1]}"
+                  if parsed is not None and len(parsed.release) >= 2 else _series_name(ref.value))
+        if series and any(row.get("series") == series for row in discovery.affected_ranges):
+            return series
+    return None
+
+
+def _series_from_vulnerable_commit(metadata, discovery, repo):
+    """Choose the branch where the vulnerable source state first appears.
+
+    A fix commit can be shared by several maintenance branches, so checking
+    only whether the fix is contained in the newest release picks the wrong
+    range (for example php-src's 8.2.34-dev vulnerable commit was reported as
+    8.5 because the shared fix is also in 8.5.13). The vulnerable commit's
+    earliest declared fixed release is the conservative branch identity.
+    """
+    from .discovery import _range_sort_key
+
+    ref = discovery.vulnerable
+    if not ref or ref.kind != "commit" or not repo:
+        return None
+    sha = ref.resolved_commit or ref.value
+    if not _SHA.fullmatch(str(sha or "")):
+        return None
+    hits = []
+    for row in _branch_rows(discovery):
+        tag = metadata.release_tag(repo, row.get("fixed"))
+        if tag is not None and metadata.precedes(
+                repo, sha, tag.resolved_commit, allow_identical=True) is True:
+            hits.append(row)
+    if not hits:
+        return None
+    return min(hits, key=_range_sort_key).get("series")
+
+
+def _next_patch_versions(value, limit=MAX_BRANCH_TAG_PROBES):
+    version = _version(value)
+    if version is None or len(version.release) < 3:
+        return []
+    major, minor, patch = version.release[:3]
+    if not all(isinstance(part, int) for part in (major, minor, patch)):
+        return []
+    return [f"{major}.{minor}.{patch + delta}" for delta in range(1, limit + 1)]
+
+
+def _release_containing(metadata, repo, declared_fixed, fix_sha, *, later=False):
+    """Find a release tag in this series whose tag contains the fix.
+
+    Advisory fixed labels can lag the actual source patch: php2shell declared
+    8.5.12 but the fix first appears in 8.5.13. The declared tag is always
+    checked first. ``later=True`` additionally probes a bounded run of later
+    patch releases, used only after a branch has been selected so four branches
+    do not multiply the request budget.
+    """
+    if not repo or not fix_sha or not declared_fixed:
+        return None
+    values = [str(declared_fixed)]
+    if later:
+        values += _next_patch_versions(declared_fixed)
+    for value in dict.fromkeys(values):
+        ref = metadata.release_tag(repo, value)
+        if ref is not None and metadata.precedes(repo, fix_sha, ref.resolved_commit, allow_identical=True) is True:
+            return value
+    return None
+
+
+def _branch_contains(metadata, repo, series, fix_sha):
+    if not repo or not fix_sha:
+        return None
+    tip = metadata.branch(repo, series)
+    if not tip:
+        return None
+    return metadata.precedes(repo, fix_sha, tip, allow_identical=True)
+
+
+def _candidate_for_branch(metadata, discovery, repo, candidates):
+    """Pick exactly one eligible fix whose patch is on a declared branch.
+
+    ``candidates`` are ``(fix_sha, parent_sha, source_id)`` tuples already
+    verified as single-parent application patches. A branch is usable only
+    when one candidate is contained in that branch's release or branch tip.
+    """
+    rows = _branch_rows(discovery)
+    for row in rows:
+        declared_hits = [(candidate, row, declared)
+                         for candidate in candidates
+                         if (declared := _release_containing(metadata, repo, row.get("fixed"), candidate[0]))]
+        if len(declared_hits) == 1:
+            return declared_hits[0]
+        if len(declared_hits) > 1:
+            metadata.decision("affected_branch", "unresolved",
+                              "more than one CVE-named fix is inside the same declared fixed release",
+                              series=row.get("series"), candidate_count=len(declared_hits))
+            continue
+        branch_hits = [candidate for candidate in candidates
+                       if _branch_contains(metadata, repo, row["series"], candidate[0]) is True]
+        if len(branch_hits) == 1:
+            return branch_hits[0], row, row.get("fixed")
+        if len(branch_hits) > 1:
+            metadata.decision("affected_branch", "unresolved",
+                              "more than one CVE-named fix is reachable from the same declared branch",
+                              series=row.get("series"), candidate_count=len(branch_hits))
+    return None
+
+
+def _align_affected_range(metadata, discovery, repo=None):
+    """Make ``affected_range`` describe the selected pair's actual branch.
+
+    A commit pair can be reachable from several maintenance branches. The
+    selected branch is the latest affected series whose release tag (or branch
+    tip) actually contains the fix. When a declared fixed tag lags the patch,
+    the first later patch release of that same series is used as the exclusive
+    upper bound. The full ``affected_ranges`` list is never rewritten.
+    """
+    from .discovery import _series_name
+
+    rows = _branch_rows(discovery)
+    if not rows:
+        return discovery
+    ref_series = _series_from_refs(discovery)
+    if not ref_series:
+        ref_series = _series_from_vulnerable_commit(metadata, discovery, repo)
+    candidates = ([row for row in rows if row.get("series") == ref_series]
+                  if ref_series else rows)
+    if not candidates:
+        return discovery
+
+    fixed_ref = discovery.fixed
+    if all((ref is None or ref.kind in {"tag", "package_version"})
+           for ref in (discovery.fixed, discovery.vulnerable)):
+        row = candidates[0]
+        actual = row["fixed"]
+        if fixed_ref is not None:
+            parsed = _ref_version(fixed_ref.value)
+            if parsed is not None:
+                series = f"{parsed.release[0]}.{parsed.release[1]}" if len(parsed.release) >= 2 else _series_name(fixed_ref.value)
+                if series == row["series"]:
+                    actual = str(parsed)
+        result = replace(discovery, affected_range=f">= {row['introduced']}, < {actual}")
+        metadata.decision("selected_affected_range", "selected",
+                          "release refs identify the selected branch", series=row["series"],
+                          affected_range=result.affected_range)
+        return result
+
+    fix_sha = (discovery.fix_commit or (fixed_ref.resolved_commit if fixed_ref else None))
+    if not fix_sha or not repo:
+        return discovery
+
+    # Prefer an actual fixed release tag that contains the fix. If no declared
+    # fixed tag does, use branch-tip containment and then look for the first
+    # later patch release only on the selected branch. This keeps four
+    # branches from multiplying the source-request budget.
+    release_hits = []
+    for row in candidates:
+        actual = _release_containing(metadata, repo, row.get("fixed"), fix_sha)
+        if actual:
+            release_hits.append((row, actual))
+            break
+    if release_hits:
+        row, actual = release_hits[0]
+    else:
+        branch_row = next((row for row in candidates
+                           if _branch_contains(metadata, repo, row["series"], fix_sha) is True), None)
+        if branch_row is None:
+            return discovery
+        row = branch_row
+        actual = _release_containing(metadata, repo, row.get("fixed"), fix_sha, later=True) or row["fixed"]
+
+    result = replace(discovery, affected_range=f">= {row['introduced']}, < {actual}")
+    if actual != row.get("fixed"):
+        metadata.notes.append(
+            f"selected release boundary {actual} is the first {row['series']} patch "
+            f"containing the fix; the advisory names {row.get('fixed')}"
+        )
+    metadata.decision("selected_affected_range", "selected",
+                      "fix commit is contained in the selected branch; range now describes that pair",
+                      series=row["series"], affected_range=result.affected_range,
+                      declared_fixed=row.get("fixed"), actual_fixed=actual)
+    return result
+
+
+def _search_branch_pair(discovery, metadata, repo):
+    """Find a fix on the newest affected branch that has a branch-specific patch.
+
+    Global CVE commit search sees only the default-branch commit. A maintenance
+    branch may carry a backport with the same message that is absent from that
+    search result. List commits reachable from each declared fixed release tag
+    and verify the candidate against that tag before choosing the branch.
+    """
+    from .discovery import DiscoveryRef
+
+    if not repo or not discovery.affected_ranges:
+        return None
+    exact_cve = re.compile(r"(?<![A-Za-z0-9])" + re.escape(discovery.cve_id) + r"(?![A-Za-z0-9])", re.IGNORECASE)
+    for row in _branch_rows(discovery):
+        declared = str(row.get("fixed") or "")
+        if not declared:
+            continue
+        # The declared fixed tag is authoritative first; probe at most one
+        # later patch release if the advisory boundary itself was a miss.
+        for value in dict.fromkeys([declared, *_next_patch_versions(declared, limit=1)]):
+            tag = metadata.release_tag(repo, value)
+            if tag is None:
+                continue
+            commits, _ = metadata.commits(repo, tag.value)
+            candidates = []
+            detail_failed = False
+            for hit in commits:
+                sha = str(hit.get("sha") or "")
+                message = str((hit.get("commit") or {}).get("message") or "")
+                if not _SHA.fullmatch(sha) or not _fix_message(message, exact_cve):
+                    continue
+                document, source_id = metadata.commit(repo, sha)
+                if not document:
+                    detail_failed = True
+                    break
+                message = str(document.get("commit", {}).get("message") or "") if isinstance(document.get("commit"), dict) else ""
+                if not _fix_message(message, exact_cve):
+                    continue
+                parents = document.get("parents") or []
+                if not isinstance(parents, list) or len(parents) != 1 or not isinstance(parents[0], dict):
+                    continue
+                files = document.get("files")
+                if (not isinstance(files, list) or any(not isinstance(file, dict) for file in files)
+                        or any(file.get("changes") and not file.get("patch") for file in files)):
+                    detail_failed = True
+                    break
+                parent = str(parents[0].get("sha") or "")
+                if (not _SHA.fullmatch(parent) or parent == sha
+                        or not _application_patch(document)):
+                    continue
+                candidates.append((sha, parent, source_id))
+            if detail_failed:
+                metadata.decision("branch_fix_pair", "unresolved",
+                                  "a branch candidate could not be inspected within the source budget",
+                                  series=row.get("series"), release=value)
+                continue
+            if len(candidates) != 1:
+                if len(candidates) > 1:
+                    metadata.decision("branch_fix_pair", "unresolved",
+                                      "multiple CVE-named fixes are reachable from the same release",
+                                      series=row.get("series"), release=value,
+                                      candidate_count=len(candidates))
+                continue
+            sha, parent, source_id = candidates[0]
+            if (metadata.precedes(repo, sha, tag.resolved_commit, allow_identical=True) is not True
+                    or metadata.precedes(repo, parent, sha) is not True):
+                metadata.decision("branch_fix_pair", "rejected",
+                                  "branch candidate did not verify inside the fixed release",
+                                  series=row.get("series"), release=value, candidate=sha)
+                continue
+            for source in metadata.collector.sources:
+                if source["id"] == source_id:
+                    source["source_type"] = "upstream_commit"
+            candidate = replace(
+                discovery, package=repo, ecosystem="generic",
+                vulnerable=DiscoveryRef("commit", parent, repository=repo,
+                                         resolved_commit=parent, source_id=source_id),
+                fixed=tag, fix_commit=sha, fix_source_id=source_id,
+                affected_range=f">= {row['introduced']}, < {value}",
+                references=tuple(dict.fromkeys([
+                    *discovery.references,
+                    f"https://github.com/{repo}/commit/{sha}",
+                ])),
+            )
+            metadata.notes.append(
+                f"deterministic ref rule=branch_fix_pair: branch={row['series']} release={value}; "
+                f"fix={source_id}; vulnerable={parent}; fixed={tag.value}; "
+                "branch-specific patch selected before the global fallback"
+            )
+            metadata.decision("branch_fix_pair", "selected",
+                              "branch-specific fix and vulnerable parent verified inside the declared release",
+                              series=row.get("series"), release=value,
+                              vulnerable=parent, fixed=tag.value, fix_commit=sha)
+            return candidate
+    metadata.decision("branch_fix_pair", "unresolved",
+                      "no affected branch had one verifiable branch-specific fix")
+    return None
+
+
 def _search_fix_pair(discovery, metadata, repo):
     """Find one CVE-named fix and replace the whole pair with fix/unique-parent."""
     from .discovery import DiscoveryRef
@@ -657,8 +1084,7 @@ def _search_fix_pair(discovery, metadata, repo):
             return None
         seen.add(sha)
         message = str((hit.get("commit") or {}).get("message") or "")
-        subject = message.splitlines()[0] if message else ""
-        if not exact_cve.search(message) or not _FIX_SUBJECT.match(subject):
+        if not _fix_message(message, exact_cve):
             continue
         commit, source_id = metadata.commit(repo, sha)
         if not commit:
@@ -667,8 +1093,7 @@ def _search_fix_pair(discovery, metadata, repo):
             defer("CVE commit search deferred: a potential fix could not be inspected within the source budget")
             return None
         message = str(commit.get("commit", {}).get("message") or "") if isinstance(commit.get("commit"), dict) else ""
-        subject = message.splitlines()[0] if message else ""
-        if not exact_cve.search(message) or not _FIX_SUBJECT.match(subject):
+        if not _fix_message(message, exact_cve):
             defer("CVE commit search deferred: search hit and commit metadata disagree")
             return None
         parents = commit.get("parents") or []
@@ -683,6 +1108,17 @@ def _search_fix_pair(discovery, metadata, repo):
         if not _SHA.fullmatch(parent) or parent == sha or not _application_patch(commit):
             continue
         eligible.append((sha, parent, source_id))
+    if len(eligible) != 1 and len(eligible) > 1 and discovery.affected_ranges:
+        # Several CVE-named fixes can exist (one per maintenance branch).
+        # Resolve them against affected_ranges before declaring ambiguity.
+        chosen = _candidate_for_branch(metadata, discovery, repo, eligible)
+        if chosen is not None:
+            candidate, row, actual_fixed = chosen
+            metadata.decision("affected_branch", "selected",
+                              "one verified fix belongs to this declared release branch",
+                              series=row.get("series"), declared_fixed=row.get("fixed"),
+                              actual_fixed=actual_fixed, candidate=candidate[0])
+            eligible = [candidate]
     if len(eligible) != 1:
         defer(f"CVE commit search deferred: {len(eligible)} eligible single-parent fixes")
         return None
@@ -697,13 +1133,14 @@ def _search_fix_pair(discovery, metadata, repo):
     )
     # Return both sides together. Do not let the registry/CNA-version fallback
     # below combine this newly found fix with a stale vulnerable package ref.
-    return replace(
+    candidate = replace(
         discovery, package=repo, ecosystem="generic",
         vulnerable=DiscoveryRef("commit", parent, repository=repo, resolved_commit=parent, source_id=source_id),
         fixed=DiscoveryRef("commit", sha, repository=repo, resolved_commit=sha, source_id=source_id),
         fix_commit=sha, fix_source_id=source_id,
         references=tuple(dict.fromkeys([*discovery.references, f"https://github.com/{repo}/commit/{sha}"])),
     )
+    return _align_affected_range(metadata, candidate, repo)
 
 
 def _version(value):
@@ -1121,6 +1558,8 @@ def verify_proposed_pair(settings, run_dir, evidence, discovery):
         candidate = replace(discovery, **checked)
         if not _verify_pair(metadata, candidate):
             raise PipelineError("proposed pair failed shared identity/ancestry validation")
+        candidate = ensure_affected_ranges(settings, run_dir, evidence, candidate)
+        candidate = _align_affected_range(metadata, candidate, repo)
         return _finish(metadata, candidate, "reviewed_ref_pair")
     finally:
         collector.save(discovery.cve_id)
@@ -1145,6 +1584,7 @@ def _finish(metadata, discovery, rule):
                       vulnerable=discovery.vulnerable.to_json() if discovery.vulnerable else None,
                       fixed=discovery.fixed.to_json() if discovery.fixed else None,
                       fix_commit=discovery.fix_commit, mechanism_verified=False,
+                      affected_range=discovery.affected_range,
                       source_ids=[discovery.fix_source_id, discovery.vulnerable.source_id if discovery.vulnerable else None,
                                   discovery.fixed.source_id if discovery.fixed else None])
     return metadata.collector.save(discovery.cve_id), replace(discovery, notes=tuple(dict.fromkeys(metadata.notes)),
@@ -1152,18 +1592,67 @@ def _finish(metadata, discovery, rule):
 
 
 
+def ensure_affected_ranges(
+    settings: SourceSettings, run_dir: Path, evidence: dict, discovery: Discovery,
+) -> Discovery:
+    """Backfill the structured branch list for older discovery checkpoints."""
+    if discovery.affected_ranges:
+        return discovery
+    from .discovery import _affected_ranges
+
+    sources = evidence.get("sources") or []
+    collector = EvidenceCollector(settings, Path(run_dir), sources=[dict(s) for s in sources])
+    try:
+        record, osv, _ = _records(collector)
+    except Exception:  # noqa: BLE001 - keep legacy checkpoints resumable
+        return discovery
+    cve_source_id = next(
+        (s.get("id") for s in sources if s.get("source_type") == "cve_record"), None
+    )
+    osv_source_id = next(
+        (s.get("id") for s in sources if "api.osv.dev/" in str(s.get("url") or "")), None
+    )
+    branches = _affected_ranges(
+        record, osv,
+        cve_source_id=str(cve_source_id or "") or None,
+        osv_source_id=str(osv_source_id or "") or None,
+    )
+    return replace(discovery, affected_ranges=branches) if branches else discovery
+
+
 def complete_missing_refs(
     settings: SourceSettings, run_dir: Path, evidence: dict, discovery: Discovery,
 ) -> tuple[dict, Discovery]:
     """Resolve typed build refs, including incomplete or incorrectly mapped caches."""
-    from .discovery import DiscoveryRef, _package_facts
+    from .discovery import DiscoveryRef, _affected_ranges, _package_facts
 
     root = Path(run_dir)
     sources = evidence.get("sources") or []
     collector = EvidenceCollector(settings, root, sources=[dict(s) for s in sources])
     cached = _Metadata(collector, [])
     cached.requests = MAX_REF_REQUESTS  # cache validation must never fetch
+    # Older checkpoints stored only the selected branch. Recover the full
+    # CNA/OSV branch list from the already saved evidence.
+    discovery = ensure_affected_ranges(settings, run_dir, evidence, discovery)
     if _verify_pair(cached, discovery):
+        # Older checkpoints stored only the top-level advisory range. Backfill
+        # the selected branch once; the trace event prevents repeated probes.
+        aligned_before = any(
+            item.get("rule") == "selected_affected_range"
+            for item in discovery.selection_trace
+        )
+        if discovery.affected_ranges and not aligned_before:
+            align_metadata = _Metadata(collector, list(discovery.notes))
+            repo = (discovery.fixed.repository if discovery.fixed else None) or (
+                discovery.vulnerable.repository if discovery.vulnerable else None)
+            aligned = _align_affected_range(align_metadata, discovery, repo)
+            if aligned != discovery:
+                discovery = replace(
+                    aligned,
+                    notes=tuple(dict.fromkeys(align_metadata.notes)),
+                    selection_trace=tuple([*discovery.selection_trace, *align_metadata.trace]),
+                )
+                cached = align_metadata
         last = discovery.selection_trace[-1] if discovery.selection_trace else {}
         if (last.get("vulnerable") == discovery.vulnerable.to_json() and last.get("fixed") == discovery.fixed.to_json()
                 and last.get("fix_commit") == discovery.fix_commit):
@@ -1195,7 +1684,14 @@ def complete_missing_refs(
                       else "advertised fix lacks verified patch evidence", candidate=discovery.fix_commit,
                       source_ids=[discovery.fix_source_id])
     if not discovery.fix_source_id:
-        searched = _search_fix_pair(discovery, metadata, _fix_search_repo(discovery, repo, osv, record))
+        search_repo = _fix_search_repo(discovery, repo, osv, record)
+        if discovery.affected_ranges and search_repo:
+            selected = _search_branch_pair(discovery, metadata, search_repo)
+            if selected is not None:
+                stale = ("no concrete vulnerable release", "no fixed release", "no fetchable upstream fix commit")
+                notes[:] = [note for note in notes if not note.startswith(stale)]
+                return _finish(metadata, selected, "branch_fix_pair")
+        searched = _search_fix_pair(discovery, metadata, search_repo)
         if searched is not None:
             stale = ("no concrete vulnerable release", "no fixed release", "no fetchable upstream fix commit")
             notes[:] = [note for note in notes if not note.startswith(stale)]
@@ -1344,4 +1840,7 @@ def complete_missing_refs(
         if discovery.is_complete:
             stale = ("no concrete vulnerable release", "no fixed release", "no fetchable upstream fix commit")
             notes[:] = [n for n in notes if not n.startswith(stale)]
+            repo_for_range = (discovery.fixed.repository if discovery.fixed else None) or (
+                discovery.vulnerable.repository if discovery.vulnerable else None)
+            discovery = _align_affected_range(metadata, discovery, repo_for_range)
     return _finish(metadata, discovery, rule)

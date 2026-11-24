@@ -91,11 +91,14 @@ def _load_context() -> ToolContext:
     config_path = os.environ.get("HARBOR_AUTHOR_CONFIG")
     if config_path and Path(config_path).is_file():
         try:
-            config = load_config(Path(config_path))
+            # The author helper does not run models. Do not expand model
+            # endpoint placeholders such as ${ANTHROPIC_BASE_URL}: the author
+            # environment deliberately strips those variables, and a failed
+            # expansion used to silently downgrade this config to defaults,
+            # disabling evidence review.
+            config = load_config(Path(config_path), expand_env=False)
         except PipelineError:
-            # A config that references a secret the helper is not allowed to
-            # see must not block authoring; the defaults keep the same source
-            # allowlist and budgets.
+            # Keep authoring available if the profile itself is invalid.
             config = Config()
     else:
         config = Config()

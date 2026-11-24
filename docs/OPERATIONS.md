@@ -4,8 +4,11 @@
 
 > 0.2 变更（2026-11-06）：运行时执行证据和独立复核取代“自动 RELEASED 即正确”的假设。新增或修改内容见 README 与 `policies/`；旧 run-id 的 RELEASED 结果不能直接混入 0.2 数据集，需要按新协议重新验收。
 
-- author 仍只能使用 Read/Write/Edit/Grep/Glob，Bash 只允许 helper；新增 `shell` 持久沙箱和 `debug --variant fixed exec -- ...`，可以在构建前做实验，也可以分别调试 vulnerable/fixed 现场。
-- `author_sandbox_network` 默认 `none`；确有下载依赖需求时可显式改成 `bridge`，但 scratch 容器不挂载 Docker socket、宿主凭据或评分文件；`author_sandbox_image` 可配置基础工具链。
+- 默认 `author_runtime = "container"`：每个候选运行一个持久 author 容器，Claude Code、文件工具和 Bash 都在容器内；Bash 不限制为 helper。宿主 worker 提供 `/model` 模型代理和 `/helper` 执行服务，容器不挂 Docker socket、宿主凭据或长期模型密钥。
+- 每个候选有独立 egress 网络和 internal lab 网络。author 容器可访问公网、`target-vulnerable:8080` / `target-fixed:8080`，并带有 `author` 别名供 PoC 回调；debug 靶机只加入 lab 网络，没有公网。author 容器通过一次性 NET_ADMIN 容器配置 iptables，只放行本机 helper/模型端口、本题靶机 IP 和公网，拒绝宿主局域网及其他私网。正式 probe 仍使用全新的独立验收网络。
+- author 基础镜像包含 Bash、git、curl、Python、Node、编译工具、jq、ripgrep、iptables 和 sudo；可在容器内 `sudo apt-get` 安装系统包，clone 的 PoC 放在 `research/`，工具和缓存放在 `tools/`，两者不进入提交的 `target/`、`poc/`。容器在会话之间停止但保留 home volume 和运行环境，候选最终状态时删除。
+- `author_runtime = "host"` 是回退路径：author 在宿主受限运行，Bash 只允许 helper，通用命令通过 `harbor-author shell` 进入 scratch 容器。host 模式的 `author_sandbox_network` 默认 `bridge`，`author_sandbox_image` 默认 `python:3.12.10-bookworm`；scratch 以非 root 用户运行并 `cap-drop ALL`，因此 `apt-get` 不可用。
+- `discovery.json` 保留 CNA/OSV 声明的全部 `affected_ranges` 分支，`affected_range` 直接表示选中 pair 的分支区间，不是另一条分支的公告范围。commit pair 按分支从新到旧选择：先列该分支 fixed release tag 可达的提交，找到并验证分支专用 fix；默认选最新且存在可验证分支专用 patch 的分支，全部失败才回退全局 CVE 搜索。公告 fixed tag 早于 patch 时使用同系列第一个包含 patch 的后续 patch release。author 可在公开 PoC 只校准较早受影响版本时申请 evidence review 切换分支，但新 vulnerable 必须仍在受影响区间内，fixed 必须是该分支的真实上游修复，最终由 resolver 验证。
 - `target.business_probes` 必填：除 `/health`、`/business` 外至少一条正常业务探针，并在 vulnerable 和 fixed 两边都通过，避免“只有漏洞路径能跑”的假应用。
 - `recheck` 只在执行签名（spec、task 文件、镜像 digest、verifier/生成器代码）一致时复用旧 matrix；spec、镜像 ID 或 verifier 改动会作废旧证据，重新构建并重跑 trial。
 - Qualification 要求候选级 T03/T04 成对样本、T05/T06/T07/T10 负例和 T12 故障分类，默认最小矩阵为 11 个 trial；显式启用 T09 时增加 6 个。solver/reviewer 的评分只用于出题反馈，不参与准入。

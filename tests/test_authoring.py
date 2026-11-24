@@ -233,15 +233,18 @@ def test_agent_environment_scrubs_pipeline_secrets(monkeypatch):
     monkeypatch.setenv("NVD_API_KEY", "nvd_secret")
     monkeypatch.setenv("CLAUDECODE", "1")
     monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "gateway")
+    monkeypatch.setenv("AnThRoPiC_Custom_Headers", "X-Key: gateway")
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://gateway.invalid")
     monkeypatch.setenv("ProgramFiles", r"C:\Program Files")
     workspace = Path.cwd()
-    env = agent_environment(workspace=workspace, repo_root=Path.cwd())
+    env = agent_environment(workspace=workspace, repo_root=Path.cwd(), extra_env={
+        "ANTHROPIC_API_KEY": "extra-key", "CLAUDE_CONFIG_DIR": "/untrusted/profile",
+    })
     assert "GITHUB_TOKEN" not in env
     assert "NVD_API_KEY" not in env
     assert "CLAUDECODE" not in env
-    assert env["ANTHROPIC_AUTH_TOKEN"] == "gateway"
-    assert env["ANTHROPIC_API_KEY"] == "gateway"
+    assert not any(k.lower().startswith("anthropic_") for k in env)
+    assert "CLAUDE_CONFIG_DIR" not in env
     assert env["HARBOR_AUTHOR_WORKSPACE"] == str(workspace)
     # Docker's CLI plugin discovery needs these; dropping them breaks
     # `docker compose` inside the helper. Windows stores the name upper-case.

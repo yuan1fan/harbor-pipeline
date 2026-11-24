@@ -189,11 +189,9 @@ print(json.dumps({'type':'result','subtype':'success','session_id':'same-session
     runner.profile = SimpleNamespace(role="author", trace_name="trace.jsonl")
     runner.settings = SimpleNamespace(timeout_sec=1)
     runner.config = SimpleNamespace(pipeline=SimpleNamespace(resource_wait_sec=5, command_timeout_sec=3))
-    runner.command = lambda **kwargs: [sys.executable, "-u", str(cli)]
-    monkeypatch.setattr(agent, "agent_environment", lambda **kwargs: dict(os.environ))
-    monkeypatch.setattr(author_debug, "cleanup", lambda _: None)
-    outcome = runner._run_once(prompt="test", workspace=tmp_path, settings_path=tmp_path / "settings.json",
-                             contract="test", resume=None, extra_env=None, bare=True)
+    monkeypatch.setattr(author_debug, "suspend", lambda _: None)
+    outcome = runner._run_process([sys.executable, "-u", str(cli)], agent.agent_environment(
+        workspace=tmp_path, repo_root=Path.cwd()), prompt="test", workspace=tmp_path)
     assert outcome.status == "completed" and not outcome.timed_out
     assert outcome.helper_result["status"] == "succeeded"
     assert outcome.helper_result["pending_at_exit"] is True

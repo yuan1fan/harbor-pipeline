@@ -20,9 +20,12 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
+from collections.abc import Callable
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -196,6 +199,7 @@ def build_agent_settings(
     model: str,
     *,
     profile: AgentProfile = AUTHOR_PROFILE,
+    unrestricted_shell: bool = False,
 ) -> dict[str, Any]:
     """Permission set for a native session.
 
@@ -207,7 +211,7 @@ def build_agent_settings(
     return {
         "model": model,
         "permissions": {
-            "allow": [
+            "allow": (["Bash"] if unrestricted_shell and profile.role == "author" else []) + [
                 "Read",
                 "Write",
                 "Edit",
@@ -279,12 +283,11 @@ def agent_environment(
         folded = key.casefold()
         if folded in drop_names or folded.startswith(drop_prefixes):
             continue
-        if folded.startswith("anthropic_"):
+        if profile.role != "author" and folded.startswith("anthropic_"):
             env[key] = value
     token = env.get("ANTHROPIC_AUTH_TOKEN") or env.get("ANTHROPIC_API_KEY")
     if token:
-        # The child CLI accepts ANTHROPIC_API_KEY; the gateway also accepts
-        # the auth-token form. Set both in the child process only.
+        # Preserve the resolver's API-key/bearer compatibility.
         env["ANTHROPIC_API_KEY"] = token
         env["ANTHROPIC_AUTH_TOKEN"] = token
     env.setdefault("HOME", os.environ.get("USERPROFILE", str(Path.home())))
@@ -304,7 +307,13 @@ def agent_environment(
     python = os.environ.get("HARBOR_AUTHOR_PYTHON", _python_identity())
     env["HARBOR_AUTHOR_PYTHON"] = python
     env["HARBOR_EVIDENCE_PYTHON"] = python
-    env.update(extra_env or {})
+    extra = extra_env or {}
+    if profile.role == "author":
+        # The worker supplies these three fields. In particular a child caller
+        # cannot replace the model origin, provide an API key or load hooks.
+        allowed = {"HARBOR_AUTHOR_CVE", "HARBOR_AUTHOR_CONFIG", "HARBOR_AUTHOR_REVISION"}
+        extra = {name: value for name, value in extra.items() if name in allowed}
+    env.update(extra)
     from .resources import child_environment
     env.update(child_environment())
     return env
@@ -314,6 +323,59 @@ def _python_identity() -> str:
     import sys
 
     return sys.executable
+
+
+def _author_cli_state(workspace: Path, resume: str | None, redact: Callable[[str], str]) -> Path:
+    profile = workspace.resolve().parent / "author-cli" / ".claude"
+    if profile.resolve() != profile:
+        raise PipelineError("The author's CLI profile must be local to its candidate")
+    profile.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not resume:
+        return profile
+    try:
+        if str(uuid.UUID(resume)) != resume:
+            return profile
+    except ValueError:
+        return profile
+    filename = f"{resume}.jsonl"
+    saved = next((profile / "projects").glob(f"*/{filename}"), None)
+    if saved is not None:
+        if saved.resolve() != saved or not saved.is_file():
+            raise PipelineError("Invalid author session history path")
+        return profile
+    # Pre-proxy runners used the host's default CLI history. Import only the
+    # named transcript and only if its recorded cwd matches this candidate.
+    # Do not import the user's settings, login files or other conversations.
+    projects = Path.home() / ".claude" / "projects"
+    expected_cwd = os.path.normcase(str(workspace))
+    for source in projects.glob(f"*/{filename}"):
+        if not source.is_file() or source.is_symlink() or source.resolve().parent.parent != projects.resolve():
+            continue
+        found = False
+        fd, tmp = tempfile.mkstemp(dir=profile)
+        staged = Path(tmp)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as dest, source.open(encoding="utf-8-sig") as lines:
+                for line in lines:
+                    if not found:
+                        try:
+                            row = json.loads(line)
+                        except (ValueError, RecursionError):
+                            row = {}
+                        if isinstance(row, dict) and row.get("sessionId") == resume:
+                            cwd = row.get("cwd")
+                            found = isinstance(cwd, str) and os.path.normcase(os.path.normpath(cwd)) == expected_cwd
+                    dest.write(redact(line))
+            if found:
+                target = profile / "projects" / source.parent.name / filename
+                if target.resolve() != target:
+                    raise PipelineError("The author's session history must be local to its CLI profile")
+                target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                staged.replace(target)
+                break
+        finally:
+            staged.unlink(missing_ok=True)
+    return profile
 
 
 class ClaudeCodeAgent:
@@ -334,7 +396,11 @@ class ClaudeCodeAgent:
         self.profile = profile or (
             RESOLVER_PROFILE if role == "resolver" else AUTHOR_PROFILE
         )
-        self.binary = shutil.which("claude")
+        self.binary = (
+            "claude"
+            if role == "author" and getattr(config.pipeline, "author_runtime", "host") == "container"
+            else shutil.which("claude")
+        )
         if not self.binary:
             raise PipelineError("claude CLI is not on PATH")
 
@@ -419,12 +485,9 @@ class ClaudeCodeAgent:
                 return outcome
 
         attempt = invoke(bare=True)
-        # Some gateways front the API with a token-only auth path rather than
-        # an API key. ``--bare`` is stricter about that; retry once with the
-        # user's normal settings sources if the first attempt could not
-        # authenticate. The prompt and workspace are unchanged, so the retry
-        # is safe.
-        if attempt.status == "auth_error" and not resume:
+        # The resolver retains its native authentication fallback. The author
+        # always authenticates through its host relay and private CLI profile.
+        if self.profile.role != "author" and attempt.status == "auth_error" and not resume:
             fallback = invoke(bare=False, safe_mode=True, resumed=None)
             if fallback.status != "auth_error":
                 return fallback
@@ -442,6 +505,20 @@ class ClaudeCodeAgent:
         bare: bool,
         safe_mode: bool = False,
     ) -> AgentOutcome:
+        if self.profile.role == "author" and getattr(
+            self.config.pipeline, "author_runtime", "host"
+        ) == "container":
+            from .author_runtime import run_session
+
+            return run_session(
+                self,
+                prompt=prompt,
+                workspace=workspace,
+                contract=contract,
+                settings_path=settings_path,
+                extra_env=extra_env,
+                resume=resume,
+            )
         argv = self.command(
             settings_path=settings_path,
             contract=contract,
@@ -455,6 +532,23 @@ class ClaudeCodeAgent:
             extra_env=extra_env,
             profile=self.profile,
         )
+        with ExitStack() as stack:
+            redact = str
+            if self.profile.role == "author":
+                from .author_model_proxy import ModelAuthError, author_model_proxy
+                try:
+                    relay = stack.enter_context(author_model_proxy(self.settings))
+                    env.update(relay.child_environment())
+                    env["CLAUDE_CONFIG_DIR"] = str(_author_cli_state(workspace, resume, relay.redact))
+                except ModelAuthError as exc:
+                    return AgentOutcome(status="auth_error", error=str(exc))
+                except (PipelineError, OSError) as exc:
+                    return AgentOutcome(status="provider_error", error=f"Author model connection: {exc}")
+                redact = relay.redact
+            return self._run_process(argv, env, prompt=prompt, workspace=workspace, redact=redact)
+
+    def _run_process(self, argv: list[str], env: dict[str, str], *, prompt: str, workspace: Path,
+                     redact: Callable[[str], str] = str) -> AgentOutcome:
         invocation = uuid.uuid4().hex
         if self.profile.role == "author":
             env["HARBOR_AUTHOR_SESSION_RUN"] = invocation
@@ -489,7 +583,7 @@ class ClaudeCodeAgent:
         def drain_err() -> None:
             assert proc.stderr is not None
             for line in proc.stderr:
-                stderr_chunks.append(line)
+                stderr_chunks.append(redact(line))
                 if len(stderr_chunks) > 4000:
                     del stderr_chunks[:1000]
 
@@ -539,6 +633,7 @@ class ClaudeCodeAgent:
                 assert proc.stdout is not None
                 with trace_path.open("a", encoding="utf-8", newline="\n") as trace:
                     for line in proc.stdout:
+                        line = redact(line)
                         stdout_lines.append(line)
                         _append_live_trace(trace, line)
                 proc.wait(timeout=30)
@@ -554,8 +649,8 @@ class ClaudeCodeAgent:
                 stopped.set()
                 watcher.join(timeout=2)
             if self.profile.role == "author":
-                from .author_debug import cleanup
-                cleanup(workspace)
+                from .author_debug import suspend
+                suspend(workspace)
 
         err_thread.join(timeout=5)
         stderr = "".join(stderr_chunks)

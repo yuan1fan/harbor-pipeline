@@ -26,7 +26,7 @@ flowchart TD
     REVIEW -->|"通过"| RELEASE(["打包重放，发布题目"])
 
     DISC -.->|"需补证据"| RESOLVER["Resolver<br/>补全或纠正版本对"]
-    AUTHOR -.->|"版本对有误"| RESOLVER
+    AUTHOR -.->|"版本对有误或需校准分支"| RESOLVER
     RESOLVER -->|"校验通过"| AUTHOR
     CHECK -.->|"需要修题"| AUTHOR
     REVIEW -.->|"需要修题"| AUTHOR
@@ -117,6 +117,23 @@ Discovery 负责把一个 CVE 变成可构建的 vulnerable/fixed 版本对，�
 
 上例 SHA 是格式示意。`kind` 支持 `package_version`、`tag`、`commit`、`archive`、`unresolved`。包版本记录 `ecosystem/package`，Git 引用记录仓库和解析出的 commit，发布归档记录 URL 和 SHA-256；来源通过 `source_id` 回溯。旧 `vulnerable_ref/fixed_ref` checkpoint 仍可读取，无法确定类型的旧值保留为 `unresolved` 并重新查证；新 discovery JSON 只写带类型的字段。生成模板和 normalization 会按 ref 类型选择构建方式，源码或归档对使用 `generic`，避免把 SHA/tag 传给 npm、pip 或 Maven。
 
+`discovery.json` 同时保留 CNA/OSV 声明的全部分支，而不只保留选中的那一个：
+
+```json
+"affected_ranges": [
+  {"series": "8.2", "introduced": "8.2.0", "fixed": "8.2.35", "source_ids": ["src-1-cve-record", "src-2-other"]},
+  {"series": "8.3", "introduced": "8.3.0", "fixed": "8.3.36", "source_ids": ["src-1-cve-record", "src-2-other"]},
+  {"series": "8.4", "introduced": "8.4.0", "fixed": "8.4.27", "source_ids": ["src-1-cve-record", "src-2-other"]},
+  {"series": "8.5", "introduced": "8.5.0", "fixed": "8.5.12", "source_ids": ["src-1-cve-record", "src-2-other"]}
+]
+```
+
+`vulnerable` / `fixed` 仍指向实际构建的版本对；`affected_ranges` 用于审计和 author 申请切换分支。`affected_range` 直接表示选中 pair 的分支区间，不再是另一条分支的公告范围。
+
+选择 commit pair 时不再先全局找 fix 再事后贴区间，而是按 `affected_ranges` 从新到旧逐分支查找：列出该分支 fixed release tag 可达的提交，找到该分支自己的 CVE fix commit，再验证它的 parent 和 tag ancestry。默认选择最新且存在可验证分支专用 patch 的分支；如果所有分支都找不到，才回退到全局 CVE commit search，并用 vulnerable commit 最早被哪个 release 包含来限定分支。这样 author 不会看到 8.5 的范围却拿到 8.2 的 commit，也不会把共享 fix 误归到最新分支。
+
+如果公告的 fixed tag 早于实际 patch，则使用同一系列中第一个包含 patch 的后续 patch release 作为排他上界；分支专用 fix 直接使用该分支的 fixed tag。
+
 确定性 discovery 执行以下通用规则：
 
 - 解析 CNA `packageURL` 中的 PyPI/npm/Maven/Go 身份；使用真实 registry 元数据核对版本及预发布版本拼写。
@@ -130,9 +147,10 @@ Discovery 负责把一个 CVE 变成可构建的 vulnerable/fixed 版本对，�
 - 从 [WordPress 官方插件 API](https://developer.wordpress.org/reference/functions/plugins_api/) 获取版本和下载来源，下载 ZIP 并检查插件头中的版本与归档 SHA-256。GitHub 无同名 tag 不代表 WordPress 发布版本不存在。
 - 对空 patch 重取 commit JSON；若提交本身没有文件差分，保留已验证版本并标记 fix 证据不足，不用另一父提交的任意差分代替漏洞修复依据。resolver 提案同样必须通过实际 patch 检查。
 - GitHub `.patch` 含多个 `From <SHA>` 时，按原链接请求 commit JSON 并核对 SHA；不能把邮件补丁的第一个提交当成 fixed。已有缓存同样重新解析，无法核实原链接指向的提交时保留未决。
-- 公告 fix 仍缺失、无法获取或没有实际 patch 时，在已确认的上游仓库按精确 CVE ID 搜索提交，最多 5 条。只有搜索结果完整、修复类标题（`fix:` / `fix(scope):` / `security:`）、实际代码差分和单父提交共同筛出唯一候选时，才同时替换为“父提交 / 修复提交”的 `commit` 对。纯文档、测试、自身版本号改动不作为此规则的修复候选；多候选、详情取不到或预算耗尽时保留未决。搜索和详情查询仍共用下面的 8 次来源请求上限，正常候选不额外搜索。
+- 公告 fix 仍缺失、无法获取或没有实际 patch 时，先按 `affected_ranges` 从新到旧列出每个分支 fixed release tag 可达的提交，在该分支内寻找精确 CVE 的 fix commit；只有 commit message 的修复声明（subject 以 `fix:` / `fix(scope):` / `security:` 开头，或正文中以 `Fix`/`Security` 开头的行包含精确 CVE ID）、实际代码差分、单父提交和 tag ancestry 全部通过时才采用。最新分支没有分支专用 patch 时才回退到全局 CVE commit search；全局候选仍按分支包含关系收敛，不直接取第一条结果。纯文档、测试、自身版本号改动不作为修复候选；仅在其他正文位置顺带提到 CVE 的 release note 不算修复声明；多候选、详情取不到或预算耗尽时保留未决。分支提交列表、全局搜索、详情和 tag/分支祖先检查共用来源请求上限。
+- resolver 提案不需要额外的分支字段。pipeline 会按 `affected_ranges` 检查选中的 fix commit 属于哪条分支，并把该分支区间写入 `affected_range`；分支与 commit 不一致时不会保留旧公告范围。
 
-每次补全最多新增 8 个来源请求，命中已验证的本地证据时不发新请求。pipeline 和 triage 的缓存入口同样执行类型迁移、身份补全和证据检查。来源冲突、复杂分支或未验证的 ref 保持不完整；后续漏洞差分验证仍照常执行。
+每次补全最多新增 24 个来源请求，命中已验证的本地证据时不发新请求；正常情况下不会用满，主要用于跨分支 tag/branch 祖先检查。pipeline 和 triage 的缓存入口同样执行类型迁移、身份补全和证据检查。来源冲突、复杂分支或未验证的 ref 保持不完整；后续漏洞差分验证仍照常执行。
 
 `is_complete` / discovery 的 `ready` 只表示候选证据完整，不表示已经证明该 CVE 的漏洞／修复机制。公告可能引用了其他问题的补丁，祖先关系也不能证明所选 vulnerable 确实存在漏洞。确认版本对正确还需要核对实际源码或发布包，并在相同前置条件下验证漏洞差分及其与补丁的因果关系；固定规则和 resolver 产出的候选都遵守这个标准。
 
@@ -155,9 +173,13 @@ Discovery 负责把一个 CVE 变成可构建的 vulnerable/fixed 版本对，�
 - helper 所有网络请求仍走 `sources.fetch` 的 https + 主机白名单 + 公网 IP 校验 + DNS pinning；
 - 输出 `reconciliation.json` 提案；`freeze`、`depcheck` 仍然重新验证，agent 不能直接改 spec。
 
-helper 支持 `list/show`、`registry`、`github tags/releases/commit/parent`、`fetch` 和 `propose`。
+helper 支持 `list/show`、`registry`、`github tags/releases/commit/parent`、`fetch` 和 `propose`。分支列表、commit 搜索和 compare 可以直接用 `fetch` 拉取对应 GitHub API URL，再通过 `show` 查看，不需要新增 helper 子命令。
 
-author 发现“vulnerable 已修复、fixed 仍有漏洞、补丁针对其他问题或发布包源码不符”时，写一份 `evidence-review-request.json`，提供 `reason` 和本地源码／日志的 `citations`（`path`、逐字匹配的 `quote`）；可附带 `suggested_refs`，不要求 author 已经找到替代版本。随后调用：
+resolver 在把版本对改成 commit pair 前，必须按 `inputs/discovery.json.affected_ranges` 从新到旧逐分支检查 CVE patch 是否被该分支的发布 tag 或分支 tip 包含；选择包含 patch 的最新分支。若公告 fixed tag 早于实际 patch，则用同系列第一个包含 patch 的后续 patch release 作为区间上界。最终分支和区间由 pipeline 的确定性检查写入 `affected_range`，不增加单独的 schema 字段。
+
+author 发现“vulnerable 已修复、fixed 仍有漏洞、补丁针对其他问题或发布包源码不符”时，写一份 `evidence-review-request.json`，提供 `reason` 和本地源码／日志的 `citations`（`path`、逐字匹配的 `quote`）；可附带 `suggested_refs`，不要求 author 已经找到替代版本。
+
+除了版本对错误，author 也可以因为“公开 PoC 只校准了较早的受影响版本”而申请切换分支：例如 `discovery.json.affected_ranges` 显示 8.4.0–8.4.27 也受影响，而公开 PoC 只在 8.4.26 上校准。此时 author 应把 PoC clone 到 `research/`，在较早的 vulnerable 构建上验证，并在申请中引用 PoC 文件和 `affected_ranges` 证据；建议的新 vulnerable 版本必须仍在受影响区间内，fixed 必须是该分支的真实上游修复。默认仍选择最新受影响版本，author 的申请由 resolver 独立验证。随后调用：
 
 ```bash
 harbor-author request-evidence-review --file evidence-review-request.json
@@ -172,6 +194,15 @@ helper 核对引用并记录当前版本对身份，author 随即结束会话。
 
 ### 2.2 author agent
 
+默认 `author_runtime = "container"`：每个候选有一个持久的 author 容器，Claude Code、文件工具和 Bash 都在容器内运行。宿主 worker 启动一个只绑定本次调用的服务，负责两件事：
+
+- `/model` 模型代理：宿主使用 `ANTHROPIC_API_KEY` 或 `ANTHROPIC_AUTH_TOKEN` 向上游鉴权，容器只得到本次调用、短期有效的临时凭证；
+- `/helper` helper 服务：`harbor-author validate/build/probe/debug/submit` 由宿主执行，服务绑定当前候选、工作区和 revision，容器不接触宿主 Docker socket。
+
+Author 容器默认有公网出站，可克隆公开 PoC、读取上游源码、安装依赖；`sudo apt-get` 可用。容器有独立的 egress 网络和本题 internal lab 网络：debug 靶机只能通过 lab 访问，author 可访问 `target-vulnerable:8080` / `target-fixed:8080`，靶机可回调 `author:<port>`，但靶机没有公网。`.harbor/runtime.json` 记录容器、网络和会话；会话之间容器被停止但保留，已安装工具、`research/` 和 `tools/` 在 `--resume` 后继续可用，候选进入最终状态时删除。
+
+`author_runtime = "host"` 是回退路径：Claude Code 在宿主受限运行，通用命令通过 `harbor-author shell` 进入 scratch 容器。
+
 Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建、运行和验证题目则通过 `harbor-author` 工具完成：
 
 | 命令 | 作用 |
@@ -180,9 +211,9 @@ Author 使用 CC 原生文件和网页工具读写代码、查询资料；构建
 | `build` | 只构建 vulnerable/fixed 两个 **target** 镜像；agent 镜像全局共享，verifier 按 variant 薄构建（Harbor 必须把 `tests/` 烘进 verifier 镜像） |
 | `probe` | 直连 compose 跑真实 `tests/verify.py`：target + observer（file_write）+ verifier main |
 | `exec -- <cmd>` / `exec --variant fixed -- <cmd>` | 在最后一次构建的对应 variant 镜像内执行（`--network none`），用于检查运行现场或库源码 |
-| `shell -- <cmd>` | 在持久 author 沙箱中执行通用命令；`target/`、`target-fixed/`、`poc/` 可写，`inputs/` 只读，不挂载 Docker socket 或宿主凭据 |
-| `debug --variant vulnerable\|fixed start\|exec\|logs\|stop` | 启动并反复检查持久调试靶机；vulnerable 和 fixed 可分别调试 |
-| `cleanup` | 停止该 author 工作区的 sandbox 与 debug 容器 |
+| `shell -- <cmd>` | 容器运行时的兼容别名，等价于直接在 Bash 中执行；host 运行时才进入 scratch 沙箱 |
+| `debug --variant vulnerable\|fixed start\|exec\|logs\|stop` | 启动并反复检查持久调试靶机；靶机加入本题 internal lab 网络，author 可用 `target-vulnerable:8080` / `target-fixed:8080` 直接访问，靶机自身没有公网 |
+| `cleanup` | 删除本题 debug 靶机；author 容器在会话之间停止但保留，候选结束时删除 |
 | `registry` | 查询 PyPI / npm / Go / Maven 真实版本 |
 | `submit` / `decline` | 提交已验证的树，或明确声明该 CVE 不适合当前 Web 契约 |
 
@@ -422,6 +453,8 @@ harbor_pipeline/          # pipeline 源码
   goals.py                # goal family / auth 原语
   agent.py                # 原生 Claude Code 会话 runner
   authoring.py            # author 工作区、bundle 组装、agent 契约
+  author_runtime.py       # author 容器、live workspace、网络与生命周期
+  author_service.py       # 宿主模型代理 + helper RPC 服务
   author_tool.py          # harbor-author helper（validate/build/probe/submit）
   author_probe.py         # 直连 compose probe 与全局基础镜像
   solver_review.py        # 解题 Agent 尝试 + 白盒/黑盒公平性评价

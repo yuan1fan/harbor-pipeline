@@ -64,8 +64,15 @@ class Settings:
     author_build_timeout_sec: int = 1800
     author_probe_runs: int = 20
     author_exec_runs: int = 20
-    author_sandbox_image: str = "python:3.12-slim-bookworm"
-    author_sandbox_network: str = "none"
+    # ``container`` runs Claude Code inside the per-candidate author container;
+    # ``host`` keeps the older restricted host process and harbor-author shell.
+    author_runtime: str = "container"
+    author_memory_mb: int = 2048
+    author_cpus: float = 2.0
+    # Host-runtime scratch container settings. The container runtime has its
+    # own base image and does not use these values.
+    author_sandbox_image: str = "python:3.12.10-bookworm"
+    author_sandbox_network: str = "bridge"
     # Solver feedback: run a real claude-code solver against the task, then
     # review it with the intended solution. A revise verdict resumes the author.
     solver_review: bool = True
@@ -120,6 +127,46 @@ class Config:
         return self.models.get(role, self.models["default"])
 
 
+_ENV_LINE = re.compile(r"^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$")
+
+
+def load_env_file(path: Path, environ: dict[str, str] | None = None) -> None:
+    """Load a local ``.env`` without overriding the process environment.
+
+    The file is a convenience for local runs; real environment variables keep
+    precedence. Values are not printed or copied into TOML/run artifacts.
+    """
+    target = os.environ if environ is None else environ
+    try:
+        lines = Path(path).read_text(encoding="utf-8-sig").splitlines()
+    except OSError:
+        return
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = _ENV_LINE.match(line)
+        if not match:
+            continue
+        key, value = match.group(1), match.group(2).strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        target.setdefault(key, value)
+
+
+def _load_project_env(path: Path | None) -> None:
+    explicit = os.environ.get("HARBOR_ENV_FILE", "").strip()
+    candidates: list[Path] = []
+    if explicit:
+        candidates.append(Path(explicit))
+    else:
+        if path is not None:
+            candidates.append(Path(path).resolve().parent / ".env")
+        candidates.append(Path.cwd() / ".env")
+    for candidate in dict.fromkeys(candidates):
+        load_env_file(candidate)
+
+
 def _expand(value):
     if isinstance(value, str):
         def replace(match):
@@ -135,8 +182,11 @@ def _expand(value):
     return value
 
 
-def load_config(path: Path | None = None) -> Config:
-    raw = _expand(tomllib.loads(path.read_text(encoding="utf-8-sig"))) if path else {}
+def load_config(path: Path | None = None, *, expand_env: bool = True) -> Config:
+    _load_project_env(path)
+    raw = tomllib.loads(path.read_text(encoding="utf-8-sig")) if path else {}
+    if expand_env:
+        raw = _expand(raw)
     try:
         defaults = raw.get("models", {}).get("default", {})
         config = Config(
@@ -173,6 +223,12 @@ def load_config(path: Path | None = None) -> Config:
         raise PipelineError("max_repairs must be nonnegative")
     if settings.authoring not in {"agent", "legacy"}:
         raise PipelineError("authoring must be 'agent' or 'legacy'")
+    if settings.author_runtime not in {"container", "host"}:
+        raise PipelineError("author_runtime must be 'container' or 'host'")
+    if type(settings.author_memory_mb) is not int or settings.author_memory_mb < 256:
+        raise PipelineError("author_memory_mb must be an integer of at least 256")
+    if type(settings.author_cpus) not in {float, int} or not 0 < settings.author_cpus <= 64:
+        raise PipelineError("author_cpus must be between 0 and 64")
     if settings.author_sandbox_network not in {"none", "bridge"}:
         raise PipelineError("author_sandbox_network must be 'none' or 'bridge'")
     for name in ("author_max_resumes", "author_build_runs", "author_probe_runs", "author_exec_runs", "author_build_timeout_sec", "max_evidence_reviews", "max_infra_retries"):

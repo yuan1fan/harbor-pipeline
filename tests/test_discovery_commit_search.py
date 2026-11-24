@@ -89,6 +89,23 @@ def test_search_replaces_both_stale_registry_refs_and_caches_the_pair(tmp_path, 
     assert again == result and len(calls) == 3
 
 
+def test_plain_subject_with_body_fix_line_is_accepted(tmp_path, monkeypatch):
+    # php-src uses a plain subject and states the CVE fix in the body.
+    fix = commit(message=f"Avoid state corruption via bailout\n\nFix GHSA-w8hw-w9fx-j79w ({CVE})")
+    collector, parsed, _, _ = fixture(tmp_path, monkeypatch, search(fix), [fix])
+    evidence, result = discovery_refs.complete_missing_refs(
+        collector.settings, tmp_path, collector.save(CVE), parsed
+    )
+    assert result.is_complete
+    assert (result.vulnerable.value, result.fixed.value, result.fix_commit) == (PARENT, NEW_FIX, NEW_FIX)
+
+
+def test_body_cve_mention_without_a_fix_line_is_not_enough(tmp_path, monkeypatch):
+    doc = commit(message=f"Release notes\n\nThis release mentions {CVE} in passing")
+    collector, parsed, _, _ = fixture(tmp_path, monkeypatch, search(doc), [doc])
+    assert discovery_refs._search_fix_pair(parsed, discovery_refs._Metadata(collector, []), REPO) is None
+
+
 @pytest.mark.parametrize("overrides", [
     {"incomplete_results": True}, {"incomplete_results": None}, {"total_count": 6},
     {"total_count": 2}, {"total_count": 1.0}, {"items": [None]},

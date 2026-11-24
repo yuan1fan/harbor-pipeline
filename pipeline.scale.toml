@@ -25,6 +25,10 @@ authoring = "agent"
 # build or author, and freeze/depcheck still validate its proposal.
 evidence_resolver = true
 author_max_resumes = 2
+# Claude Code and Bash run inside the per-candidate author container.
+author_runtime = "container"
+author_memory_mb = 2048
+author_cpus = 2.0
 author_build_runs = 60
 author_probe_runs = 80
 author_exec_runs = 100
@@ -60,9 +64,8 @@ max_output_tokens = 18000
 # Per CLI call; this is not a whole-run USD limit.
 max_budget_usd = 30.0
 
-# Native Claude Code authoring session. The model name is written into the
-# generated settings file; the gateway credentials stay in the child process
-# environment and are never persisted.
+# The author receives a temporary credential for the host's model proxy.
+# The upstream API key and bearer token stay in the host worker.
 [models.author]
 provider = "claude-code"
 model = "deepseek-flash[1m]"

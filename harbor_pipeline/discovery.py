@@ -144,13 +144,19 @@ class Discovery:
     aliases: tuple[str, ...] = ()
     references: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
+    # The selected build branch. ``affected_ranges`` keeps every declared
+    # release branch so the author can ask for an earlier affected release
+    # without losing the original CNA/OSV evidence. ``affected_range`` is the
+    # selected pair's interval, never a different branch's advisory range.
     affected_range: str | None = None
+    affected_ranges: tuple[dict, ...] = ()
     selection_trace: tuple[dict, ...] = ()
 
     def __init__(
         self, cve_id, package=None, ecosystem=None, component=None,
         vulnerable=None, fixed=None, fix_commit=None, fix_source_id=None,
-        aliases=(), references=(), notes=(), affected_range=None, selection_trace=(), *,
+        aliases=(), references=(), notes=(), affected_range=None,
+        affected_ranges=(), selection_trace=(), *,
         vulnerable_ref=_UNSET, fixed_ref=_UNSET,
     ):
         # Constructor aliases keep older callers/checkpoints readable. New
@@ -218,6 +224,7 @@ class Discovery:
             references=tuple(data.get("references") or ()),
             notes=tuple(data.get("notes") or ()),
             affected_range=data.get("affected_range"),
+            affected_ranges=tuple(data.get("affected_ranges") or ()),
             selection_trace=tuple(data.get("selection_trace") or ()),
         )
 
@@ -277,6 +284,12 @@ def collect(settings: SourceSettings, run_dir: Path, cve_id: str) -> tuple[dict,
     package, ecosystem, component, fixed_ref, vulnerable_range = _package_facts(
         osv_record, advisories, cve_record
     )
+    affected_ranges = _affected_ranges(
+        cve_record,
+        osv_record,
+        cve_source_id=str(cve_source.get("id") or "") or None,
+        osv_source_id=str(osv_source.get("id") or "") or None,
+    )
     if not ecosystem:
         # Git-only OSV records carry no package ecosystem. The registries cited
         # by the CVE record do, and that is what lets discovery fetch the real
@@ -297,6 +310,7 @@ def collect(settings: SourceSettings, run_dir: Path, cve_id: str) -> tuple[dict,
         component=component,
         fixed_ref=fixed_ref or fix_commit,
         affected_range=vulnerable_range,
+        affected_ranges=affected_ranges,
         fix_commit=fix_commit,
         fix_source_id=fix_source_id,
         aliases=tuple(aliases),
@@ -549,6 +563,120 @@ def _package_facts(
         if mapping:
             ecosystem, package = mapping
     return package, ecosystem, component, fixed, affected_range
+
+
+def _series_name(value: str) -> str | None:
+    match = re.match(r"^v?(\d+)(?:\.(\d+))?", str(value or "").strip())
+    if not match:
+        return None
+    return f"{match.group(1)}.{match.group(2)}" if match.group(2) else match.group(1)
+
+
+def _introduced_version(value: str, series: str) -> str:
+    text = str(value or "").strip().lstrip("v")
+    # CNA branch rows use wildcards such as ``8.2.*``. Keep the structured
+    # branch start at the first patch release of that series.
+    if not text or "*" in text or "x" in text.lower() or not re.search(r"\.\d+", text):
+        return f"{series}.0"
+    return text
+
+
+def _range_sort_key(row: dict) -> tuple:
+    def numbers(value: str) -> tuple[int, ...]:
+        return tuple(int(part) for part in re.findall(r"\d+", str(value))[:4])
+
+    return (numbers(row.get("series")), numbers(row.get("introduced")), numbers(row.get("fixed")))
+
+
+def _affected_ranges(
+    cve_record: Any,
+    osv_record: Any,
+    *,
+    cve_source_id: str | None = None,
+    osv_source_id: str | None = None,
+) -> tuple[dict, ...]:
+    """Collect every declared release branch, not only the selected one.
+
+    The deterministic selector still chooses one pair; this structured view is
+    what lets the author request an earlier affected branch when a public PoC is
+    calibrated to it.
+    """
+    rows: dict[tuple[str, str, str], dict] = {}
+
+    def add(series: str | None, introduced: str | None, fixed: str | None, source_id: str | None) -> None:
+        if not series or not introduced or not fixed:
+            return
+        if not re.match(r"^v?\d", str(fixed)):
+            return
+        key = (series, introduced, str(fixed))
+        row = rows.setdefault(
+            key,
+            {"series": series, "introduced": introduced, "fixed": str(fixed), "source_ids": []},
+        )
+        if source_id and source_id not in row["source_ids"]:
+            row["source_ids"].append(source_id)
+
+    if isinstance(cve_record, dict):
+        cna = cve_record.get("containers", {}).get("cna", {})
+        for item in cna.get("affected") or []:
+            if not isinstance(item, dict):
+                continue
+            for row in item.get("versions") or []:
+                if not isinstance(row, dict) or row.get("status") != "affected":
+                    continue
+                if str(row.get("versionType") or "").lower() == "git":
+                    continue
+                introduced = row.get("version")
+                fixed = row.get("lessThan")
+                series = _series_name(str(introduced or ""))
+                add(series, _introduced_version(str(introduced or ""), series) if series else None,
+                    str(fixed) if fixed else None, cve_source_id)
+
+    if isinstance(osv_record, dict):
+        for item in osv_record.get("affected") or []:
+            if not isinstance(item, dict):
+                continue
+            for rng in item.get("ranges") or []:
+                if not isinstance(rng, dict):
+                    continue
+                database = rng.get("database_specific") or {}
+                for event in database.get("extracted_events") or []:
+                    if not isinstance(event, dict):
+                        continue
+                    introduced = fixed = None
+                    for bound in event.get("range") or []:
+                        if not isinstance(bound, dict):
+                            continue
+                        value = bound.get("introduced")
+                        if value and not _SHA_RE.match(str(value)):
+                            introduced = str(value)
+                        value = bound.get("fixed")
+                        if value and not _SHA_RE.match(str(value)):
+                            fixed = str(value)
+                    series = _series_name(str(introduced or ""))
+                    add(series, _introduced_version(str(introduced or ""), series) if series else None,
+                        fixed, osv_source_id)
+
+    items = sorted(rows.values(), key=_range_sort_key)
+    # OSV sometimes carries a broad legacy range such as 7.3.0 -> 8.2.35 next
+    # to the concrete 8.2.0 -> 8.2.35 branch. Fold its evidence into the
+    # matching branch instead of exposing a misleading "7.3" series.
+    specific = {
+        row["fixed"]: row
+        for row in items
+        if row["series"] == _series_name(row["fixed"])
+    }
+    merged: list[dict] = []
+    for row in items:
+        fixed_series = _series_name(row["fixed"])
+        if row["series"] != fixed_series and row["fixed"] in specific:
+            target = specific[row["fixed"]]
+            for source_id in row["source_ids"]:
+                if source_id not in target["source_ids"]:
+                    target["source_ids"].append(source_id)
+            continue
+        merged.append(row)
+    return tuple(sorted(merged, key=_range_sort_key))
 
 
 def _osv_extracted_range(

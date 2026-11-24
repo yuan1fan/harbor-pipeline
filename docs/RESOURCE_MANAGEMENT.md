@@ -77,6 +77,23 @@ python scripts/run_batch_progress.py --config pipeline.scale.toml --input candid
 
 默认监测产物所在卷和 Windows 默认 Docker 数据目录所在卷。如果 Docker 已迁到其他目录，通过 `resource_disk_paths = ["D:/DockerData"]` 加入实际数据卷。检测的是宿主卷空闲空间，不是 Docker 虚拟文件系统内的可用容量；远程 Docker 主机还需在远端独立监测。
 
+## Author 模型连接
+
+默认 `author_runtime = "container"`。worker 在宿主随机端口启动一个仅本次调用有效的服务：
+
+- `GET/POST /model/...` 是模型代理。worker 从原有连接配置读取上游地址和凭据，容器内的 `ANTHROPIC_BASE_URL` 指向 `http://<host.docker.internal>:<port>/model`，`ANTHROPIC_API_KEY` 是随机生成的本次调用凭证；
+- `POST /helper` 是 helper RPC。容器内的 `harbor-author` 只是客户端，实际 `validate/build/probe/debug/submit` 由宿主执行，并绑定当前候选与 revision。
+
+宿主缺少凭据时会在启动 author 前报错。author 容器的 egress 防火墙只放行本机服务地址和端口、本题 debug 靶机 IP 以及公网，拒绝宿主局域网和私网地址；容器没有 Docker socket。
+
+`author_runtime = "host"` 时使用旧的 `127.0.0.1` 回环模型代理，author 在宿主受限运行，通用命令通过 `harbor-author shell` 进入 scratch 容器。两种模式的上游都必须是 HTTPS，本机回环服务可以使用 HTTP。
+
+两种模式都转发 Messages 与 token counting 请求，保留 API 版本、beta 标记和 SSE 流式响应，不跟随上游重定向。容器服务把请求的 `model` 固定为 `models.author.model`，并发上限为 2，每次调用最多 `max(32, 8 × max_turns)` 次请求；host 模式回环代理检查模型、按 `max_output_tokens` 限制单次生成，并分配 `4 × max_turns` 次请求。worker 结束调用时撤销凭证、关闭端口并中断活动连接。宿主账户对文件和进程的访问权限仍由操作系统控制。
+
+容器模式下，每个候选有独立的 `harbor-author-<owner>-home` volume，挂载到容器的 `/home/node`；CLI 配置和会话历史在 `/home/node/.claude`。容器在会话之间停止但不删除，`runs/<run>/<CVE>/author/.harbor/runtime.json` 保存容器名、lab/egress 网络、镜像和最近的 session ID，`--resume` 复用同一容器和同一对话。候选进入 `RELEASED` / `UNSUPPORTED` 时删除容器、网络和 home volume。
+
+host 模式下 CLI 配置和会话历史放在 `runs/<run>/<CVE>/author-cli/.claude/`。恢复旧版会话时，worker 按 session ID 和工作目录匹配宿主默认 CLI 目录中的对话记录，只复制该会话的 JSONL。可以在安装了 Claude Code 的机器上设置 `HARBOR_TEST_CLAUDE_CLI=1`，运行 `python -m pytest tests/test_author_model_proxy.py`，用本地模拟上游检查 host 模式真实 CLI 的首次调用和恢复。
+
 ## 检查和清理旧批次
 
 ```powershell
