@@ -42,7 +42,11 @@ def local_file(root: Path, name: str, *, limit: int = 4_000_000) -> Path:
     path = root
     for part in name.split("/"):
         path = path / part
-        if path.is_symlink() or getattr(path, "is_junction", lambda: False)():
+        if (
+            path.is_symlink()
+            or getattr(path, "is_junction", lambda: False)()
+            or not path.resolve().is_relative_to(root)
+        ):
             raise PipelineError("Linked author files are not accepted")
     if not path.resolve().is_relative_to(root) or not path.is_file() or path.stat().st_size > limit:
         raise PipelineError("Missing or oversized author file")
