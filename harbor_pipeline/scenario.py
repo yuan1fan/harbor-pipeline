@@ -1357,6 +1357,7 @@ SKIP_REFERENCE = os.environ.get("VERIFY_SKIP_REFERENCE", "") == "1"
 # verify container's service name; the PoC only receives the tokenized URL.
 CALLBACK_PORT = int(os.environ.get("VERIFY_CALLBACK_PORT", "8099"))
 CALLBACK_PUBLIC_HOST = os.environ.get("VERIFY_CALLBACK_HOST", "main")
+CALLBACK_GRACE_SEC = float(os.environ.get("VERIFY_CALLBACK_GRACE_SEC", "15"))
 REFERENCE_CALLBACK_TOKEN = os.environ.get(
     "VERIFY_REFERENCE_CALLBACK_TOKEN"
 ) or secrets.token_hex(24)
@@ -1513,6 +1514,17 @@ def callback_seen(token, host):
         token in item["path"] and (not expected or item["peer"] == expected)
         for item in requests
     )
+
+
+def wait_for_callback(token, host):
+    """Wait briefly for an asynchronous target request after the PoC exits."""
+    deadline = time.time() + CALLBACK_GRACE_SEC
+    while True:
+        if callback_seen(token, host):
+            return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(0.25)
 
 
 def callback_payload(token, host, secret):
@@ -1856,6 +1868,10 @@ def verify_one():
                     ),
                     bot_url_value=REFERENCE_BOT_URL if XSS else None,
                 )
+                if GOAL_FAMILY == "server_request":
+                    wait_for_callback(
+                        REFERENCE_CALLBACK_TOKEN, REFERENCE_TARGET_HOST
+                    )
                 secret = observable(ref_out, ref_err, reference=True)
                 evidence["reference_observed"] = bool(secret)
                 evidence["reference_exit"] = ref_rc
@@ -1923,6 +1939,8 @@ def verify_one():
                     ),
                     bot_url_value=BOT_URL if XSS else None,
                 )
+                if GOAL_FAMILY == "server_request":
+                    wait_for_callback(SUBMITTED_CALLBACK_TOKEN, TARGET_HOST)
                 evidence["submitted_exit"] = sub_rc
                 if GOAL_FAMILY == "secret_read":
                     # The submitted PoC must reproduce the reference's exact

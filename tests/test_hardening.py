@@ -1,6 +1,7 @@
 """Regression cases for false rewards, unsupported evidence and data leakage."""
 import json
 import socket
+import threading
 import urllib.request
 
 from harbor_pipeline import fixtures
@@ -408,6 +409,34 @@ def test_server_request_verifier_accepts_only_target_callback(tmp_path):
         url = kwargs.get("callback_url_value")
         if url:
             urllib.request.urlopen(url, timeout=5).read()
+        return "", "", 0
+
+    ns["run_restricted"] = replay
+    evidence = ns["verify_one"]()
+    assert evidence["reward"] == 1
+    assert evidence["reference_observed"] and evidence["submitted_observed"]
+
+
+def test_server_request_waits_for_a_delayed_callback(tmp_path):
+    ns = verifier(tmp_path, family="server_request")
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    callback_port = probe.getsockname()[1]
+    probe.close()
+    ns.update(
+        TARGET_HOST="127.0.0.1",
+        REFERENCE_TARGET_HOST="127.0.0.1",
+        CALLBACK_PORT=callback_port,
+        CALLBACK_PUBLIC_HOST="127.0.0.1",
+        CALLBACK_GRACE_SEC=2.0,
+    )
+
+    def replay(path, **kwargs):
+        url = kwargs.get("callback_url_value")
+        if url and kwargs.get("with_auth", True):
+            threading.Timer(
+                0.1, lambda: urllib.request.urlopen(url, timeout=5).read()
+            ).start()
         return "", "", 0
 
     ns["run_restricted"] = replay
